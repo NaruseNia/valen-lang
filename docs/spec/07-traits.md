@@ -38,10 +38,16 @@ impl Area for Shape {
 
 `impl Trait for Type` を許可する条件：
 
-- `Trait` が現在のコンパイル単位で定義されている
-- **または** `Type` の outermost nominal type constructor が現在の compile unit に所有されている
+- `Trait` が現在の **module** で定義されている
+- **または** `Type` の outermost nominal type constructor が現在の **module** に所有されている
 
-所有単位：compile unit（MVP では package = module = compile unit として扱う）
+**所有単位は module** — package / module / compile unit の三者同一視は行わない。
+
+- `package` は source 階層と名前空間（§10.1）
+- `module` はビルドターゲット内の意味的所有単位（§10.2）。orphan rule / `sealed permit` 範囲 / `internal` 可視性はすべて module ID に従う
+- `compile unit` は物理的な単位で、仕様には現れない（実装側で決まる）
+
+詳細は [§10.2 module](10-modules.md) を参照。
 
 **禁止:**
 - foreign trait for foreign type（例：`impl java.util.List for java.lang.String` 不可）
