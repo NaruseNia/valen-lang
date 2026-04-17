@@ -1,6 +1,6 @@
 # Valen 実装計画
 
-Last updated: 2026-04-17
+Last updated: 2026-04-17（言語仕様 grill-me 1-3 巡目決定を反映、docs/language-spec-revision ブランチ）
 
 ---
 
@@ -45,16 +45,18 @@ Last updated: 2026-04-17
 
 | カテゴリ | 機能 |
 |---------|------|
-| 基本 | `fn`（top-level）, `let` / `let mut`, 式指向（末尾式） |
-| クラス | `class`, primary constructor, `data class`（equals/hashCode/toString/copy 自動生成） |
-| 継承 | `open` / `abstract` / `sealed`、single inheritance + trait multiple |
-| enum | Rust ADT、payload あり/なし、`::` variant アクセス |
-| match | フルセット（リテラル / 構造分解 / ガード / 範囲 / or / `@`束縛）、Valen enum exhaustive |
-| trait | trait 定義、impl、inherent impl、UFCS |
-| coherence | orphan rule 厳格、blanket impl 禁止、一意性保証 |
+| 基本 | `fn`（top-level）, `let` / `let mut`, 式指向（末尾式）、ブロック式は statement position で `;` 省略可 |
+| クラス | `class` + primary constructor（param に `pub` のみ個別可、`mut` 組み合わせ）, `data class`（final 固定、equals/hashCode/toString/copy 自動生成）, class 本体 method / associated function |
+| 継承 | single inheritance + 複数 trait impl、`open` / `abstract` / `sealed` opt-in（推移なし）、method 単位 `open fn` / `override fn` opt-in、`super.foo()` は class 親のみ、trait default method は UFCS `Trait::foo(self)` |
+| enum | Rust ADT、payload あり/なし、`::` variant アクセス、Java binary naming は `Enum$Variant` 固定 |
+| match | フルセット（リテラル / 構造分解 / ガード / 範囲 / or / `@`束縛）、Valen enum/sealed class exhaustive、Java sealed は `@valen.Closed` 付きのみ exhaustive |
+| trait | trait 定義、`impl Trait for Type`（inherent impl なし）、trait default method、UFCS |
+| coherence | orphan rule 厳格（所有単位は module）、blanket impl 禁止、一意性保証 |
 | 失敗 | `Option` / `Result` / `panic`、`?` 演算子（Result + Option） |
-| Java 相互運用 | `import`, `safe { ... }` ブロック（exception → Result 明示変換）, Java 型は foreign |
-| 可視性 | `pub` / `internal` / `private` |
+| Java 相互運用 | `import`, `safe { ... }` ブロック（exception → Result 明示変換）, Java 型は foreign、`@valen.Closed` を Java sealed hierarchy で認識 |
+| 可視性 | `pub` / `internal` / `private`（range は module 単位） |
+| モジュール | `module` はビルドツール駆動（Gradle subproject = 1 module）、ソース内宣言なし |
+| annotation | `@` を予約 sigil として lexer に登録、Valen コード内では書けない（@valen.Closed のみ Java 側から読む） |
 | 引数 | 位置引数 + 名前付き引数 |
 | 文字列 | `f"{expr}"`（単行のみ） |
 | for | `for x in iter`、Iterator trait、java.lang.Iterable 自動アダプト |
@@ -100,9 +102,14 @@ Last updated: 2026-04-17
 - 文字列補間 multiline `f"""..."""`
 - DSL receiver lambda（`T.() -> Unit`）再評価
   - 採用するなら：**仕様上 extension とは完全に別物として隔離**（名前解決は lambda 型糖衣であり拡張ではない）
-- annotation consumption（読み取り側、`@Annotation` 定義と読み取り）
+- annotation 宣言構文（`annotation class ...`）、Valen コード内での annotation 付与、読み取り API の拡充
+  - MVP では `@valen.Closed` の Java 側読み取りのみ
+- init block / secondary constructor
+- constructor param の `internal` / `private` 個別指定
+- field override (`override val` 相当)
+- sealed trait
+- nested / inner class
 - reflection 統合（`java.lang.reflect` のラッパ）
-- Java sealed hierarchy への exhaustive 判定（`@closed` アノテーション認識）
 - Java collection への trait 注入の厚みを増す（reduce, fold, groupBy 等）
 
 ### ツール拡張

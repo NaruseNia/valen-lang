@@ -48,7 +48,7 @@ fn main() {
 
     for s in shapes {
         println(f"area = {s.area()}")
-    };
+    }
 }
 ```
 
@@ -58,7 +58,7 @@ fn main() {
 - **整合した失敗モデル** — `Option = 欠如`、`Result = 回復可能失敗`、`Exception = FFI 境界の異常`、`panic = 契約違反`。役割が明確に分離、`?` 演算子で early return
 - **trait ベース抽象** — orphan rule 厳格、同一 trait/type 対はグローバル一意、blanket impl 禁止（MVP）
 - **Java/Kotlin 完全相互運用** — `import java.util.List;`、Java exception 明示変換、Java sealed hierarchy と互換
-- **モダン構文** — `fn`, `let` / `let mut`, `match`, `::` (enum variant) + `.` (member)
+- **モダン構文** — `fn`, `let` / `let mut`, `match`, `::` (enum variant・associated function) + `.` (member)
 - **JVM 21 baseline / 25 opt-in** — Valhalla 等の新機能は `--target 25` でオプトイン
 
 ## ステータス
