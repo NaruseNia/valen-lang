@@ -104,7 +104,63 @@ data class Cash : Payment();
 
 `enum` との使い分けは [§6. enum（ADT）](06-enum.md) を参照。
 
-## 5.5 MVP 除外（Phase 1.5+ 送り）
+## 5.6 メソッド解決規則
+
+`value.foo(args)` を解決するとき、Valen コンパイラは次の手順で呼び出し先を決める。
+
+1. **候補集合の形成** — `value` の名義型の class 本体 member および in-scope な trait method のうち、receiver を調整した後に **名前と signature（arity / 型制約）が適用可能なもの** を集める
+2. **class 本体優先** — class 本体に適用可能な member があれば、それを最優先で採用
+3. **trait 候補** — class 本体に候補がない場合、in-scope な trait method に落ちる
+4. **曖昧性エラー** — trait 候補が複数あって一意に決まらない場合はコンパイルエラー
+
+**曖昧性の解消**は UFCS で書く：
+
+```valen
+Trait::foo(value, args...)
+```
+
+`Class::foo(args...)` は associated function（`self` なし）の呼び出しに限る — class 本体の instance method を UFCS で呼ぶ必要があるときも `Class::method(value, ...)` ではなく `value.method(...)` を使う。
+
+### override fn 必須条件
+
+class 本体 method が `override fn` を要求されるのは以下のいずれか：
+
+- 親 class の `open fn` と**同一 signature**を持つ
+- class が implement している trait の requirement（abstract method または default method）と**同一 signature**を持つ
+
+signature が異なれば（arity や型制約で区別できれば）、同名でも `override` は不要：
+
+```valen
+trait ShowFmt { fn show(self, fmt: Fmt) -> String; }
+
+class User(pub name: String) {
+    // Show trait 実装ではない別シグネチャの show、override 不要
+    fn show(self) -> String { self.name }
+}
+
+impl ShowFmt for User {
+    fn show(self, fmt: Fmt) -> String { /* ... */ }
+}
+
+// u.show()    → class 本体 method
+// u.show(fmt) → trait method
+```
+
+## 5.7 associated function と top-level fn の使い分け
+
+**associated function は class 本体に、top-level fn はファイル直下に** 書く。両者は名前解決で暗黙合流しない：
+
+- `parse(x)` → top-level fn 解決
+- `User::parse(x)` → `User` の associated function 解決
+
+**規範（strict でない推奨）:**
+
+- **associated function に向く** — 型の private invariant / field に触れる構築系、canonical constructor、`from_*` / `parse` / `zero` / `default` 系ファクトリ
+- **top-level fn に向く** — 複数の型に対称に振る舞うアルゴリズム、型所有を持たないユーティリティ、pure function
+
+強制ではないため、コンパイルエラーにはしない（fmt / lint レベルで指摘する程度）。ただし、同一ファイルに `parse(s)` と `User::parse(s)` を並置するのは設計の赤信号。
+
+## 5.8 MVP 除外（Phase 1.5+ 送り）
 
 - `init { ... }` ブロック
 - secondary constructor（`constructor(...) { ... }` 相当）

@@ -59,8 +59,9 @@ impl Area for Shape {
 - downstream module での再定義禁止
 
 **衝突解決:**
-- inherent impl 優先
-- trait impl 同士の衝突はコンパイルエラー、明示的な `as Trait` キャストが必要
+- class 本体 member（method / associated function）が適用可能なら最優先
+- trait method の候補が複数で曖昧になる場合は UFCS `Trait::foo(v, ...)` で解決
+- 詳細なメソッド解決規則は [§5.6](05-classes.md) を参照
 
 ## 7.5 演算子オーバーロード
 
