@@ -8,19 +8,28 @@ Last updated: 2026-04-17
 
 **目的:** 後続 Phase 全体の土台を整える。
 
+**現在の進捗（2026-04-17）:** Rust workspace / AST 骨組み / logos lexer + 極小 recursive descent parser / `insta` snapshot テスト基盤まで完了。残：JVM classfile crate 選定・PoC、enum bytecode spike、top-level `class` 宣言の parse、HIR 詳細設計。
+
 ### タスク
-- [ ] Rust workspace 初期化（`compiler/`, `lsp/`, `fmt/`）
+- [x] Rust workspace 初期化（`crates/valen-ast`, `valen-parser`, `valen-hir`, `valen-codegen`, `valen-diagnostics`, `valenc`, `valen-lsp`, `valenfmt`）
 - [ ] JVM classfile crate 選定と PoC
   - 候補：[noak](https://crates.io/crates/noak), [cafebabe](https://crates.io/crates/cafebabe), [classfile-parser](https://crates.io/crates/classfile-parser)
   - 評価基準：write API の完成度、ClassFile emit の対応範囲、Java 21/25 bytecode サポート、メンテナンス
+  - 現状：`noak = "0.5"` を workspace placeholder として仮置き、選定・PoC 未着手
 - [ ] **enum bytecode emit の実験 spike**：sealed interface + record + singleton の組み合わせを手書きで emit し、以下を検証
   - Java 21 `switch` pattern matching での exhaustive
   - Jackson / Gson での serialize/deserialize
   - `java.lang.reflect` での class 名前解決
   - Gradle incremental compilation
-- [ ] Parser 戦略の選定（手書き recursive descent vs parser generator）
-- [ ] AST / IR の設計
-- [ ] テストインフラ（snapshot テスト、integration テスト、bytecode diff）
+- [x] Parser 戦略の選定（**logos lexer + 手書き recursive descent** に確定）
+- [x] AST の設計（`valen-ast` に Item / Expr / Pattern / Type / Literal の骨格を定義）
+  - HIR の詳細設計は Phase 1 初期タスクへ送る
+- [x] テストインフラ（`insta` snapshot 基盤、integration テスト稼働）
+  - lexer / parser に 15 ケース投入（`crates/valen-parser/tests/`）
+  - bytecode diff テストは classfile PoC 着手時に追加
+- [ ] parser 拡張：top-level `class NAME {}` の parse（Phase 0 完了条件 PoC の前提）
+  - 現状の parse カバレッジは `fn NAME() { BLOCK }` + `let` / 式 / リテラル / 二項演算のみ
+  - fn パラメータ・戻り値型、`if` / `match` / call / path(`::`) / `safe` ブロックなど他の拡張は Phase 1 本体で対応
 
 ### 完了条件
 - 最小限の `class Foo {}` を `.vln` → `Foo.class` に emit できる PoC が動く
