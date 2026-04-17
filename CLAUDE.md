@@ -53,10 +53,38 @@ valen-lang/
 
 ## 開発方針
 
-- コミットメッセージは日本語OK、概要 + 理由を1-2文
+- コミットメッセージは英語、タイトル short、本文で「何を」「なぜ」を1-2段落。conventional prefix (`feat:` `fix:` `chore:` `build:` `docs:` `refactor:` `test:`)
 - PR は MVP 機能1単位で小さく
 - Codex 3巡レビューの「82/100」判定は設計凍結ではない — 実装中に発見した仕様穴は遠慮なく上げる
 - enum bytecode emit 戦略は実装前に必ず検証実験を走らせる（Java pattern switch / Jackson / reflection / Gradle incremental）
+
+## コミット前チェックリスト
+
+コードに触れた後は必ず以下を通してからコミット。1つでも失敗したら修正する。skip 禁止。
+
+```sh
+cargo check --workspace --all-targets
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all -- --check
+cargo test --workspace
+cargo build --workspace  # リリース前は --release でも確認
+```
+
+- `cargo check` は型と借用チェック、最速のゲート
+- `cargo clippy -D warnings` で warning も error 扱い
+- `cargo fmt --check` は差分のみ検出、フォーマット崩れたら `cargo fmt --all` で修正
+- `cargo test` は integration テスト含む
+- エラーやテスト失敗を握り潰さない。`#[allow(...)]` や `#[ignore]` を貼るのは最終手段、貼るときはコメントで理由を書く
+
+Git hook で自動化したい場合は `.git/hooks/pre-commit` に上記を仕込む（ローカル設定、コミット対象外）。
+
+## 不明点の扱い
+
+- 仕様が曖昧、Codex レビューで触れていない、複数解釈可能 — いずれも **ユーザに聞く**
+- 「多分こうだろう」で進めない、特にコア4軸（ADT / match / trait / 失敗モデル）に関わる判断は確認必須
+- 既存のメモリ（`memory/`）や仕様書（`docs/LANGUAGE_SPEC.md`）で答えが見つからない時点で質問する
+- 質問する時は選択肢を提示して判断を促す（AskUserQuestion 推奨）、自由記述で聞き返さない
+- 実装途中で設計矛盾を発見したら、勝手に直さず先に報告する。MVP/Phase 境界を越える変更は特に要相談
 
 ## よくある判断
 
