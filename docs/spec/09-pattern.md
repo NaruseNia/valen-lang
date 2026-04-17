@@ -18,11 +18,12 @@ match value {
 ## 9.2 exhaustive check
 
 - Valen `enum` / `sealed class` hierarchy：**厳密 exhaustive**（非網羅はコンパイルエラー）
-- Java 型：**`@closed` アノテーション付きのみ exhaustive**、他は普通の分岐（exhaustive check なし）
+- Java 型：**`@valen.Closed` アノテーション付きのみ exhaustive**、他は常に open-world
 
 ```valen
-@closed
-sealed interface Color  // Java 側定義
+// Java 側定義（ライブラリ作者が @valen.Closed を付与）
+@Closed
+sealed interface Color permits Red, Blue, Green
 
 match color {
     Color.Red => ...,
@@ -30,3 +31,20 @@ match color {
     Color.Green => ...,  // 網羅しないとコンパイルエラー
 }
 ```
+
+## 9.3 `@valen.Closed` 不在時の動作
+
+**Java `sealed` 単独では exhaustive 扱いにしない**。`@valen.Closed` の付与がない Java hierarchy は open-world として扱い、`match` では wildcard arm (`_`) を **必ず要求する**。
+
+```valen
+// @valen.Closed なし — wildcard 必須
+match javaSealed {
+    Foo.A => ...,
+    Foo.B => ...,
+    _ => ...,  // 省くとコンパイルエラー
+}
+```
+
+理由: Valen 自身が定義した closed world はコンパイラが完全に把握できるが、Java 定義の closed world は classpath 変動・tooling 差異があり、同じ厳密さを保証できない。annotation による明示 opt-in を要求することで、classpath で permit が増えたときに silently non-exhaustive 化する事故を防ぐ。
+
+詳細は [20. アノテーション](20-annotations.md) を参照。
