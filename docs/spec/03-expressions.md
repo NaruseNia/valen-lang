@@ -29,7 +29,15 @@ let result = {
 
 ```valen
 fn f(x: Int) -> Int {
-    if x < 0 { return -x; };
-    x * 2  // ← 末尾式
+    if x < 0 { return -x }  // statement position、; 省略
+    x * 2                    // ← 末尾式、値として返る
+}
+```
+
+ブロック式をそのまま戻り値にすることもできる：
+
+```valen
+fn abs(x: Int) -> Int {
+    if x < 0 { -x } else { x }  // if 式が関数の値
 }
 ```

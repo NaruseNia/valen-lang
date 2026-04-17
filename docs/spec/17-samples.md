@@ -24,8 +24,8 @@ enum AppError {
 
 fn find_positive(xs: List<Int>) -> Result<Int, AppError> {
     for x in xs {
-        if x > 0 { return Ok(x); };
-    };
+        if x > 0 { return Ok(x); }
+    }
     Err(AppError::NotFound(id = 0))
 }
 
@@ -35,7 +35,7 @@ fn main() {
         Ok(n) => println(f"found: {n}"),
         Err(AppError::NotFound(id)) => println(f"not found, id={id}"),
         Err(AppError::Invalid(reason)) => println(f"invalid: {reason}"),
-    };
+    }
 }
 ```
 

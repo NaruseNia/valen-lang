@@ -17,7 +17,7 @@ trait 注入は **iteration, map, filter 程度に最小化**（MVP）。
 ```valen
 for x in xs {
     println(x);
-};
+}
 ```
 
 - `Iterator` trait を実装した型に適用
