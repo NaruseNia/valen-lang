@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.75
+      - uses: dtolnay/rust-toolchain@1.90
         with:
           components: rustfmt
       - run: cargo fmt --all -- --check
@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.75
+      - uses: dtolnay/rust-toolchain@1.90
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
@@ -49,7 +49,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.75
+      - uses: dtolnay/rust-toolchain@1.90
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: test-${{ matrix.os }}
@@ -65,7 +65,7 @@ jobs:
       RUSTDOCFLAGS: -D warnings
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.75
+      - uses: dtolnay/rust-toolchain@1.90
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: docs
