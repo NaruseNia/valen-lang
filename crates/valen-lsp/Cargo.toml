@@ -1,0 +1,24 @@
+[package]
+name = "valen-lsp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Valen language server (LSP)"
+
+[[bin]]
+name = "valen-lsp"
+path = "src/main.rs"
+
+[dependencies]
+valen-ast = { workspace = true }
+valen-diagnostics = { workspace = true }
+valen-parser = { workspace = true }
+valen-hir = { workspace = true }
+tower-lsp = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

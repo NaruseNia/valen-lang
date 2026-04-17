@@ -1,0 +1,19 @@
+[package]
+name = "valenfmt"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Valen source formatter"
+
+[[bin]]
+name = "valenfmt"
+path = "src/main.rs"
+
+[dependencies]
+valen-ast = { workspace = true }
+valen-parser = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
