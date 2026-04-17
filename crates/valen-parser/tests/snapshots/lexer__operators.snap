@@ -1,0 +1,37 @@
+---
+source: crates/valen-parser/tests/lexer.rs
+expression: "fmt(\"fn main() { a + b - c * d / e % f == g != h < i <= j > k >= l && m || n }\")"
+---
+Fn @ 0..2
+Ident("main") @ 3..7
+LParen @ 7..8
+RParen @ 8..9
+LBrace @ 10..11
+Ident("a") @ 12..13
+Plus @ 14..15
+Ident("b") @ 16..17
+Minus @ 18..19
+Ident("c") @ 20..21
+Star @ 22..23
+Ident("d") @ 24..25
+Slash @ 26..27
+Ident("e") @ 28..29
+Percent @ 30..31
+Ident("f") @ 32..33
+EqEq @ 34..36
+Ident("g") @ 37..38
+NotEq @ 39..41
+Ident("h") @ 42..43
+Lt @ 44..45
+Ident("i") @ 46..47
+Le @ 48..50
+Ident("j") @ 51..52
+Gt @ 53..54
+Ident("k") @ 55..56
+Ge @ 57..59
+Ident("l") @ 60..61
+AmpAmp @ 62..64
+Ident("m") @ 65..66
+PipePipe @ 67..69
+Ident("n") @ 70..71
+RBrace @ 72..73

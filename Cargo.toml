@@ -40,7 +40,6 @@ smol_str = "0.2"
 indexmap = "2"
 # Parser
 logos = "0.14"
-chumsky = "0.9"
 # LSP
 tower-lsp = "0.20"
 tokio = { version = "1", features = ["full"] }

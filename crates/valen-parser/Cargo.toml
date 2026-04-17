@@ -17,3 +17,4 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 expect-test = { workspace = true }
+insta = { workspace = true }

@@ -1,0 +1,11 @@
+---
+source: crates/valen-parser/tests/lexer.rs
+expression: "fmt(\"fn main() { @ }\")"
+---
+Fn @ 0..2
+Ident("main") @ 3..7
+LParen @ 7..8
+RParen @ 8..9
+LBrace @ 10..11
+Error("@") @ 12..13
+RBrace @ 14..15

@@ -1,0 +1,115 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"fn main() { let x = 1 + 2; x }\")"
+---
+=== AST ===
+[
+    Fn(
+        FnDecl {
+            visibility: Internal,
+            name: "main",
+            generics: [],
+            params: [],
+            return_type: None,
+            body: Some(
+                Block {
+                    stmts: [
+                        Let(
+                            LetStmt {
+                                mutable: false,
+                                name: "x",
+                                ty: None,
+                                init: Binary(
+                                    BinaryExpr {
+                                        op: Add,
+                                        lhs: Literal(
+                                            Int(
+                                                1,
+                                                Span {
+                                                    start: 20,
+                                                    end: 21,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                        rhs: Literal(
+                                            Int(
+                                                2,
+                                                Span {
+                                                    start: 24,
+                                                    end: 25,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                        span: Span {
+                                            start: 20,
+                                            end: 25,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                span: Span {
+                                    start: 12,
+                                    end: 26,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ],
+                    tail: Some(
+                        Path(
+                            Path {
+                                segments: [
+                                    PathSegment {
+                                        name: "x",
+                                        turbofish: false,
+                                        generics: [],
+                                        span: Span {
+                                            start: 27,
+                                            end: 28,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ],
+                                span: Span {
+                                    start: 27,
+                                    end: 28,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    span: Span {
+                        start: 10,
+                        end: 30,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            span: Span {
+                start: 0,
+                end: 30,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)
