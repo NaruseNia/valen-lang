@@ -36,6 +36,7 @@ pub enum TokenKind {
     Internal,
     Private,
     Open,
+    Override,
     Abstract,
     Sealed,
     Package,

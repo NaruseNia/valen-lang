@@ -48,7 +48,7 @@ fn main() {
 
     for s in shapes {
         println(f"area = {s.area()}")
-    };
+    }
 }
 ```
 
@@ -58,7 +58,7 @@ fn main() {
 - **Coherent failure model** — `Option` for absence, `Result` for recoverable failure, `Exception` for FFI boundary errors, `panic` for contract violation. Each role is distinct, and `?` performs early return.
 - **Trait-based abstraction** — strict orphan rule, globally unique `(trait, type)` pairs, blanket impls disallowed in the MVP.
 - **Seamless Java / Kotlin interop** — `import java.util.List;`, explicit conversion for Java exceptions, compatibility with Java sealed hierarchies.
-- **Modern syntax** — `fn`, `let` / `let mut`, `match`, `::` for enum variants / static members, `.` for member access.
+- **Modern syntax** — `fn`, `let` / `let mut`, `match`, `::` for enum variants and associated functions, `.` for member access.
 - **JVM 21 baseline, 25 opt-in** — new features such as Valhalla value types are gated behind `--target 25`.
 
 ## Status
