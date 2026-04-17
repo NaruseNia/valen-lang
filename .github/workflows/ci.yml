@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # Deny warnings everywhere so a broken lint blocks the build in CI but
+  # not in local `cargo check`.
+  RUSTFLAGS: -D warnings
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.75
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.75
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: clippy
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  test:
+    name: test / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.75
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: test-${{ matrix.os }}
+      - run: cargo check --workspace --all-targets --locked
+      - run: cargo test --workspace --locked
+      - run: cargo build --workspace --locked
+
+  docs:
+    name: rustdoc
+    runs-on: ubuntu-latest
+    env:
+      # Fail on broken intra-doc links.
+      RUSTDOCFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.75
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: docs
+      - run: cargo doc --workspace --no-deps --locked
+
+  # Aggregate status for branch protection rules. Keep the required-status
+  # list short by pointing the rule at this single job.
+  ci:
+    name: ci
+    needs: [fmt, clippy, test, docs]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Summarize required job outcomes
+        run: |
+          if [[ "${{ needs.fmt.result }}" != "success" \
+             || "${{ needs.clippy.result }}" != "success" \
+             || "${{ needs.test.result }}" != "success" \
+             || "${{ needs.docs.result }}" != "success" ]]; then
+            echo "::error::one or more required jobs failed"
+            exit 1
+          fi
