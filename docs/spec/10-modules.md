@@ -54,12 +54,20 @@ import java.util.List;
 
 ## 10.4 スコープ演算子
 
-- `::` — enum variant、static-like member
+- `::` — enum variant、associated function
 - `.` — package path、type path、値メンバ
 
 ```valen
 java.util.HashMap         // package path
 Shape::Circle(r = 5.0)    // enum variant
-User::from_name("Alice")  // static-like associated function
+User::from_name("Alice")  // associated function
 user.name                 // value member
 ```
+
+**用語ポリシー:** Valen 仕様では以下の3語のみを使う。
+
+- `method` — `self` レシーバを持つ、値に対して呼び出す関数
+- `associated function` — `self` なしで class 本体に定義される、型名義空間の関数
+- `enum variant` — enum の variant
+
+`static` / `static-like` / `static member` という語は **Valen 仕様では使わない**。Java interop 説明の中で Java 側の `static` に言及する場合のみ例外。

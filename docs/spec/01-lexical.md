@@ -11,7 +11,7 @@ fn let mut self return
 if else match
 class data enum trait impl
 pub internal private
-open abstract sealed
+open abstract sealed override
 package import
 for in while loop
 true false
@@ -19,6 +19,10 @@ as
 ```
 
 予約語（将来用）：`suspend async await yield typealias`
+
+**`@`** は annotation 用の予約 sigil（§20 参照）。MVP では Valen コード内で annotation を書けないため、`@` を識別子前に置くとパーサエラーとなる。
+
+**Valen 仕様で使わないキーワード:** `static` は導入しない。instance method と associated function の区別は `self` レシーバの有無のみで行う（§5.1 参照）。
 
 ## 1.3 識別子
 - `[a-zA-Z_][a-zA-Z0-9_]*`
