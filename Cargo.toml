@@ -1,0 +1,63 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/valen-ast",
+    "crates/valen-diagnostics",
+    "crates/valen-parser",
+    "crates/valen-hir",
+    "crates/valen-codegen",
+    "crates/valenc",
+    "crates/valen-lsp",
+    "crates/valenfmt",
+]
+
+[workspace.package]
+version = "0.1.0-dev"
+edition = "2021"
+rust-version = "1.75"
+authors = ["Naruse Nia"]
+license = "Apache-2.0"
+repository = "https://github.com/NaruseNia/valen-lang"
+homepage = "https://github.com/NaruseNia/valen-lang"
+
+[workspace.dependencies]
+# Internal crates
+valen-ast = { path = "crates/valen-ast" }
+valen-diagnostics = { path = "crates/valen-diagnostics" }
+valen-parser = { path = "crates/valen-parser" }
+valen-hir = { path = "crates/valen-hir" }
+valen-codegen = { path = "crates/valen-codegen" }
+
+# External crates
+anyhow = "1"
+thiserror = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+smol_str = "0.2"
+indexmap = "2"
+# Parser
+logos = "0.14"
+chumsky = "0.9"
+# LSP
+tower-lsp = "0.20"
+tokio = { version = "1", features = ["full"] }
+# JVM bytecode emit (選定は Phase 0 で確定、ここでは placeholder)
+noak = "0.5"
+# Test
+insta = "1"
+expect-test = "1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.test]
+opt-level = 1
