@@ -14,8 +14,9 @@ trait Display {
 
 ## 7.2 impl
 
+`impl` は **trait 実装専用**。inherent impl block（`impl Type { ... }`）は存在しない — class の instance method / associated function は class 本体に直接書く（§5.1 参照）。
+
 ```valen
-// trait impl
 impl Area for Shape {
     fn area(self) -> Float {
         match self {
@@ -23,13 +24,6 @@ impl Area for Shape {
             Shape::Rect(w, h) => w * h,
             Shape::Point => 0.0,
         }
-    }
-}
-
-// inherent impl（trait 無し）
-impl User {
-    fn from_name(name: String) -> User {
-        User(name = name, age = 0)
     }
 }
 ```
