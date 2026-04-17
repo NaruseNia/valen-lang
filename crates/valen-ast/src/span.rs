@@ -18,7 +18,11 @@ impl Span {
     };
 
     pub fn new(start: u32, end: u32, file_id: FileId) -> Self {
-        Self { start, end, file_id }
+        Self {
+            start,
+            end,
+            file_id,
+        }
     }
 
     pub fn len(&self) -> u32 {
@@ -30,7 +34,10 @@ impl Span {
     }
 
     pub fn merge(self, other: Span) -> Span {
-        debug_assert_eq!(self.file_id, other.file_id, "cannot merge spans across files");
+        debug_assert_eq!(
+            self.file_id, other.file_id,
+            "cannot merge spans across files"
+        );
         Span {
             start: self.start.min(other.start),
             end: self.end.max(other.end),

@@ -94,9 +94,7 @@ impl Diagnostics {
     }
 
     pub fn has_errors(&self) -> bool {
-        self.entries
-            .iter()
-            .any(|d| d.severity == Severity::Error)
+        self.entries.iter().any(|d| d.severity == Severity::Error)
     }
 
     pub fn len(&self) -> usize {

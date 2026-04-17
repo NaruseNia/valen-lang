@@ -19,36 +19,87 @@ pub enum TokenKind {
     Ident(SmolStr),
 
     // Keywords
-    Fn, Let, Mut, SelfKw, Return,
-    If, Else, Match,
-    Class, Data, Enum, Trait, Impl,
-    Pub, Internal, Private,
-    Open, Abstract, Sealed,
-    Package, Import,
-    For, In, While, Loop,
-    True, False,
+    Fn,
+    Let,
+    Mut,
+    SelfKw,
+    Return,
+    If,
+    Else,
+    Match,
+    Class,
+    Data,
+    Enum,
+    Trait,
+    Impl,
+    Pub,
+    Internal,
+    Private,
+    Open,
+    Abstract,
+    Sealed,
+    Package,
+    Import,
+    For,
+    In,
+    While,
+    Loop,
+    True,
+    False,
     As,
     // Reserved for future
-    Suspend, Async, Await, Yield, TypeAlias,
+    Suspend,
+    Async,
+    Await,
+    Yield,
+    TypeAlias,
 
     // Punctuation
-    LParen, RParen,
-    LBrace, RBrace,
-    LBracket, RBracket,
-    Comma, Semi, Colon, DoubleColon, Dot, DotDot, DotDotEq,
-    Arrow,       // ->
-    FatArrow,    // =>
-    Question,    // ?
-    Bang,        // !
-    At,          // @
-    Underscore,  // _
+    LParen,
+    RParen,
+    LBrace,
+    RBrace,
+    LBracket,
+    RBracket,
+    Comma,
+    Semi,
+    Colon,
+    DoubleColon,
+    Dot,
+    DotDot,
+    DotDotEq,
+    Arrow,      // ->
+    FatArrow,   // =>
+    Question,   // ?
+    Bang,       // !
+    At,         // @
+    Underscore, // _
 
     // Operators
-    Eq, EqEq, NotEq, Lt, Le, Gt, Ge,
-    Plus, Minus, Star, Slash, Percent,
-    Amp, AmpAmp, Pipe, PipePipe, Caret,
-    Shl, Shr,
-    PlusEq, MinusEq, StarEq, SlashEq, PercentEq,
+    Eq,
+    EqEq,
+    NotEq,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    Plus,
+    Minus,
+    Star,
+    Slash,
+    Percent,
+    Amp,
+    AmpAmp,
+    Pipe,
+    PipePipe,
+    Caret,
+    Shl,
+    Shr,
+    PlusEq,
+    MinusEq,
+    StarEq,
+    SlashEq,
+    PercentEq,
 
     // Trivia
     Whitespace,
