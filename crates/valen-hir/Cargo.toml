@@ -1,0 +1,15 @@
+[package]
+name = "valen-hir"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Valen high-level IR: name resolution, type check, coherence"
+
+[dependencies]
+valen-ast = { workspace = true }
+valen-diagnostics = { workspace = true }
+smol_str = { workspace = true }
+indexmap = { workspace = true }

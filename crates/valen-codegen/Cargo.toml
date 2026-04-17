@@ -1,0 +1,16 @@
+[package]
+name = "valen-codegen"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Valen HIR to JVM bytecode emitter"
+
+[dependencies]
+valen-ast = { workspace = true }
+valen-hir = { workspace = true }
+valen-diagnostics = { workspace = true }
+noak = { workspace = true }
+smol_str = { workspace = true }

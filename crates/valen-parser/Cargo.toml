@@ -1,0 +1,19 @@
+[package]
+name = "valen-parser"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Valen lexer and parser"
+
+[dependencies]
+valen-ast = { workspace = true }
+valen-diagnostics = { workspace = true }
+logos = { workspace = true }
+smol_str = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+expect-test = { workspace = true }
