@@ -1,0 +1,99 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"fn main() { -1 + !false }\")"
+---
+=== AST ===
+[
+    Fn(
+        FnDecl {
+            visibility: Internal,
+            name: "main",
+            generics: [],
+            params: [],
+            return_type: None,
+            body: Some(
+                Block {
+                    stmts: [],
+                    tail: Some(
+                        Binary(
+                            BinaryExpr {
+                                op: Add,
+                                lhs: Unary(
+                                    UnaryExpr {
+                                        op: Neg,
+                                        expr: Literal(
+                                            Int(
+                                                1,
+                                                Span {
+                                                    start: 13,
+                                                    end: 14,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                        span: Span {
+                                            start: 12,
+                                            end: 14,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                rhs: Unary(
+                                    UnaryExpr {
+                                        op: Not,
+                                        expr: Literal(
+                                            Bool(
+                                                false,
+                                                Span {
+                                                    start: 18,
+                                                    end: 23,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                        span: Span {
+                                            start: 17,
+                                            end: 23,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                span: Span {
+                                    start: 12,
+                                    end: 23,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    span: Span {
+                        start: 10,
+                        end: 25,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            span: Span {
+                start: 0,
+                end: 25,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

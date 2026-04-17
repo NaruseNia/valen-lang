@@ -1,0 +1,99 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"fn main() { 1 + 2 * 3 }\")"
+---
+=== AST ===
+[
+    Fn(
+        FnDecl {
+            visibility: Internal,
+            name: "main",
+            generics: [],
+            params: [],
+            return_type: None,
+            body: Some(
+                Block {
+                    stmts: [],
+                    tail: Some(
+                        Binary(
+                            BinaryExpr {
+                                op: Add,
+                                lhs: Literal(
+                                    Int(
+                                        1,
+                                        Span {
+                                            start: 12,
+                                            end: 13,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    ),
+                                ),
+                                rhs: Binary(
+                                    BinaryExpr {
+                                        op: Mul,
+                                        lhs: Literal(
+                                            Int(
+                                                2,
+                                                Span {
+                                                    start: 16,
+                                                    end: 17,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                        rhs: Literal(
+                                            Int(
+                                                3,
+                                                Span {
+                                                    start: 20,
+                                                    end: 21,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                        span: Span {
+                                            start: 16,
+                                            end: 21,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                span: Span {
+                                    start: 12,
+                                    end: 21,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    span: Span {
+                        start: 10,
+                        end: 23,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            span: Span {
+                start: 0,
+                end: 23,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

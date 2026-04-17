@@ -1,0 +1,8 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"let x = 1;\")"
+---
+=== AST ===
+[]
+=== diagnostics ===
+Error V0101 0..3: expected top-level item (e.g. `fn`)

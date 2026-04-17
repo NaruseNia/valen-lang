@@ -1,0 +1,11 @@
+---
+source: crates/valen-parser/tests/lexer.rs
+expression: "fmt(\"fn main() {\\n  // comment\\n  42\\n}\")"
+---
+Fn @ 0..2
+Ident("main") @ 3..7
+LParen @ 7..8
+RParen @ 8..9
+LBrace @ 10..11
+IntLit(42) @ 27..29
+RBrace @ 30..31

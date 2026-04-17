@@ -1,0 +1,25 @@
+---
+source: crates/valen-parser/tests/lexer.rs
+expression: "fmt(r#\"fn main() { let s = \"hi\\n\"; let b = true; let n = 42; }\"#)"
+---
+Fn @ 0..2
+Ident("main") @ 3..7
+LParen @ 7..8
+RParen @ 8..9
+LBrace @ 10..11
+Let @ 12..15
+Ident("s") @ 16..17
+Eq @ 18..19
+StringLit("hi\n") @ 20..26
+Semi @ 26..27
+Let @ 28..31
+Ident("b") @ 32..33
+Eq @ 34..35
+BoolLit(true) @ 36..40
+Semi @ 40..41
+Let @ 42..45
+Ident("n") @ 46..47
+Eq @ 48..49
+IntLit(42) @ 50..52
+Semi @ 52..53
+RBrace @ 54..55
