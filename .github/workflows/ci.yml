@@ -21,8 +21,8 @@ jobs:
     name: rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.90
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.100
         with:
           components: rustfmt
       - run: cargo fmt --all -- --check
@@ -31,8 +31,8 @@ jobs:
     name: clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.90
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.100
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
@@ -48,8 +48,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.90
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.100
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: test-${{ matrix.os }}
@@ -64,8 +64,8 @@ jobs:
       # Fail on broken intra-doc links.
       RUSTDOCFLAGS: -D warnings
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.90
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.100
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: docs
