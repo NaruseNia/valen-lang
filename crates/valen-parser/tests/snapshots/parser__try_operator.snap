@@ -1,0 +1,112 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"fn f() -> Int { get_value()? }\")"
+---
+=== AST ===
+[
+    Fn(
+        FnDecl {
+            visibility: Internal,
+            name: "f",
+            generics: [],
+            params: [],
+            return_type: Some(
+                Path(
+                    TypePath {
+                        segments: [
+                            TypePathSegment {
+                                name: "Int",
+                                generics: [],
+                                span: Span {
+                                    start: 10,
+                                    end: 13,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ],
+                        span: Span {
+                            start: 10,
+                            end: 13,
+                            file_id: FileId(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+            ),
+            body: Some(
+                Block {
+                    stmts: [],
+                    tail: Some(
+                        Try(
+                            TryExpr {
+                                expr: Call(
+                                    CallExpr {
+                                        callee: Path(
+                                            Path {
+                                                segments: [
+                                                    PathSegment {
+                                                        name: "get_value",
+                                                        turbofish: false,
+                                                        generics: [],
+                                                        span: Span {
+                                                            start: 16,
+                                                            end: 25,
+                                                            file_id: FileId(
+                                                                0,
+                                                            ),
+                                                        },
+                                                    },
+                                                ],
+                                                span: Span {
+                                                    start: 16,
+                                                    end: 25,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ),
+                                        args: [],
+                                        span: Span {
+                                            start: 16,
+                                            end: 27,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                span: Span {
+                                    start: 16,
+                                    end: 28,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    span: Span {
+                        start: 14,
+                        end: 30,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            span: Span {
+                start: 0,
+                end: 30,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

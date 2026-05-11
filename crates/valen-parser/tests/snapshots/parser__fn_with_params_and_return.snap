@@ -1,0 +1,160 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"fn add(a: Int, b: Int) -> Int { a }\")"
+---
+=== AST ===
+[
+    Fn(
+        FnDecl {
+            visibility: Internal,
+            name: "add",
+            generics: [],
+            params: [
+                Param {
+                    name: "a",
+                    ty: Path(
+                        TypePath {
+                            segments: [
+                                TypePathSegment {
+                                    name: "Int",
+                                    generics: [],
+                                    span: Span {
+                                        start: 10,
+                                        end: 13,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                            ],
+                            span: Span {
+                                start: 10,
+                                end: 13,
+                                file_id: FileId(
+                                    0,
+                                ),
+                            },
+                        },
+                    ),
+                    mutable: false,
+                    span: Span {
+                        start: 7,
+                        end: 13,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+                Param {
+                    name: "b",
+                    ty: Path(
+                        TypePath {
+                            segments: [
+                                TypePathSegment {
+                                    name: "Int",
+                                    generics: [],
+                                    span: Span {
+                                        start: 18,
+                                        end: 21,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                            ],
+                            span: Span {
+                                start: 18,
+                                end: 21,
+                                file_id: FileId(
+                                    0,
+                                ),
+                            },
+                        },
+                    ),
+                    mutable: false,
+                    span: Span {
+                        start: 15,
+                        end: 21,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ],
+            return_type: Some(
+                Path(
+                    TypePath {
+                        segments: [
+                            TypePathSegment {
+                                name: "Int",
+                                generics: [],
+                                span: Span {
+                                    start: 26,
+                                    end: 29,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ],
+                        span: Span {
+                            start: 26,
+                            end: 29,
+                            file_id: FileId(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+            ),
+            body: Some(
+                Block {
+                    stmts: [],
+                    tail: Some(
+                        Path(
+                            Path {
+                                segments: [
+                                    PathSegment {
+                                        name: "a",
+                                        turbofish: false,
+                                        generics: [],
+                                        span: Span {
+                                            start: 32,
+                                            end: 33,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ],
+                                span: Span {
+                                    start: 32,
+                                    end: 33,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    span: Span {
+                        start: 30,
+                        end: 35,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            span: Span {
+                start: 0,
+                end: 35,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

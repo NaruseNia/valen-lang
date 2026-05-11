@@ -1,0 +1,138 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"fn main() { greet(msg = hello, count = 3) }\")"
+---
+=== AST ===
+[
+    Fn(
+        FnDecl {
+            visibility: Internal,
+            name: "main",
+            generics: [],
+            params: [],
+            return_type: None,
+            body: Some(
+                Block {
+                    stmts: [],
+                    tail: Some(
+                        Call(
+                            CallExpr {
+                                callee: Path(
+                                    Path {
+                                        segments: [
+                                            PathSegment {
+                                                name: "greet",
+                                                turbofish: false,
+                                                generics: [],
+                                                span: Span {
+                                                    start: 12,
+                                                    end: 17,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ],
+                                        span: Span {
+                                            start: 12,
+                                            end: 17,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                args: [
+                                    CallArg {
+                                        name: Some(
+                                            "msg",
+                                        ),
+                                        value: Path(
+                                            Path {
+                                                segments: [
+                                                    PathSegment {
+                                                        name: "hello",
+                                                        turbofish: false,
+                                                        generics: [],
+                                                        span: Span {
+                                                            start: 24,
+                                                            end: 29,
+                                                            file_id: FileId(
+                                                                0,
+                                                            ),
+                                                        },
+                                                    },
+                                                ],
+                                                span: Span {
+                                                    start: 24,
+                                                    end: 29,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ),
+                                        span: Span {
+                                            start: 18,
+                                            end: 29,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                    CallArg {
+                                        name: Some(
+                                            "count",
+                                        ),
+                                        value: Literal(
+                                            Int(
+                                                3,
+                                                Span {
+                                                    start: 39,
+                                                    end: 40,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                        span: Span {
+                                            start: 31,
+                                            end: 40,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ],
+                                span: Span {
+                                    start: 12,
+                                    end: 41,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    span: Span {
+                        start: 10,
+                        end: 43,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            span: Span {
+                start: 0,
+                end: 43,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

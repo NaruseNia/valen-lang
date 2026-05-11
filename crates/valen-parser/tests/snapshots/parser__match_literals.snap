@@ -1,0 +1,276 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"fn f(x: Int) -> String { match x { 0 => zero, 1 => one, _ => other } }\")"
+---
+=== AST ===
+[
+    Fn(
+        FnDecl {
+            visibility: Internal,
+            name: "f",
+            generics: [],
+            params: [
+                Param {
+                    name: "x",
+                    ty: Path(
+                        TypePath {
+                            segments: [
+                                TypePathSegment {
+                                    name: "Int",
+                                    generics: [],
+                                    span: Span {
+                                        start: 8,
+                                        end: 11,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                            ],
+                            span: Span {
+                                start: 8,
+                                end: 11,
+                                file_id: FileId(
+                                    0,
+                                ),
+                            },
+                        },
+                    ),
+                    mutable: false,
+                    span: Span {
+                        start: 5,
+                        end: 11,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ],
+            return_type: Some(
+                Path(
+                    TypePath {
+                        segments: [
+                            TypePathSegment {
+                                name: "String",
+                                generics: [],
+                                span: Span {
+                                    start: 16,
+                                    end: 22,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ],
+                        span: Span {
+                            start: 16,
+                            end: 22,
+                            file_id: FileId(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+            ),
+            body: Some(
+                Block {
+                    stmts: [],
+                    tail: Some(
+                        Match(
+                            MatchExpr {
+                                scrutinee: Path(
+                                    Path {
+                                        segments: [
+                                            PathSegment {
+                                                name: "x",
+                                                turbofish: false,
+                                                generics: [],
+                                                span: Span {
+                                                    start: 31,
+                                                    end: 32,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ],
+                                        span: Span {
+                                            start: 31,
+                                            end: 32,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                arms: [
+                                    MatchArm {
+                                        pattern: Literal(
+                                            Int(
+                                                0,
+                                                Span {
+                                                    start: 35,
+                                                    end: 36,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                        guard: None,
+                                        body: Path(
+                                            Path {
+                                                segments: [
+                                                    PathSegment {
+                                                        name: "zero",
+                                                        turbofish: false,
+                                                        generics: [],
+                                                        span: Span {
+                                                            start: 40,
+                                                            end: 44,
+                                                            file_id: FileId(
+                                                                0,
+                                                            ),
+                                                        },
+                                                    },
+                                                ],
+                                                span: Span {
+                                                    start: 40,
+                                                    end: 44,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ),
+                                        span: Span {
+                                            start: 35,
+                                            end: 44,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                    MatchArm {
+                                        pattern: Literal(
+                                            Int(
+                                                1,
+                                                Span {
+                                                    start: 46,
+                                                    end: 47,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                        guard: None,
+                                        body: Path(
+                                            Path {
+                                                segments: [
+                                                    PathSegment {
+                                                        name: "one",
+                                                        turbofish: false,
+                                                        generics: [],
+                                                        span: Span {
+                                                            start: 51,
+                                                            end: 54,
+                                                            file_id: FileId(
+                                                                0,
+                                                            ),
+                                                        },
+                                                    },
+                                                ],
+                                                span: Span {
+                                                    start: 51,
+                                                    end: 54,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ),
+                                        span: Span {
+                                            start: 46,
+                                            end: 54,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                    MatchArm {
+                                        pattern: Wildcard(
+                                            Span {
+                                                start: 56,
+                                                end: 57,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
+                                        ),
+                                        guard: None,
+                                        body: Path(
+                                            Path {
+                                                segments: [
+                                                    PathSegment {
+                                                        name: "other",
+                                                        turbofish: false,
+                                                        generics: [],
+                                                        span: Span {
+                                                            start: 61,
+                                                            end: 66,
+                                                            file_id: FileId(
+                                                                0,
+                                                            ),
+                                                        },
+                                                    },
+                                                ],
+                                                span: Span {
+                                                    start: 61,
+                                                    end: 66,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ),
+                                        span: Span {
+                                            start: 56,
+                                            end: 66,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ],
+                                span: Span {
+                                    start: 25,
+                                    end: 68,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    span: Span {
+                        start: 23,
+                        end: 70,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            span: Span {
+                start: 0,
+                end: 70,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

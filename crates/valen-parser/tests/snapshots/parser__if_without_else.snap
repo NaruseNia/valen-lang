@@ -1,0 +1,127 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"fn f() { if cond { do_thing(); } }\")"
+---
+=== AST ===
+[
+    Fn(
+        FnDecl {
+            visibility: Internal,
+            name: "f",
+            generics: [],
+            params: [],
+            return_type: None,
+            body: Some(
+                Block {
+                    stmts: [],
+                    tail: Some(
+                        If(
+                            IfExpr {
+                                cond: Path(
+                                    Path {
+                                        segments: [
+                                            PathSegment {
+                                                name: "cond",
+                                                turbofish: false,
+                                                generics: [],
+                                                span: Span {
+                                                    start: 12,
+                                                    end: 16,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ],
+                                        span: Span {
+                                            start: 12,
+                                            end: 16,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                then_branch: Block {
+                                    stmts: [
+                                        ExprSemi(
+                                            Call(
+                                                CallExpr {
+                                                    callee: Path(
+                                                        Path {
+                                                            segments: [
+                                                                PathSegment {
+                                                                    name: "do_thing",
+                                                                    turbofish: false,
+                                                                    generics: [],
+                                                                    span: Span {
+                                                                        start: 19,
+                                                                        end: 27,
+                                                                        file_id: FileId(
+                                                                            0,
+                                                                        ),
+                                                                    },
+                                                                },
+                                                            ],
+                                                            span: Span {
+                                                                start: 19,
+                                                                end: 27,
+                                                                file_id: FileId(
+                                                                    0,
+                                                                ),
+                                                            },
+                                                        },
+                                                    ),
+                                                    args: [],
+                                                    span: Span {
+                                                        start: 19,
+                                                        end: 29,
+                                                        file_id: FileId(
+                                                            0,
+                                                        ),
+                                                    },
+                                                },
+                                            ),
+                                        ),
+                                    ],
+                                    tail: None,
+                                    span: Span {
+                                        start: 17,
+                                        end: 32,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                                else_branch: None,
+                                span: Span {
+                                    start: 9,
+                                    end: 32,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    span: Span {
+                        start: 7,
+                        end: 34,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            span: Span {
+                start: 0,
+                end: 34,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

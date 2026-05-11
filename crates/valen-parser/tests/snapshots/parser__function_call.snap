@@ -1,0 +1,143 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"fn main() { foo(1, 2, 3) }\")"
+---
+=== AST ===
+[
+    Fn(
+        FnDecl {
+            visibility: Internal,
+            name: "main",
+            generics: [],
+            params: [],
+            return_type: None,
+            body: Some(
+                Block {
+                    stmts: [],
+                    tail: Some(
+                        Call(
+                            CallExpr {
+                                callee: Path(
+                                    Path {
+                                        segments: [
+                                            PathSegment {
+                                                name: "foo",
+                                                turbofish: false,
+                                                generics: [],
+                                                span: Span {
+                                                    start: 12,
+                                                    end: 15,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ],
+                                        span: Span {
+                                            start: 12,
+                                            end: 15,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                args: [
+                                    CallArg {
+                                        name: None,
+                                        value: Literal(
+                                            Int(
+                                                1,
+                                                Span {
+                                                    start: 16,
+                                                    end: 17,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                        span: Span {
+                                            start: 16,
+                                            end: 17,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                    CallArg {
+                                        name: None,
+                                        value: Literal(
+                                            Int(
+                                                2,
+                                                Span {
+                                                    start: 19,
+                                                    end: 20,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                        span: Span {
+                                            start: 19,
+                                            end: 20,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                    CallArg {
+                                        name: None,
+                                        value: Literal(
+                                            Int(
+                                                3,
+                                                Span {
+                                                    start: 22,
+                                                    end: 23,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                        span: Span {
+                                            start: 22,
+                                            end: 23,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ],
+                                span: Span {
+                                    start: 12,
+                                    end: 24,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    span: Span {
+                        start: 10,
+                        end: 26,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            span: Span {
+                start: 0,
+                end: 26,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)
