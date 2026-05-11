@@ -12,5 +12,5 @@ description = "Valen HIR to JVM bytecode emitter"
 valen-ast = { workspace = true }
 valen-hir = { workspace = true }
 valen-diagnostics = { workspace = true }
-noak = { workspace = true }
+ristretto_classfile = { workspace = true }
 smol_str = { workspace = true }
