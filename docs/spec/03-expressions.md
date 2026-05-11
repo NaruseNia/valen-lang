@@ -41,3 +41,39 @@ fn abs(x: Int) -> Int {
     if x < 0 { -x } else { x }  // if 式が関数の値
 }
 ```
+
+## 3.4 break / continue
+
+`break` と `continue` は `loop` / `while` / `for` の中で使える。
+
+- `break;` — ループを抜ける
+- `break expr;` — ループを抜けつつ値を返す（`loop` 式の値になる）
+- `continue;` — 現在のイテレーションをスキップし次へ
+
+```valen
+let x = loop {
+    let n = read_input();
+    if n > 0 {
+        break n;  // loop 式の値
+    }
+    continue;
+};
+
+while condition() {
+    if skip_this() { continue; }
+    process();
+}
+```
+
+**ラベル付き break（Phase 1.5）:**
+
+ネストしたループからの脱出は Phase 1.5 で導入予定。
+
+```valen
+// Phase 1.5+
+'outer: for x in xs {
+    for y in ys {
+        if done(x, y) { break 'outer; }
+    }
+}
+```

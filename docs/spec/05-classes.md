@@ -46,6 +46,7 @@ data class User(pub name: String, pub email: String);
 ```
 
 - 自動生成：`equals` / `hashCode` / `toString` / `copy`（MVP 必須）
+- **自動生成の対象は自身の primary constructor params のみ。** 親 class の state は含めない（Kotlin 同様）
 - `data class` は常に **final**
 - `open` / `abstract` / `sealed` を付与**できない**
 - `data class` は **superclass になれない**（継承元として使えない）
@@ -123,10 +124,11 @@ Trait::foo(value, args...)
 
 ### override fn 必須条件
 
-class 本体 method が `override fn` を要求されるのは以下のいずれか：
+class 本体 method が `override fn` を要求されるのは以下の場合のみ：
 
 - 親 class の `open fn` と**同一 signature**を持つ
-- class が implement している trait の requirement（abstract method または default method）と**同一 signature**を持つ
+
+**class 本体 method は trait を充足しない。** trait 充足は必ず `impl Trait for Type { ... }` ブロックで行う（§7.2）。class 本体に trait と同名・同シグネチャの method があっても、それは trait とは無関係な独立した method である。
 
 signature が異なれば（arity や型制約で区別できれば）、同名でも `override` は不要：
 

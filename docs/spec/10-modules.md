@@ -10,8 +10,31 @@ import java.util.List;
 ```
 
 - Java 風、ファイル先頭に package 宣言
+- **package 宣言は必須。** 省略した `.vln` ファイルはコンパイルエラー
 - ファイルシステム階層と一致（Java と同様）
 - **package は source 階層と名前空間のみ**。所有権・可視性単位としては使わない（それは `module` の責務、§10.2）
+
+### import 構文
+
+**MVP:**
+
+```valen
+import java.util.List;                    // 単一型 import
+import java.util.concurrent.ConcurrentHashMap as CMap;  // alias
+```
+
+- `import path.to.Type;` — 単一型の import
+- `import path.to.Type as Alias;` — alias 付き import
+
+**Phase 1.5+:**
+
+```valen
+// selective import
+import java.util.{List, Map, Set};
+
+// glob import
+import java.util.*;
+```
 
 ## 10.2 module
 
