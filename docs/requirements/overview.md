@@ -30,20 +30,20 @@ Valen は JVM をターゲットとする新規プログラミング言語。ADT
 | REQ-SYNTAX-001 | キーワード・識別子・リテラルの字句定義 | Must | Done |
 | REQ-SYNTAX-002 | セミコロンルール（Rust 流3分類） | Must | Draft |
 | REQ-SYNTAX-003 | コメント（単行・ブロック・doc） | Must | Done |
-| REQ-TYPE-001 | プリミティブ名義型（Int〜Nothing） | Must | Draft |
-| REQ-TYPE-002 | リテラルデフォルト型（42=Int, 3.14=Double, サフィックス） | Must | Draft |
-| REQ-TYPE-003 | 暗黙数値変換なし・明示変換メソッド | Must | Draft |
-| REQ-TYPE-004 | 等値比較（== 構造 / === 参照） | Must | Draft |
-| REQ-TYPE-005 | Option<T> による null 一本化（T? 糖衣） | Must | Draft |
+| REQ-TYPE-001 | プリミティブ名義型（Int〜Nothing） | Must | Done |
+| REQ-TYPE-002 | リテラルデフォルト型（42=Int, 3.14=Double, サフィックス） | Must | Done |
+| REQ-TYPE-003 | 暗黙数値変換なし・明示変換メソッド | Must | Done |
+| REQ-TYPE-004 | 等値比較（== 構造 / === 参照） | Must | Done |
+| REQ-TYPE-005 | Option<T> による null 一本化（T? 糖衣） | Must | Done |
 | REQ-TYPE-006 | ジェネリクス（erasure, in/out variance） | Must | Draft |
 | REQ-TYPE-007 | typealias（所有権なし） | Should | Draft |
-| REQ-TYPE-008 | ローカル型推論あり・fn シグネチャ明示 | Must | Draft |
+| REQ-TYPE-008 | ローカル型推論あり・fn シグネチャ明示 | Must | Done |
 | REQ-CLASS-001 | class + primary constructor | Must | Draft |
 | REQ-CLASS-002 | data class（equals/hashCode/toString/copy 自動生成） | Must | Draft |
 | REQ-CLASS-003 | 継承（open/abstract/sealed opt-in、単一継承+複数 trait） | Must | Draft |
 | REQ-CLASS-004 | sealed class（closed OOP hierarchy） | Must | Draft |
-| REQ-CLASS-005 | メソッド解決規則（class 本体優先→trait→UFCS） | Must | Draft |
-| REQ-CLASS-006 | 可視性（pub/internal/private、module 単位） | Must | Draft |
+| REQ-CLASS-005 | メソッド解決規則（class 本体優先→trait→UFCS） | Must | Done |
+| REQ-CLASS-006 | 可視性（pub/internal/private、module 単位） | Must | Done |
 | REQ-CLASS-007 | package 宣言必須 | Must | Draft |
 | REQ-CLASS-008 | import（単一型 + alias、MVP） | Must | Draft |
 | REQ-ADT-001 | enum（Rust 型 ADT、payload あり/なし） | Must | Draft |
@@ -51,7 +51,7 @@ Valen は JVM をターゲットとする新規プログラミング言語。ADT
 | REQ-ADT-003 | enum Java ABI（sealed interface + record/singleton） | Must | Draft |
 | REQ-TRAIT-001 | trait 定義と impl ブロック（inherent impl なし） | Must | Draft |
 | REQ-TRAIT-002 | trait 充足は impl ブロックのみ | Must | Draft |
-| REQ-TRAIT-003 | orphan rule（module 所有、blanket impl 禁止） | Must | Draft |
+| REQ-TRAIT-003 | orphan rule（module 所有、blanket impl 禁止） | Must | Done |
 | REQ-TRAIT-004 | UFCS（Trait::method(receiver, args) 一本化） | Must | Draft |
 | REQ-FAIL-001 | Option/Result/panic/Exception の役割分離 | Must | Draft |
 | REQ-FAIL-002 | Error trait（E: Error 制約） | Must | Draft |

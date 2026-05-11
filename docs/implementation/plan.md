@@ -14,8 +14,8 @@ Phase 0（基盤整備）完了済み。Phase 1（MVP）に向けて、コンパ
 | 1 | ~~TASK-002: Parser 拡張（enum/trait/impl/import/package 宣言）~~ ✅ | - | L |
 | 1 | ~~TASK-003: Parser 拡張（for/while/loop/break/continue/lambda）~~ ✅ | - | M |
 | 2 | ~~TASK-004: HIR 設計と名前解決~~ ✅ | TASK-001, TASK-002 | L |
-| 2 | TASK-005: 型検査（プリミティブ・ジェネリクス・推論） | TASK-004 | L |
-| 2 | TASK-006: Coherence / orphan rule 検証 | TASK-004 | M |
+| 2 | ~~TASK-005: 型検査（プリミティブ・ジェネリクス・推論）~~ ✅ | TASK-004 | L |
+| 2 | ~~TASK-006: Coherence / orphan rule 検証~~ ✅ | TASK-004 | M |
 | 2 | TASK-007: Exhaustiveness check（enum/sealed） | TASK-004 | M |
 | 3 | TASK-008: Codegen — class/data class emit | TASK-005 | L |
 | 3 | TASK-009: Codegen — enum ADT フル emit | TASK-005, TASK-007 | L |
