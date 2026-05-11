@@ -22,31 +22,39 @@ Claude Code 向け作業ガイドライン。このファイルは Valen 言語�
 4. **Java 親和優先、Rust 厳密優先のどちらかを選ぶ場面では、新機能は Rust 厳密側、既存資産連携は Java 側**
 5. **仕様を記述するときは実装都合を出さない** — 例：`Int` は「JVM 整数型に対応する名義型」まで、boxing は実装メモ
 
-## 確定事項（2026-04 時点）
+## 確定事項（2026-05 時点）
 
-- MVPスコープ、Phase計画は [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) を参照
-- 構文・型システム詳細は [docs/LANGUAGE_SPEC.md](docs/LANGUAGE_SPEC.md) を参照
+- **要件定義:** [docs/requirements/overview.md](docs/requirements/overview.md) — 10 スコープ、45 要件（REQ-{SCOPE}-{SEQ} 形式）
+- **言語仕様:** [docs/LANGUAGE_SPEC.md](docs/LANGUAGE_SPEC.md) → [docs/spec/](docs/spec/) 配下の詳細仕様
+- **アーキテクチャ:** [docs/specifications/architecture.md](docs/specifications/architecture.md)
+- **実装計画:** [docs/implementation/plan.md](docs/implementation/plan.md) — 17 タスク、5 マイルストーン、トレーサビリティマトリクス
+- **Phase 計画:** [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)
+- **grill-me 4巡確定事項:** [docs/spec/18-open-questions.md](docs/spec/18-open-questions.md) 末尾の決定サマリ表
 - Codex 3巡レビューの採用履歴は memory の `project_valen_codex_review.md` を参照
 
-## ディレクトリ構成（予定）
+## ディレクトリ構成
 
 ```
 valen-lang/
-├── compiler/             # valenc（Rust）
-│   ├── Cargo.toml
-│   └── src/
-├── gradle-plugin/        # Gradle プラグイン（Kotlin）
-│   └── build.gradle.kts
-├── lsp/                  # LSP server（Rust）
-│   └── Cargo.toml
-├── fmt/                  # valenfmt（Rust）
-│   └── Cargo.toml
-├── stdlib/               # Valen stdlib（.vln）
-├── examples/             # サンプルコード
-├── docs/                 # 仕様・実装計画
-│   ├── LANGUAGE_SPEC.md
-│   └── IMPLEMENTATION_PLAN.md
-├── README.md
+├── crates/
+│   ├── valen-ast/          # AST 型定義、TokenKind、Span
+│   ├── valen-diagnostics/  # エラー・警告の共通構造体
+│   ├── valen-parser/       # logos lexer + hand-written RD parser
+│   ├── valen-hir/          # 名前解決・型検査・coherence・exhaustiveness
+│   ├── valen-codegen/      # JVM bytecode 生成 (ristretto_classfile)
+│   ├── valenc/             # コンパイラ CLI
+│   ├── valen-lsp/          # LSP サーバー
+│   └── valenfmt/           # コードフォーマッタ
+├── docs/
+│   ├── requirements/       # 要件定義書（REQ-{SCOPE}-{SEQ}）
+│   ├── specifications/     # アーキテクチャ仕様
+│   ├── implementation/     # 実装計画・タスク（TASK-{SEQ}）
+│   ├── spec/               # 言語仕様詳細（01-lexical 〜 20-annotations）
+│   ├── LANGUAGE_SPEC.md    # 仕様インデックス
+│   └── IMPLEMENTATION_PLAN.md # Phase 計画
+├── gradle-plugin/          # Gradle プラグイン（Kotlin、未着手）
+├── stdlib/                 # Valen stdlib（.vln、未着手）
+├── examples/               # サンプルコード（未着手）
 ├── CLAUDE.md
 └── LICENSE
 ```
@@ -103,3 +111,16 @@ Git hook で自動化したい場合は `.git/hooks/pre-commit` に上記を仕�
 5. interop 境界でのルール明確化
 
 新機能提案時は自己診断として上記5軸でチェック。
+
+## ドキュメント整合性
+
+作業完了時、以下のドキュメントに影響する変更がないか確認し、必要なら更新するかユーザーに確認すること:
+
+- `docs/requirements/` — 要件の追加・変更・ステータス更新（Draft → Done 等）
+- `docs/specifications/` — アーキテクチャ変更（crate 追加、パイプライン変更等）
+- `docs/implementation/plan.md` — タスク完了、新規タスク追加、マイルストーン進捗
+- `docs/spec/` — 言語仕様の変更・追加
+- `docs/IMPLEMENTATION_PLAN.md` — Phase 進捗の更新
+- `docs/spec/18-open-questions.md` — 仕様課題の解決・追加
+
+特に parser/HIR/codegen の実装が進んだ際は、対応する TASK の完了や REQ のステータス更新を忘れずに行う。

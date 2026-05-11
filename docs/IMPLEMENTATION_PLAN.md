@@ -1,6 +1,6 @@
 # Valen 実装計画
 
-Last updated: 2026-04-17（言語仕様 grill-me 1-3 巡目決定を反映、docs/language-spec-revision ブランチ）
+Last updated: 2026-05-11（Phase 0 完了、grill-me 4巡確定、TASK-001 完了を反映）
 
 ---
 
@@ -8,28 +8,22 @@ Last updated: 2026-04-17（言語仕様 grill-me 1-3 巡目決定を反映、doc
 
 **目的:** 後続 Phase 全体の土台を整える。
 
-**現在の進捗（2026-04-17）:** Rust workspace / AST 骨組み / logos lexer + 極小 recursive descent parser / `insta` snapshot テスト基盤まで完了。残：JVM classfile crate 選定・PoC、enum bytecode spike、top-level `class` 宣言の parse、HIR 詳細設計。
+**Phase 0 完了（2026-05-11）。** 全タスク完了。
 
 ### タスク
 - [x] Rust workspace 初期化（`crates/valen-ast`, `valen-parser`, `valen-hir`, `valen-codegen`, `valen-diagnostics`, `valenc`, `valen-lsp`, `valenfmt`）
-- [ ] JVM classfile crate 選定と PoC
-  - 候補：[noak](https://crates.io/crates/noak), [cafebabe](https://crates.io/crates/cafebabe), [classfile-parser](https://crates.io/crates/classfile-parser)
-  - 評価基準：write API の完成度、ClassFile emit の対応範囲、Java 21/25 bytecode サポート、メンテナンス
-  - 現状：`noak = "0.5"` を workspace placeholder として仮置き、選定・PoC 未着手
-- [ ] **enum bytecode emit の実験 spike**：sealed interface + record + singleton の組み合わせを手書きで emit し、以下を検証
-  - Java 21 `switch` pattern matching での exhaustive
-  - Jackson / Gson での serialize/deserialize
-  - `java.lang.reflect` での class 名前解決
-  - Gradle incremental compilation
+- [x] JVM classfile crate 選定と PoC — **ristretto_classfile 0.31** を選定（write API + Java 21-25 + sealed/record attrs）
+- [x] **enum bytecode emit の実験 spike** — 結果: `docs/enum-abi-report.md`
 - [x] Parser 戦略の選定（**logos lexer + 手書き recursive descent** に確定）
 - [x] AST の設計（`valen-ast` に Item / Expr / Pattern / Type / Literal の骨格を定義）
-  - HIR の詳細設計は Phase 1 初期タスクへ送る
 - [x] テストインフラ（`insta` snapshot 基盤、integration テスト稼働）
-  - lexer / parser に 15 ケース投入（`crates/valen-parser/tests/`）
-  - bytecode diff テストは classfile PoC 着手時に追加
-- [ ] parser 拡張：top-level `class NAME {}` の parse（Phase 0 完了条件 PoC の前提）
-  - 現状の parse カバレッジは `fn NAME() { BLOCK }` + `let` / 式 / リテラル / 二項演算のみ
-  - fn パラメータ・戻り値型、`if` / `match` / call / path(`::`) / `safe` ブロックなど他の拡張は Phase 1 本体で対応
+- [x] parser 拡張：top-level `class NAME {}` の parse + 全キーワード lexer 登録
+- [x] `class Foo {}` → `Foo.class` emit PoC（`valenc build` で動作確認済み）
+
+### Phase 1 進捗
+- [x] **TASK-001:** Parser 拡張 — fn params/return type, if/else, match（フルパターン）, call/method call/field/try, paths, return（PR #18）
+- [ ] TASK-002: Parser 拡張 — enum/trait/impl/import/package
+- [ ] TASK-003: Parser 拡張 — for/while/loop/break/continue/lambda
 
 ### 完了条件
 - 最小限の `class Foo {}` を `.vln` → `Foo.class` に emit できる PoC が動く
