@@ -5,4 +5,4 @@ expression: "check(\"let x = 1;\")"
 === AST ===
 []
 === diagnostics ===
-Error V0101 0..3: expected top-level item (e.g. `fn`, `class`)
+Error V0101 0..3: expected top-level item (e.g. `fn`, `class`, `enum`, `trait`, `impl`)

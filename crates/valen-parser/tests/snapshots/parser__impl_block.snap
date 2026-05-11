@@ -1,0 +1,8 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"impl Area for Circle { fn area(self) -> Float { self.r } }\")"
+---
+=== AST ===
+[]
+=== diagnostics ===
+Error V0101 48..52: expected expression

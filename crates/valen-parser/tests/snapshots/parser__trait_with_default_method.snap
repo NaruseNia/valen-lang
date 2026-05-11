@@ -1,0 +1,8 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"trait Display { fn display(self) -> String { self.name } }\")"
+---
+=== AST ===
+[]
+=== diagnostics ===
+Error V0101 45..49: expected expression

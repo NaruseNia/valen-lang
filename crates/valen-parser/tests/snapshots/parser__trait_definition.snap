@@ -1,0 +1,103 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"trait Area { fn area(self) -> Float; }\")"
+---
+=== AST ===
+[
+    Trait(
+        TraitDecl {
+            visibility: Internal,
+            name: "Area",
+            generics: [],
+            items: [
+                Fn(
+                    FnDecl {
+                        visibility: Pub,
+                        name: "area",
+                        generics: [],
+                        params: [
+                            Param {
+                                name: "self",
+                                ty: Path(
+                                    TypePath {
+                                        segments: [
+                                            TypePathSegment {
+                                                name: "Self",
+                                                generics: [],
+                                                span: Span {
+                                                    start: 21,
+                                                    end: 25,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ],
+                                        span: Span {
+                                            start: 21,
+                                            end: 25,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                mutable: false,
+                                span: Span {
+                                    start: 21,
+                                    end: 25,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ],
+                        return_type: Some(
+                            Path(
+                                TypePath {
+                                    segments: [
+                                        TypePathSegment {
+                                            name: "Float",
+                                            generics: [],
+                                            span: Span {
+                                                start: 30,
+                                                end: 35,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
+                                        },
+                                    ],
+                                    span: Span {
+                                        start: 30,
+                                        end: 35,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                            ),
+                        ),
+                        body: None,
+                        span: Span {
+                            start: 13,
+                            end: 36,
+                            file_id: FileId(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+            ],
+            span: Span {
+                start: 0,
+                end: 38,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

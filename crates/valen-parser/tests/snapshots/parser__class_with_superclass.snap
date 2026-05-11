@@ -1,0 +1,90 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"class Dog(pub name: String) : Animal {}\")"
+---
+=== AST ===
+[
+    Class(
+        ClassDecl {
+            visibility: Internal,
+            kind: Final,
+            name: "Dog",
+            generics: [],
+            ctor_params: [
+                CtorParam {
+                    visibility: Pub,
+                    name: "name",
+                    ty: Path(
+                        TypePath {
+                            segments: [
+                                TypePathSegment {
+                                    name: "String",
+                                    generics: [],
+                                    span: Span {
+                                        start: 20,
+                                        end: 26,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                            ],
+                            span: Span {
+                                start: 20,
+                                end: 26,
+                                file_id: FileId(
+                                    0,
+                                ),
+                            },
+                        },
+                    ),
+                    mutable: false,
+                    span: Span {
+                        start: 10,
+                        end: 26,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ],
+            superclass: Some(
+                Path(
+                    TypePath {
+                        segments: [
+                            TypePathSegment {
+                                name: "Animal",
+                                generics: [],
+                                span: Span {
+                                    start: 30,
+                                    end: 36,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ],
+                        span: Span {
+                            start: 30,
+                            end: 36,
+                            file_id: FileId(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+            ),
+            traits: [],
+            body: [],
+            span: Span {
+                start: 0,
+                end: 39,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

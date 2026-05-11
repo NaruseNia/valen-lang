@@ -1,0 +1,97 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"data class Point(x: Float, y: Float);\")"
+---
+=== AST ===
+[
+    DataClass(
+        DataClassDecl {
+            visibility: Internal,
+            name: "Point",
+            generics: [],
+            ctor_params: [
+                CtorParam {
+                    visibility: Internal,
+                    name: "x",
+                    ty: Path(
+                        TypePath {
+                            segments: [
+                                TypePathSegment {
+                                    name: "Float",
+                                    generics: [],
+                                    span: Span {
+                                        start: 20,
+                                        end: 25,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                            ],
+                            span: Span {
+                                start: 20,
+                                end: 25,
+                                file_id: FileId(
+                                    0,
+                                ),
+                            },
+                        },
+                    ),
+                    mutable: false,
+                    span: Span {
+                        start: 17,
+                        end: 25,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+                CtorParam {
+                    visibility: Internal,
+                    name: "y",
+                    ty: Path(
+                        TypePath {
+                            segments: [
+                                TypePathSegment {
+                                    name: "Float",
+                                    generics: [],
+                                    span: Span {
+                                        start: 30,
+                                        end: 35,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                            ],
+                            span: Span {
+                                start: 30,
+                                end: 35,
+                                file_id: FileId(
+                                    0,
+                                ),
+                            },
+                        },
+                    ),
+                    mutable: false,
+                    span: Span {
+                        start: 27,
+                        end: 35,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ],
+            span: Span {
+                start: 0,
+                end: 37,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

@@ -1,0 +1,166 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"enum Shape { Circle(r: Float), Rectangle(w: Float, h: Float), Point }\")"
+---
+=== AST ===
+[
+    Enum(
+        EnumDecl {
+            visibility: Internal,
+            name: "Shape",
+            generics: [],
+            variants: [
+                EnumVariant {
+                    name: "Circle",
+                    fields: Named(
+                        [
+                            EnumField {
+                                name: "r",
+                                ty: Path(
+                                    TypePath {
+                                        segments: [
+                                            TypePathSegment {
+                                                name: "Float",
+                                                generics: [],
+                                                span: Span {
+                                                    start: 23,
+                                                    end: 28,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ],
+                                        span: Span {
+                                            start: 23,
+                                            end: 28,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                span: Span {
+                                    start: 20,
+                                    end: 28,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ],
+                    ),
+                    span: Span {
+                        start: 13,
+                        end: 29,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+                EnumVariant {
+                    name: "Rectangle",
+                    fields: Named(
+                        [
+                            EnumField {
+                                name: "w",
+                                ty: Path(
+                                    TypePath {
+                                        segments: [
+                                            TypePathSegment {
+                                                name: "Float",
+                                                generics: [],
+                                                span: Span {
+                                                    start: 44,
+                                                    end: 49,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ],
+                                        span: Span {
+                                            start: 44,
+                                            end: 49,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                span: Span {
+                                    start: 41,
+                                    end: 49,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                            EnumField {
+                                name: "h",
+                                ty: Path(
+                                    TypePath {
+                                        segments: [
+                                            TypePathSegment {
+                                                name: "Float",
+                                                generics: [],
+                                                span: Span {
+                                                    start: 54,
+                                                    end: 59,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ],
+                                        span: Span {
+                                            start: 54,
+                                            end: 59,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                span: Span {
+                                    start: 51,
+                                    end: 59,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ],
+                    ),
+                    span: Span {
+                        start: 31,
+                        end: 60,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+                EnumVariant {
+                    name: "Point",
+                    fields: Unit,
+                    span: Span {
+                        start: 62,
+                        end: 67,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ],
+            span: Span {
+                start: 0,
+                end: 69,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

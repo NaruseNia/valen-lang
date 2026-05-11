@@ -1,0 +1,148 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"package com.example;\\nimport java.util.List;\\n\\npub fn main() { let x: Int = 42; x }\")"
+---
+=== AST ===
+[
+    Package(
+        PackageDecl {
+            path: [
+                "com",
+                "example",
+            ],
+            span: Span {
+                start: 0,
+                end: 20,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+    Import(
+        ImportDecl {
+            path: [
+                "java",
+                "util",
+                "List",
+            ],
+            alias: None,
+            span: Span {
+                start: 21,
+                end: 43,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+    Fn(
+        FnDecl {
+            visibility: Pub,
+            name: "main",
+            generics: [],
+            params: [],
+            return_type: None,
+            body: Some(
+                Block {
+                    stmts: [
+                        Let(
+                            LetStmt {
+                                mutable: false,
+                                name: "x",
+                                ty: Some(
+                                    Path(
+                                        TypePath {
+                                            segments: [
+                                                TypePathSegment {
+                                                    name: "Int",
+                                                    generics: [],
+                                                    span: Span {
+                                                        start: 68,
+                                                        end: 71,
+                                                        file_id: FileId(
+                                                            0,
+                                                        ),
+                                                    },
+                                                },
+                                            ],
+                                            span: Span {
+                                                start: 68,
+                                                end: 71,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
+                                        },
+                                    ),
+                                ),
+                                init: Literal(
+                                    Int(
+                                        42,
+                                        Span {
+                                            start: 74,
+                                            end: 76,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    ),
+                                ),
+                                span: Span {
+                                    start: 61,
+                                    end: 77,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ],
+                    tail: Some(
+                        Path(
+                            Path {
+                                segments: [
+                                    PathSegment {
+                                        name: "x",
+                                        turbofish: false,
+                                        generics: [],
+                                        span: Span {
+                                            start: 78,
+                                            end: 79,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ],
+                                span: Span {
+                                    start: 78,
+                                    end: 79,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    span: Span {
+                        start: 59,
+                        end: 81,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            span: Span {
+                start: 45,
+                end: 81,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)
