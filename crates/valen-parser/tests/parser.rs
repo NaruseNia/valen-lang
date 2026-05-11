@@ -111,3 +111,139 @@ fn error_class_missing_name() {
 fn error_class_missing_brace() {
     assert_snapshot!(check("class Foo"));
 }
+
+// --- TASK-001: fn params, return type, type annotations ---
+
+#[test]
+fn fn_with_params_and_return() {
+    assert_snapshot!(check("fn add(a: Int, b: Int) -> Int { a }"));
+}
+
+#[test]
+fn fn_with_generic_type() {
+    assert_snapshot!(check("fn first(xs: List<Int>) -> Option<Int> { xs }"));
+}
+
+#[test]
+fn let_with_type_annotation() {
+    assert_snapshot!(check("fn main() { let x: Int = 42; x }"));
+}
+
+#[test]
+fn nullable_type() {
+    assert_snapshot!(check("fn find(id: Int) -> String? { id }"));
+}
+
+// --- if/else ---
+
+#[test]
+fn if_else_expr() {
+    assert_snapshot!(check("fn abs(x: Int) -> Int { if x { 1 } else { 2 } }"));
+}
+
+#[test]
+fn if_without_else() {
+    assert_snapshot!(check("fn f() { if cond { do_thing(); } }"));
+}
+
+#[test]
+fn if_else_if_chain() {
+    assert_snapshot!(check(
+        "fn f(x: Int) -> Int { if x { 1 } else if y { 2 } else { 3 } }"
+    ));
+}
+
+// --- match ---
+
+#[test]
+fn match_literals() {
+    assert_snapshot!(check(
+        "fn f(x: Int) -> String { match x { 0 => zero, 1 => one, _ => other } }"
+    ));
+}
+
+#[test]
+fn match_with_guard() {
+    assert_snapshot!(check(
+        "fn f(x: Int) -> Int { match x { n if n > 0 => n, _ => 0 } }"
+    ));
+}
+
+#[test]
+fn match_or_pattern() {
+    assert_snapshot!(check(
+        "fn f(x: Int) -> Bool { match x { 1 | 2 | 3 => true, _ => false } }"
+    ));
+}
+
+#[test]
+fn match_range_pattern() {
+    assert_snapshot!(check(
+        "fn f(x: Int) -> String { match x { 0..=9 => small, _ => big } }"
+    ));
+}
+
+#[test]
+fn match_enum_destructure() {
+    assert_snapshot!(check(
+        "fn f() -> Int { match shape { Shape::Circle(r) => r, Shape::Point => 0 } }"
+    ));
+}
+
+#[test]
+fn match_at_binding() {
+    assert_snapshot!(check(
+        "fn f(x: Int) -> Int { match x { n @ 1 => n, _ => 0 } }"
+    ));
+}
+
+// --- call / method call / field ---
+
+#[test]
+fn function_call() {
+    assert_snapshot!(check("fn main() { foo(1, 2, 3) }"));
+}
+
+#[test]
+fn named_args_call() {
+    assert_snapshot!(check("fn main() { greet(msg = hello, count = 3) }"));
+}
+
+#[test]
+fn method_call() {
+    assert_snapshot!(check("fn main() { xs.map(f) }"));
+}
+
+#[test]
+fn field_access() {
+    assert_snapshot!(check("fn main() { user.name }"));
+}
+
+#[test]
+fn chained_method_calls() {
+    assert_snapshot!(check("fn main() { xs.filter(f).map(g).count() }"));
+}
+
+#[test]
+fn path_with_double_colon() {
+    assert_snapshot!(check("fn main() { Shape::Circle }"));
+}
+
+// --- try operator ---
+
+#[test]
+fn try_operator() {
+    assert_snapshot!(check("fn f() -> Int { get_value()? }"));
+}
+
+// --- return ---
+
+#[test]
+fn return_expr() {
+    assert_snapshot!(check("fn f(x: Int) -> Int { return x; }"));
+}
+
+#[test]
+fn return_no_value() {
+    assert_snapshot!(check("fn f() { return; }"));
+}

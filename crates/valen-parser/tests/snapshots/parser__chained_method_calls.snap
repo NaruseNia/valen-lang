@@ -1,0 +1,178 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"fn main() { xs.filter(f).map(g).count() }\")"
+---
+=== AST ===
+[
+    Fn(
+        FnDecl {
+            visibility: Internal,
+            name: "main",
+            generics: [],
+            params: [],
+            return_type: None,
+            body: Some(
+                Block {
+                    stmts: [],
+                    tail: Some(
+                        MethodCall(
+                            MethodCallExpr {
+                                receiver: MethodCall(
+                                    MethodCallExpr {
+                                        receiver: MethodCall(
+                                            MethodCallExpr {
+                                                receiver: Path(
+                                                    Path {
+                                                        segments: [
+                                                            PathSegment {
+                                                                name: "xs",
+                                                                turbofish: false,
+                                                                generics: [],
+                                                                span: Span {
+                                                                    start: 12,
+                                                                    end: 14,
+                                                                    file_id: FileId(
+                                                                        0,
+                                                                    ),
+                                                                },
+                                                            },
+                                                        ],
+                                                        span: Span {
+                                                            start: 12,
+                                                            end: 14,
+                                                            file_id: FileId(
+                                                                0,
+                                                            ),
+                                                        },
+                                                    },
+                                                ),
+                                                method: "filter",
+                                                generics: [],
+                                                args: [
+                                                    CallArg {
+                                                        name: None,
+                                                        value: Path(
+                                                            Path {
+                                                                segments: [
+                                                                    PathSegment {
+                                                                        name: "f",
+                                                                        turbofish: false,
+                                                                        generics: [],
+                                                                        span: Span {
+                                                                            start: 22,
+                                                                            end: 23,
+                                                                            file_id: FileId(
+                                                                                0,
+                                                                            ),
+                                                                        },
+                                                                    },
+                                                                ],
+                                                                span: Span {
+                                                                    start: 22,
+                                                                    end: 23,
+                                                                    file_id: FileId(
+                                                                        0,
+                                                                    ),
+                                                                },
+                                                            },
+                                                        ),
+                                                        span: Span {
+                                                            start: 22,
+                                                            end: 23,
+                                                            file_id: FileId(
+                                                                0,
+                                                            ),
+                                                        },
+                                                    },
+                                                ],
+                                                span: Span {
+                                                    start: 12,
+                                                    end: 24,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ),
+                                        method: "map",
+                                        generics: [],
+                                        args: [
+                                            CallArg {
+                                                name: None,
+                                                value: Path(
+                                                    Path {
+                                                        segments: [
+                                                            PathSegment {
+                                                                name: "g",
+                                                                turbofish: false,
+                                                                generics: [],
+                                                                span: Span {
+                                                                    start: 29,
+                                                                    end: 30,
+                                                                    file_id: FileId(
+                                                                        0,
+                                                                    ),
+                                                                },
+                                                            },
+                                                        ],
+                                                        span: Span {
+                                                            start: 29,
+                                                            end: 30,
+                                                            file_id: FileId(
+                                                                0,
+                                                            ),
+                                                        },
+                                                    },
+                                                ),
+                                                span: Span {
+                                                    start: 29,
+                                                    end: 30,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ],
+                                        span: Span {
+                                            start: 12,
+                                            end: 31,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                method: "count",
+                                generics: [],
+                                args: [],
+                                span: Span {
+                                    start: 12,
+                                    end: 39,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    span: Span {
+                        start: 10,
+                        end: 41,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            span: Span {
+                start: 0,
+                end: 41,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)
