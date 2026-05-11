@@ -1,3 +1,4 @@
+pub mod coherence;
 pub mod resolve;
 pub mod ty;
 

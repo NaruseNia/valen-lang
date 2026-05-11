@@ -62,6 +62,10 @@ impl DiagCode {
     pub const ORPHAN_RULE_VIOLATION: DiagCode = DiagCode(400);
     pub const BLANKET_IMPL_NOT_ALLOWED: DiagCode = DiagCode(401);
     pub const IMPL_CONFLICT: DiagCode = DiagCode(402);
+    pub const MISSING_TRAIT_METHOD: DiagCode = DiagCode(403);
+    pub const TRAIT_METHOD_SIG_MISMATCH: DiagCode = DiagCode(404);
+    pub const UNKNOWN_TRAIT: DiagCode = DiagCode(405);
+    pub const INHERENT_IMPL_NOT_ALLOWED: DiagCode = DiagCode(406);
     pub const MATCH_NOT_EXHAUSTIVE: DiagCode = DiagCode(500);
     pub const JAVA_EXCEPTION_NOT_WRAPPED: DiagCode = DiagCode(600);
 }
