@@ -3,6 +3,199 @@ source: crates/valen-parser/tests/parser.rs
 expression: "check(\"impl Area for Circle { fn area(self) -> Float { self.r } }\")"
 ---
 === AST ===
-[]
+[
+    Impl(
+        ImplBlock {
+            generics: [],
+            trait_ref: Some(
+                Path(
+                    TypePath {
+                        segments: [
+                            TypePathSegment {
+                                name: "Area",
+                                generics: [],
+                                span: Span {
+                                    start: 5,
+                                    end: 9,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ],
+                        span: Span {
+                            start: 5,
+                            end: 9,
+                            file_id: FileId(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+            ),
+            target: Path(
+                TypePath {
+                    segments: [
+                        TypePathSegment {
+                            name: "Circle",
+                            generics: [],
+                            span: Span {
+                                start: 14,
+                                end: 20,
+                                file_id: FileId(
+                                    0,
+                                ),
+                            },
+                        },
+                    ],
+                    span: Span {
+                        start: 14,
+                        end: 20,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            items: [
+                Fn(
+                    FnDecl {
+                        visibility: Pub,
+                        name: "area",
+                        generics: [],
+                        params: [
+                            Param {
+                                name: "self",
+                                ty: Path(
+                                    TypePath {
+                                        segments: [
+                                            TypePathSegment {
+                                                name: "Self",
+                                                generics: [],
+                                                span: Span {
+                                                    start: 31,
+                                                    end: 35,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ],
+                                        span: Span {
+                                            start: 31,
+                                            end: 35,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                mutable: false,
+                                span: Span {
+                                    start: 31,
+                                    end: 35,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ],
+                        return_type: Some(
+                            Path(
+                                TypePath {
+                                    segments: [
+                                        TypePathSegment {
+                                            name: "Float",
+                                            generics: [],
+                                            span: Span {
+                                                start: 40,
+                                                end: 45,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
+                                        },
+                                    ],
+                                    span: Span {
+                                        start: 40,
+                                        end: 45,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                            ),
+                        ),
+                        body: Some(
+                            Block {
+                                stmts: [],
+                                tail: Some(
+                                    Field(
+                                        FieldAccess {
+                                            receiver: Path(
+                                                Path {
+                                                    segments: [
+                                                        PathSegment {
+                                                            name: "self",
+                                                            turbofish: false,
+                                                            generics: [],
+                                                            span: Span {
+                                                                start: 48,
+                                                                end: 52,
+                                                                file_id: FileId(
+                                                                    0,
+                                                                ),
+                                                            },
+                                                        },
+                                                    ],
+                                                    span: Span {
+                                                        start: 48,
+                                                        end: 52,
+                                                        file_id: FileId(
+                                                            0,
+                                                        ),
+                                                    },
+                                                },
+                                            ),
+                                            field: "r",
+                                            span: Span {
+                                                start: 48,
+                                                end: 54,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
+                                        },
+                                    ),
+                                ),
+                                span: Span {
+                                    start: 46,
+                                    end: 56,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                        span: Span {
+                            start: 23,
+                            end: 56,
+                            file_id: FileId(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+            ],
+            span: Span {
+                start: 0,
+                end: 58,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
 === diagnostics ===
-Error V0101 48..52: expected expression
+(none)

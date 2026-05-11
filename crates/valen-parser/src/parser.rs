@@ -845,6 +845,18 @@ impl Parser {
                 Some(Expr::Literal(Literal::Bool(b, span)))
             }
             TokenKind::Ident(_) => self.parse_path_expr(),
+            TokenKind::SelfKw => {
+                self.bump();
+                Some(Expr::Path(valen_ast::Path {
+                    segments: vec![valen_ast::PathSegment {
+                        name: SmolStr::from("self"),
+                        turbofish: false,
+                        generics: Vec::new(),
+                        span,
+                    }],
+                    span,
+                }))
+            }
             TokenKind::LParen => {
                 self.bump();
                 let inner = self.parse_expr()?;

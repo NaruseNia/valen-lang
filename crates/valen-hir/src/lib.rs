@@ -1,25 +1,145 @@
-//! High-level IR: after AST, before bytecode.
-//!
-//! Responsibilities:
-//! - Name resolution (imports, visibility, path lookup)
-//! - Type checking (including `Option`/`Result` + `?` propagation rules)
-//! - Coherence / orphan rule enforcement
-//!   - trait or outermost nominal constructor must be locally owned
-//!   - typealias does not grant ownership
-//!   - blanket impls rejected (std only)
-//!   - impl uniqueness globally
-//! - Exhaustiveness check for `match` over Valen enums and `@closed` Java types
-//! - Lowering to a typed IR suitable for codegen
-
-pub mod coherence;
-pub mod exhaustive;
 pub mod resolve;
 pub mod ty;
 
+use indexmap::IndexMap;
+use smol_str::SmolStr;
+use valen_ast::Span;
+
+pub type DefId = u32;
+
+#[derive(Debug, Default)]
 pub struct Hir {
-    // TODO: resolved items, type-annotated bodies, impl table, etc.
+    pub defs: IndexMap<DefId, Def>,
+    pub package: Option<Vec<SmolStr>>,
+    next_id: DefId,
 }
 
-pub fn lower(_items: &[valen_ast::Item]) -> Hir {
-    todo!("run resolve → typeck → coherence → exhaustiveness → lower to HIR")
+impl Hir {
+    pub fn alloc_id(&mut self) -> DefId {
+        let id = self.next_id;
+        self.next_id += 1;
+        id
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Def {
+    pub id: DefId,
+    pub name: SmolStr,
+    pub kind: DefKind,
+    pub vis: Vis,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Vis {
+    Pub,
+    Internal,
+    Private,
+}
+
+#[derive(Debug, Clone)]
+pub enum DefKind {
+    Fn(FnDef),
+    Class(ClassDef),
+    DataClass(DataClassDef),
+    Enum(EnumDef),
+    Trait(TraitDef),
+    Impl(ImplDef),
+    TypeAlias,
+}
+
+#[derive(Debug, Clone)]
+pub struct FnDef {
+    pub params: Vec<ParamDef>,
+    pub return_ty: Option<TyRef>,
+    pub has_body: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParamDef {
+    pub name: SmolStr,
+    pub ty: TyRef,
+    pub mutable: bool,
+    pub is_self: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ClassDef {
+    pub kind: ClassDefKind,
+    pub ctor_params: Vec<CtorParamDef>,
+    pub superclass: Option<TyRef>,
+    pub trait_impls: Vec<TyRef>,
+    pub methods: Vec<DefId>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClassDefKind {
+    Final,
+    Open,
+    Abstract,
+    Sealed,
+}
+
+#[derive(Debug, Clone)]
+pub struct CtorParamDef {
+    pub vis: Vis,
+    pub name: SmolStr,
+    pub ty: TyRef,
+    pub mutable: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct DataClassDef {
+    pub ctor_params: Vec<CtorParamDef>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EnumDef {
+    pub variants: Vec<EnumVariantDef>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EnumVariantDef {
+    pub name: SmolStr,
+    pub fields: Vec<(SmolStr, TyRef)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TraitDef {
+    pub methods: Vec<DefId>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImplDef {
+    pub trait_ref: TyRef,
+    pub target: TyRef,
+    pub methods: Vec<DefId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TyRef {
+    Prim(PrimTy),
+    Named(SmolStr),
+    Generic(SmolStr, Vec<TyRef>),
+    Nullable(Box<TyRef>),
+    Fn(Vec<TyRef>, Box<TyRef>),
+    SelfTy,
+    Unresolved(SmolStr),
+    Error,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PrimTy {
+    Int,
+    Long,
+    Float,
+    Double,
+    Bool,
+    Char,
+    Byte,
+    Short,
+    String,
+    Unit,
+    Nothing,
 }
