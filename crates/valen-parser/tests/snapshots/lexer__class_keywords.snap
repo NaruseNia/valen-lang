@@ -1,0 +1,10 @@
+---
+source: crates/valen-parser/tests/lexer.rs
+expression: "fmt(\"pub sealed class Foo {}\")"
+---
+Pub @ 0..3
+Sealed @ 4..10
+Class @ 11..16
+Ident("Foo") @ 17..20
+LBrace @ 21..22
+RBrace @ 22..23

@@ -71,3 +71,43 @@ fn error_missing_semicolon() {
 fn error_unexpected_top_level() {
     assert_snapshot!(check("let x = 1;"));
 }
+
+#[test]
+fn empty_class() {
+    assert_snapshot!(check("class Foo {}"));
+}
+
+#[test]
+fn pub_class() {
+    assert_snapshot!(check("pub class Foo {}"));
+}
+
+#[test]
+fn sealed_class() {
+    assert_snapshot!(check("sealed class Foo {}"));
+}
+
+#[test]
+fn pub_abstract_class() {
+    assert_snapshot!(check("pub abstract class Bar {}"));
+}
+
+#[test]
+fn pub_fn() {
+    assert_snapshot!(check("pub fn main() {}"));
+}
+
+#[test]
+fn class_and_fn() {
+    assert_snapshot!(check("class Foo {}\nfn main() {}"));
+}
+
+#[test]
+fn error_class_missing_name() {
+    assert_snapshot!(check("class {}"));
+}
+
+#[test]
+fn error_class_missing_brace() {
+    assert_snapshot!(check("class Foo"));
+}

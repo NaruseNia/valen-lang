@@ -18,23 +18,77 @@ use valen_ast::{FileId, Span};
 #[logos(skip r"[ \t\r\n\f]+")]
 #[logos(skip r"//[^\n]*")]
 enum RawTok {
+    // Keywords
     #[token("fn")]
     Fn,
     #[token("let")]
     Let,
     #[token("mut")]
     Mut,
+    #[token("self")]
+    SelfKw,
     #[token("return")]
     Return,
     #[token("if")]
     If,
     #[token("else")]
     Else,
+    #[token("match")]
+    Match,
+    #[token("class")]
+    Class,
+    #[token("data")]
+    Data,
+    #[token("enum")]
+    Enum,
+    #[token("trait")]
+    Trait,
+    #[token("impl")]
+    Impl,
+    #[token("pub")]
+    Pub,
+    #[token("internal")]
+    Internal,
+    #[token("private")]
+    Private,
+    #[token("open")]
+    Open,
+    #[token("override")]
+    Override,
+    #[token("abstract")]
+    Abstract,
+    #[token("sealed")]
+    Sealed,
+    #[token("package")]
+    Package,
+    #[token("import")]
+    Import,
+    #[token("for")]
+    For,
+    #[token("in")]
+    In,
+    #[token("while")]
+    While,
+    #[token("loop")]
+    Loop,
     #[token("true")]
     True,
     #[token("false")]
     False,
+    #[token("as")]
+    As,
+    #[token("suspend")]
+    Suspend,
+    #[token("async")]
+    Async,
+    #[token("await")]
+    Await,
+    #[token("yield")]
+    Yield,
+    #[token("typealias")]
+    TypeAlias,
 
+    // Punctuation
     #[token("(")]
     LParen,
     #[token(")")]
@@ -43,6 +97,10 @@ enum RawTok {
     LBrace,
     #[token("}")]
     RBrace,
+    #[token("[")]
+    LBracket,
+    #[token("]")]
+    RBracket,
     #[token(",")]
     Comma,
     #[token(";")]
@@ -51,9 +109,24 @@ enum RawTok {
     DoubleColon,
     #[token(":")]
     Colon,
+    #[token("..=")]
+    DotDotEq,
+    #[token("..")]
+    DotDot,
+    #[token(".")]
+    Dot,
     #[token("->")]
     Arrow,
+    #[token("=>")]
+    FatArrow,
+    #[token("?")]
+    Question,
+    #[token("@")]
+    At,
+    #[token("_", priority = 3)]
+    Underscore,
 
+    // Operators
     #[token("==")]
     EqEq,
     #[token("!=")]
@@ -62,6 +135,10 @@ enum RawTok {
     Le,
     #[token(">=")]
     Ge,
+    #[token("<<")]
+    Shl,
+    #[token(">>")]
+    Shr,
     #[token("<")]
     Lt,
     #[token(">")]
@@ -72,8 +149,24 @@ enum RawTok {
     AmpAmp,
     #[token("||")]
     PipePipe,
+    #[token("&")]
+    Amp,
+    #[token("|")]
+    Pipe,
+    #[token("^")]
+    Caret,
     #[token("!")]
     Bang,
+    #[token("+=")]
+    PlusEq,
+    #[token("-=")]
+    MinusEq,
+    #[token("*=")]
+    StarEq,
+    #[token("/=")]
+    SlashEq,
+    #[token("%=")]
+    PercentEq,
     #[token("+")]
     Plus,
     #[token("-")]
@@ -84,6 +177,10 @@ enum RawTok {
     Slash,
     #[token("%")]
     Percent,
+
+    // Literals
+    #[regex(r"[0-9][0-9_]*\.[0-9][0-9_]*([eE][+-]?[0-9]+)?", parse_float)]
+    FloatLit(f64),
 
     #[regex(r"[0-9][0-9_]*", parse_int)]
     IntLit(i64),
@@ -97,6 +194,10 @@ enum RawTok {
 
 fn parse_int(lex: &mut logos::Lexer<'_, RawTok>) -> Option<i64> {
     lex.slice().replace('_', "").parse::<i64>().ok()
+}
+
+fn parse_float(lex: &mut logos::Lexer<'_, RawTok>) -> Option<f64> {
+    lex.slice().replace('_', "").parse::<f64>().ok()
 }
 
 fn parse_string(lex: &mut logos::Lexer<'_, RawTok>) -> Option<SmolStr> {
@@ -170,23 +271,61 @@ pub fn lex(source: &str, file_id: FileId) -> Vec<(TokenKind, Span)> {
 
 fn map_token(raw: RawTok) -> TokenKind {
     match raw {
+        // Keywords
         RawTok::Fn => TokenKind::Fn,
         RawTok::Let => TokenKind::Let,
         RawTok::Mut => TokenKind::Mut,
+        RawTok::SelfKw => TokenKind::SelfKw,
         RawTok::Return => TokenKind::Return,
         RawTok::If => TokenKind::If,
         RawTok::Else => TokenKind::Else,
+        RawTok::Match => TokenKind::Match,
+        RawTok::Class => TokenKind::Class,
+        RawTok::Data => TokenKind::Data,
+        RawTok::Enum => TokenKind::Enum,
+        RawTok::Trait => TokenKind::Trait,
+        RawTok::Impl => TokenKind::Impl,
+        RawTok::Pub => TokenKind::Pub,
+        RawTok::Internal => TokenKind::Internal,
+        RawTok::Private => TokenKind::Private,
+        RawTok::Open => TokenKind::Open,
+        RawTok::Override => TokenKind::Override,
+        RawTok::Abstract => TokenKind::Abstract,
+        RawTok::Sealed => TokenKind::Sealed,
+        RawTok::Package => TokenKind::Package,
+        RawTok::Import => TokenKind::Import,
+        RawTok::For => TokenKind::For,
+        RawTok::In => TokenKind::In,
+        RawTok::While => TokenKind::While,
+        RawTok::Loop => TokenKind::Loop,
         RawTok::True => TokenKind::BoolLit(true),
         RawTok::False => TokenKind::BoolLit(false),
+        RawTok::As => TokenKind::As,
+        RawTok::Suspend => TokenKind::Suspend,
+        RawTok::Async => TokenKind::Async,
+        RawTok::Await => TokenKind::Await,
+        RawTok::Yield => TokenKind::Yield,
+        RawTok::TypeAlias => TokenKind::TypeAlias,
+        // Punctuation
         RawTok::LParen => TokenKind::LParen,
         RawTok::RParen => TokenKind::RParen,
         RawTok::LBrace => TokenKind::LBrace,
         RawTok::RBrace => TokenKind::RBrace,
+        RawTok::LBracket => TokenKind::LBracket,
+        RawTok::RBracket => TokenKind::RBracket,
         RawTok::Comma => TokenKind::Comma,
         RawTok::Semi => TokenKind::Semi,
         RawTok::Colon => TokenKind::Colon,
         RawTok::DoubleColon => TokenKind::DoubleColon,
+        RawTok::Dot => TokenKind::Dot,
+        RawTok::DotDot => TokenKind::DotDot,
+        RawTok::DotDotEq => TokenKind::DotDotEq,
         RawTok::Arrow => TokenKind::Arrow,
+        RawTok::FatArrow => TokenKind::FatArrow,
+        RawTok::Question => TokenKind::Question,
+        RawTok::At => TokenKind::At,
+        RawTok::Underscore => TokenKind::Underscore,
+        // Operators
         RawTok::Eq => TokenKind::Eq,
         RawTok::EqEq => TokenKind::EqEq,
         RawTok::NotEq => TokenKind::NotEq,
@@ -194,14 +333,26 @@ fn map_token(raw: RawTok) -> TokenKind {
         RawTok::Le => TokenKind::Le,
         RawTok::Gt => TokenKind::Gt,
         RawTok::Ge => TokenKind::Ge,
+        RawTok::Shl => TokenKind::Shl,
+        RawTok::Shr => TokenKind::Shr,
         RawTok::AmpAmp => TokenKind::AmpAmp,
         RawTok::PipePipe => TokenKind::PipePipe,
+        RawTok::Amp => TokenKind::Amp,
+        RawTok::Pipe => TokenKind::Pipe,
+        RawTok::Caret => TokenKind::Caret,
         RawTok::Bang => TokenKind::Bang,
+        RawTok::PlusEq => TokenKind::PlusEq,
+        RawTok::MinusEq => TokenKind::MinusEq,
+        RawTok::StarEq => TokenKind::StarEq,
+        RawTok::SlashEq => TokenKind::SlashEq,
+        RawTok::PercentEq => TokenKind::PercentEq,
         RawTok::Plus => TokenKind::Plus,
         RawTok::Minus => TokenKind::Minus,
         RawTok::Star => TokenKind::Star,
         RawTok::Slash => TokenKind::Slash,
         RawTok::Percent => TokenKind::Percent,
+        // Literals
+        RawTok::FloatLit(n) => TokenKind::FloatLit(n),
         RawTok::IntLit(n) => TokenKind::IntLit(n),
         RawTok::StringLit(s) => TokenKind::StringLit(s),
         RawTok::Ident(s) => TokenKind::Ident(s),

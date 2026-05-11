@@ -1,0 +1,28 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"pub abstract class Bar {}\")"
+---
+=== AST ===
+[
+    Class(
+        ClassDecl {
+            visibility: Pub,
+            kind: Abstract,
+            name: "Bar",
+            generics: [],
+            ctor_params: [],
+            superclass: None,
+            traits: [],
+            body: [],
+            span: Span {
+                start: 0,
+                end: 25,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

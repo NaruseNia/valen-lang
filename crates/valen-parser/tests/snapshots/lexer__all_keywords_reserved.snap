@@ -1,0 +1,31 @@
+---
+source: crates/valen-parser/tests/lexer.rs
+expression: "fmt(\"fn let mut self return if else match class data enum trait impl pub internal private open override abstract sealed package import for in while loop as\")"
+---
+Fn @ 0..2
+Let @ 3..6
+Mut @ 7..10
+SelfKw @ 11..15
+Return @ 16..22
+If @ 23..25
+Else @ 26..30
+Match @ 31..36
+Class @ 37..42
+Data @ 43..47
+Enum @ 48..52
+Trait @ 53..58
+Impl @ 59..63
+Pub @ 64..67
+Internal @ 68..76
+Private @ 77..84
+Open @ 85..89
+Override @ 90..98
+Abstract @ 99..107
+Sealed @ 108..114
+Package @ 115..122
+Import @ 123..129
+For @ 130..133
+In @ 134..136
+While @ 137..142
+Loop @ 143..147
+As @ 148..150

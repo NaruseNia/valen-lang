@@ -18,8 +18,8 @@
 use smol_str::SmolStr;
 use valen_ast::token::TokenKind;
 use valen_ast::{
-    BinaryExpr, BinaryOp, Block, Expr, FileId, FnDecl, Item, LetStmt, Literal, Path, PathSegment,
-    Span, Stmt, UnaryExpr, UnaryOp, Visibility,
+    BinaryExpr, BinaryOp, Block, ClassDecl, ClassKind, Expr, FileId, FnDecl, Item, LetStmt,
+    Literal, Path, PathSegment, Span, Stmt, UnaryExpr, UnaryOp, Visibility,
 };
 use valen_diagnostics::{DiagCode, Diagnostics};
 
@@ -60,22 +60,66 @@ impl Parser {
     }
 
     fn parse_item(&mut self) -> Option<Item> {
+        let start = self.peek_span();
+        let vis = self.parse_visibility();
         match self.peek() {
-            TokenKind::Fn => self.parse_fn().map(Item::Fn),
+            TokenKind::Fn => self.parse_fn_decl(vis, start).map(Item::Fn),
+            TokenKind::Class => self
+                .parse_class(vis, ClassKind::Final, start)
+                .map(Item::Class),
+            TokenKind::Open | TokenKind::Abstract | TokenKind::Sealed => {
+                let kind = self.parse_class_kind();
+                self.parse_class(vis, kind, start).map(Item::Class)
+            }
             _ => {
                 let span = self.peek_span();
                 self.diagnostics.error(
                     DiagCode::PARSE_EXPECTED_EXPR,
                     span,
-                    SmolStr::from("expected top-level item (e.g. `fn`)"),
+                    SmolStr::from("expected top-level item (e.g. `fn`, `class`)"),
                 );
                 None
             }
         }
     }
 
-    fn parse_fn(&mut self) -> Option<FnDecl> {
-        let start = self.peek_span();
+    fn parse_visibility(&mut self) -> Visibility {
+        match self.peek() {
+            TokenKind::Pub => {
+                self.bump();
+                Visibility::Pub
+            }
+            TokenKind::Internal => {
+                self.bump();
+                Visibility::Internal
+            }
+            TokenKind::Private => {
+                self.bump();
+                Visibility::Private
+            }
+            _ => Visibility::Internal,
+        }
+    }
+
+    fn parse_class_kind(&mut self) -> ClassKind {
+        match self.peek() {
+            TokenKind::Open => {
+                self.bump();
+                ClassKind::Open
+            }
+            TokenKind::Abstract => {
+                self.bump();
+                ClassKind::Abstract
+            }
+            TokenKind::Sealed => {
+                self.bump();
+                ClassKind::Sealed
+            }
+            _ => ClassKind::Final,
+        }
+    }
+
+    fn parse_fn_decl(&mut self, visibility: Visibility, start: Span) -> Option<FnDecl> {
         self.expect(TokenKind::Fn)?;
         let name = self.expect_ident()?;
         self.expect(TokenKind::LParen)?;
@@ -83,13 +127,36 @@ impl Parser {
         let body = self.parse_block()?;
         let span = start.merge(body.span);
         Some(FnDecl {
-            visibility: Visibility::Internal,
+            visibility,
             name,
             generics: Vec::new(),
             params: Vec::new(),
             return_type: None,
             body: Some(body),
             span,
+        })
+    }
+
+    fn parse_class(
+        &mut self,
+        visibility: Visibility,
+        kind: ClassKind,
+        start: Span,
+    ) -> Option<ClassDecl> {
+        self.expect(TokenKind::Class)?;
+        let name = self.expect_ident()?;
+        self.expect(TokenKind::LBrace)?;
+        let end = self.expect(TokenKind::RBrace)?;
+        Some(ClassDecl {
+            visibility,
+            kind,
+            name,
+            generics: Vec::new(),
+            ctor_params: Vec::new(),
+            superclass: None,
+            traits: Vec::new(),
+            body: Vec::new(),
+            span: start.merge(end),
         })
     }
 
@@ -367,7 +434,17 @@ impl Parser {
 
     fn recover_to_item_boundary(&mut self) {
         while !self.at_eof() {
-            if matches!(self.peek(), TokenKind::Fn) {
+            if matches!(
+                self.peek(),
+                TokenKind::Fn
+                    | TokenKind::Class
+                    | TokenKind::Pub
+                    | TokenKind::Internal
+                    | TokenKind::Private
+                    | TokenKind::Open
+                    | TokenKind::Abstract
+                    | TokenKind::Sealed
+            ) {
                 return;
             }
             self.bump();
@@ -418,6 +495,7 @@ fn describe_token(kind: &TokenKind) -> &'static str {
         TokenKind::Fn => "`fn`",
         TokenKind::Let => "`let`",
         TokenKind::Mut => "`mut`",
+        TokenKind::Class => "`class`",
         TokenKind::LParen => "`(`",
         TokenKind::RParen => "`)`",
         TokenKind::LBrace => "`{`",
