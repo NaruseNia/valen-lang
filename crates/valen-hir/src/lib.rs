@@ -11,7 +11,16 @@ pub type DefId = u32;
 pub struct Hir {
     pub defs: IndexMap<DefId, Def>,
     pub package: Option<Vec<SmolStr>>,
+    pub type_methods: IndexMap<SmolStr, Vec<DefId>>,
+    pub trait_impls: Vec<ImplEntry>,
     next_id: DefId,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImplEntry {
+    pub trait_name: SmolStr,
+    pub target_name: SmolStr,
+    pub methods: Vec<DefId>,
 }
 
 impl Hir {
@@ -20,6 +29,67 @@ impl Hir {
         self.next_id += 1;
         id
     }
+
+    pub fn resolve_method(&self, type_name: &str, method_name: &str) -> MethodResolution {
+        if let Some(class_methods) = self.type_methods.get(type_name) {
+            for &mid in class_methods {
+                if let Some(def) = self.defs.get(&mid) {
+                    if def.name == method_name {
+                        return MethodResolution::Found(mid);
+                    }
+                }
+            }
+        }
+
+        let mut trait_candidates = Vec::new();
+        for entry in &self.trait_impls {
+            if entry.target_name == type_name {
+                for &mid in &entry.methods {
+                    if let Some(def) = self.defs.get(&mid) {
+                        if def.name == method_name {
+                            trait_candidates.push(mid);
+                        }
+                    }
+                }
+            }
+        }
+
+        match trait_candidates.len() {
+            0 => MethodResolution::NotFound,
+            1 => MethodResolution::Found(trait_candidates[0]),
+            _ => MethodResolution::Ambiguous(trait_candidates),
+        }
+    }
+
+    pub fn check_visibility(&self, def_id: DefId, accessor_type: Option<&str>) -> bool {
+        let Some(def) = self.defs.get(&def_id) else {
+            return false;
+        };
+        match def.vis {
+            Vis::Pub | Vis::Internal => true,
+            Vis::Private => {
+                if let Some(accessor) = accessor_type {
+                    self.is_member_of(def_id, accessor)
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
+    fn is_member_of(&self, def_id: DefId, type_name: &str) -> bool {
+        if let Some(methods) = self.type_methods.get(type_name) {
+            return methods.contains(&def_id);
+        }
+        false
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MethodResolution {
+    Found(DefId),
+    Ambiguous(Vec<DefId>),
+    NotFound,
 }
 
 #[derive(Debug, Clone)]
