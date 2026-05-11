@@ -14,7 +14,7 @@ members = [
 [workspace.package]
 version = "0.1.0-dev"
 edition = "2021"
-rust-version = "1.90"
+rust-version = "1.95"
 authors = ["Naruse Nia"]
 license = "Apache-2.0"
 repository = "https://github.com/NaruseNia/valen-lang"
@@ -43,8 +43,8 @@ logos = "0.14"
 # LSP
 tower-lsp = "0.20"
 tokio = { version = "1", features = ["full"] }
-# JVM bytecode emit (選定は Phase 0 で確定、ここでは placeholder)
-noak = "0.5"
+# JVM bytecode emit (Phase 0 選定: ristretto_classfile — write API + Java 21-25 + sealed/record attrs)
+ristretto_classfile = "0.31"
 # Test
 insta = "1"
 expect-test = "1"
