@@ -324,3 +324,59 @@ fn full_file() {
         "package com.example;\nimport java.util.List;\n\npub fn main() { let x: Int = 42; x }"
     ));
 }
+
+// --- TASK-003: for/while/loop/break/continue/lambda ---
+
+#[test]
+fn for_in_loop() {
+    assert_snapshot!(check("fn f() { for x in xs { println(x); } }"));
+}
+
+#[test]
+fn while_loop() {
+    assert_snapshot!(check("fn f() { while running { tick(); } }"));
+}
+
+#[test]
+fn loop_with_break_value() {
+    assert_snapshot!(check("fn f() -> Int { loop { break 42; } }"));
+}
+
+#[test]
+fn loop_with_continue() {
+    assert_snapshot!(check(
+        "fn f() { loop { if skip { continue; } process(); } }"
+    ));
+}
+
+#[test]
+fn break_no_value() {
+    assert_snapshot!(check("fn f() { loop { break; } }"));
+}
+
+#[test]
+fn lambda_single_expr() {
+    assert_snapshot!(check("fn f() { let double = |x: Int| x; }"));
+}
+
+#[test]
+fn lambda_no_params() {
+    assert_snapshot!(check("fn f() { let greet = || hello; }"));
+}
+
+#[test]
+fn lambda_multiple_params() {
+    assert_snapshot!(check("fn f() { let add = |a: Int, b: Int| -> Int { a }; }"));
+}
+
+#[test]
+fn lambda_inferred_types() {
+    assert_snapshot!(check("fn f() { xs.map(|x| x); }"));
+}
+
+#[test]
+fn for_while_no_semicolon() {
+    assert_snapshot!(check(
+        "fn f() { for x in xs { process(x); }\nwhile cond { tick(); }\nloop { break; } }"
+    ));
+}

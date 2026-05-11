@@ -1,0 +1,91 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"fn f() { let greet = || hello; }\")"
+---
+=== AST ===
+[
+    Fn(
+        FnDecl {
+            visibility: Internal,
+            name: "f",
+            generics: [],
+            params: [],
+            return_type: None,
+            body: Some(
+                Block {
+                    stmts: [
+                        Let(
+                            LetStmt {
+                                mutable: false,
+                                name: "greet",
+                                ty: None,
+                                init: Lambda(
+                                    LambdaExpr {
+                                        params: [],
+                                        return_type: None,
+                                        body: Path(
+                                            Path {
+                                                segments: [
+                                                    PathSegment {
+                                                        name: "hello",
+                                                        turbofish: false,
+                                                        generics: [],
+                                                        span: Span {
+                                                            start: 24,
+                                                            end: 29,
+                                                            file_id: FileId(
+                                                                0,
+                                                            ),
+                                                        },
+                                                    },
+                                                ],
+                                                span: Span {
+                                                    start: 24,
+                                                    end: 29,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ),
+                                        span: Span {
+                                            start: 21,
+                                            end: 29,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                span: Span {
+                                    start: 9,
+                                    end: 30,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ],
+                    tail: None,
+                    span: Span {
+                        start: 7,
+                        end: 32,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            span: Span {
+                start: 0,
+                end: 32,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

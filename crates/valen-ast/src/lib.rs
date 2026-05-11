@@ -292,6 +292,8 @@ pub enum Expr {
     Match(MatchExpr),
     Block(Block),
     Return(ReturnExpr),
+    Break(BreakExpr),
+    Continue(ContinueExpr),
     For(ForExpr),
     While(WhileExpr),
     Loop(LoopExpr),
@@ -484,6 +486,17 @@ pub struct AtPattern {
 #[derive(Debug, Clone)]
 pub struct ReturnExpr {
     pub value: Option<Box<Expr>>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct BreakExpr {
+    pub value: Option<Box<Expr>>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct ContinueExpr {
     pub span: Span,
 }
 
