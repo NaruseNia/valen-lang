@@ -1,6 +1,6 @@
 # Valen 実装計画
 
-Last updated: 2026-05-11（Phase 0 完了、grill-me 4巡確定、TASK-001 完了を反映）
+Last updated: 2026-05-11（Phase 0 完了、TASK-001〜006 完了、M2 残り TASK-007 のみ）
 
 ---
 
@@ -24,6 +24,9 @@ Last updated: 2026-05-11（Phase 0 完了、grill-me 4巡確定、TASK-001 完�
 - [x] **TASK-001:** Parser 拡張 — fn params/return type, if/else, match（フルパターン）, call/method call/field/try, paths, return（PR #18）
 - [x] **TASK-002:** Parser 拡張 — class ctor/body, data class, enum, trait, impl, package, import
 - [x] **TASK-003:** Parser 拡張 — for/while/loop/break/continue/lambda → **M1: Parser 完成**
+- [x] **TASK-004:** HIR 設計と名前解決 — AST→HIR lowering, スコープ, メソッド解決, 可視性（PR #21, #22）
+- [x] **TASK-005:** 型検査 — bidirectional type checker, typed HIR, リテラル/変数/演算/if/match/call/lambda 等（PR #23）
+- [x] **TASK-006:** Coherence — orphan rule, blanket impl 禁止, 重複検出, trait 充足検査（PR #24）
 
 ### 完了条件
 - 最小限の `class Foo {}` を `.vln` → `Foo.class` に emit できる PoC が動く
