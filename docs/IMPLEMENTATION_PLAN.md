@@ -1,6 +1,6 @@
 # Valen 実装計画
 
-Last updated: 2026-05-11（Phase 0 完了、TASK-001〜006 完了、M2 残り TASK-007 のみ）
+Last updated: 2026-05-11（Phase 0 完了、TASK-001〜007 完了、M2 達成、次は M3: Bytecode 生成）
 
 ---
 
@@ -27,6 +27,7 @@ Last updated: 2026-05-11（Phase 0 完了、TASK-001〜006 完了、M2 残り TA
 - [x] **TASK-004:** HIR 設計と名前解決 — AST→HIR lowering, スコープ, メソッド解決, 可視性（PR #21, #22）
 - [x] **TASK-005:** 型検査 — bidirectional type checker, typed HIR, リテラル/変数/演算/if/match/call/lambda 等（PR #23）
 - [x] **TASK-006:** Coherence — orphan rule, blanket impl 禁止, 重複検出, trait 充足検査（PR #24）
+- [x] **TASK-007:** Exhaustiveness check — enum/sealed class/Bool exhaustive match（PR #25）→ **M2: 型チェック通過**
 
 ### 完了条件
 - 最小限の `class Foo {}` を `.vln` → `Foo.class` に emit できる PoC が動く

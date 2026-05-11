@@ -47,7 +47,7 @@ Valen は JVM をターゲットとする新規プログラミング言語。ADT
 | REQ-CLASS-007 | package 宣言必須 | Must | Draft |
 | REQ-CLASS-008 | import（単一型 + alias、MVP） | Must | Draft |
 | REQ-ADT-001 | enum（Rust 型 ADT、payload あり/なし） | Must | Draft |
-| REQ-ADT-002 | exhaustive match（リテラル/分解/ガード/範囲/or/@束縛） | Must | Draft |
+| REQ-ADT-002 | exhaustive match（リテラル/分解/ガード/範囲/or/@束縛） | Must | Done |
 | REQ-ADT-003 | enum Java ABI（sealed interface + record/singleton） | Must | Draft |
 | REQ-TRAIT-001 | trait 定義と impl ブロック（inherent impl なし） | Must | Draft |
 | REQ-TRAIT-002 | trait 充足は impl ブロックのみ | Must | Draft |
