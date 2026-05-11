@@ -1,11 +1,2 @@
-//! Type system.
-//!
-//! - Primitive nominal types (`Int` etc.) are defined here
-//! - `T?` is desugared to `Option<T>` at this layer, not in the parser
-//! - `T!` (platform type) is internal-only; never surfaces to user code
-//! - Declaration-site variance (`in` / `out`) enforced at trait/type param sites
-//! - `?` operator checks: Result context strict, Option context requires return type `Option<U>`
-
-pub fn check() {
-    todo!()
-}
+// Type checking — TASK-005 で実装予定。
+// HIR の TyRef 解決・推論・検証をここで行う。

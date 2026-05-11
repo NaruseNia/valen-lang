@@ -1,9 +1,508 @@
-//! Name resolution.
-//!
-//! - Package decl & imports build the module scope
-//! - Visibility (`pub` / `internal` / `private`) is checked here
-//! - `::` (enum variant / static) vs `.` (package/type/member) are resolved separately
+use indexmap::IndexMap;
+use smol_str::SmolStr;
+use valen_ast::{self, Item, Visibility};
+use valen_diagnostics::Diagnostics;
 
-pub fn resolve() {
-    todo!()
+use crate::{
+    ClassDef, ClassDefKind, CtorParamDef, DataClassDef, Def, DefId, DefKind, EnumDef,
+    EnumVariantDef, FnDef, Hir, ImplDef, ParamDef, PrimTy, TraitDef, TyRef, Vis,
+};
+
+pub struct Resolver {
+    hir: Hir,
+    scope: Scope,
+    diagnostics: Diagnostics,
+}
+
+#[derive(Debug, Default)]
+struct Scope {
+    names: IndexMap<SmolStr, DefId>,
+    imports: IndexMap<SmolStr, Vec<SmolStr>>,
+}
+
+impl Scope {
+    fn define(&mut self, name: SmolStr, id: DefId) {
+        self.names.insert(name, id);
+    }
+
+    fn lookup(&self, name: &str) -> Option<DefId> {
+        self.names.get(name).copied()
+    }
+}
+
+pub struct ResolveResult {
+    pub hir: Hir,
+    pub diagnostics: Diagnostics,
+}
+
+pub fn resolve(items: &[Item]) -> ResolveResult {
+    let mut resolver = Resolver {
+        hir: Hir::default(),
+        scope: Scope::default(),
+        diagnostics: Diagnostics::new(),
+    };
+    resolver.resolve_items(items);
+    ResolveResult {
+        hir: resolver.hir,
+        diagnostics: resolver.diagnostics,
+    }
+}
+
+impl Resolver {
+    fn resolve_items(&mut self, items: &[Item]) {
+        for item in items {
+            if let Item::Package(pkg) = item {
+                self.hir.package = Some(pkg.path.clone());
+            }
+        }
+
+        for item in items {
+            if let Item::Import(imp) = item {
+                let short = imp
+                    .alias
+                    .clone()
+                    .or_else(|| imp.path.last().cloned())
+                    .unwrap_or_default();
+                self.scope.imports.insert(short, imp.path.clone());
+            }
+        }
+
+        // First pass: register all top-level names
+        for item in items {
+            self.register_item(item);
+        }
+
+        // Second pass: resolve bodies (future — needs expression resolution)
+    }
+
+    fn register_item(&mut self, item: &Item) {
+        match item {
+            Item::Package(_) | Item::Import(_) => {}
+            Item::Fn(f) => {
+                let id = self.hir.alloc_id();
+                let def = Def {
+                    id,
+                    name: f.name.clone(),
+                    kind: DefKind::Fn(self.lower_fn(f)),
+                    vis: lower_vis(f.visibility),
+                    span: f.span,
+                };
+                self.hir.defs.insert(id, def);
+                self.scope.define(f.name.clone(), id);
+            }
+            Item::Class(c) => {
+                let id = self.hir.alloc_id();
+                let mut method_ids = Vec::new();
+                for member in &c.body {
+                    if let valen_ast::ClassMember::Method(m) = member {
+                        let mid = self.hir.alloc_id();
+                        let mdef = Def {
+                            id: mid,
+                            name: m.name.clone(),
+                            kind: DefKind::Fn(self.lower_fn(m)),
+                            vis: lower_vis(m.visibility),
+                            span: m.span,
+                        };
+                        self.hir.defs.insert(mid, mdef);
+                        method_ids.push(mid);
+                    }
+                }
+                let def = Def {
+                    id,
+                    name: c.name.clone(),
+                    kind: DefKind::Class(ClassDef {
+                        kind: lower_class_kind(c.kind),
+                        ctor_params: c.ctor_params.iter().map(lower_ctor_param).collect(),
+                        superclass: c.superclass.as_ref().map(lower_type_ref),
+                        trait_impls: c.traits.iter().map(lower_type_ref).collect(),
+                        methods: method_ids,
+                    }),
+                    vis: lower_vis(c.visibility),
+                    span: c.span,
+                };
+                self.hir.defs.insert(id, def);
+                self.scope.define(c.name.clone(), id);
+            }
+            Item::DataClass(dc) => {
+                let id = self.hir.alloc_id();
+                let def = Def {
+                    id,
+                    name: dc.name.clone(),
+                    kind: DefKind::DataClass(DataClassDef {
+                        ctor_params: dc.ctor_params.iter().map(lower_ctor_param).collect(),
+                    }),
+                    vis: lower_vis(dc.visibility),
+                    span: dc.span,
+                };
+                self.hir.defs.insert(id, def);
+                self.scope.define(dc.name.clone(), id);
+            }
+            Item::Enum(e) => {
+                let id = self.hir.alloc_id();
+                let variants = e
+                    .variants
+                    .iter()
+                    .map(|v| {
+                        let fields = match &v.fields {
+                            valen_ast::EnumVariantFields::Unit => Vec::new(),
+                            valen_ast::EnumVariantFields::Named(fs) => fs
+                                .iter()
+                                .map(|f| (f.name.clone(), lower_type_ref(&f.ty)))
+                                .collect(),
+                        };
+                        EnumVariantDef {
+                            name: v.name.clone(),
+                            fields,
+                        }
+                    })
+                    .collect();
+                let def = Def {
+                    id,
+                    name: e.name.clone(),
+                    kind: DefKind::Enum(EnumDef { variants }),
+                    vis: lower_vis(e.visibility),
+                    span: e.span,
+                };
+                self.hir.defs.insert(id, def);
+                self.scope.define(e.name.clone(), id);
+            }
+            Item::Trait(t) => {
+                let id = self.hir.alloc_id();
+                let mut method_ids = Vec::new();
+                for ti in &t.items {
+                    if let valen_ast::TraitItem::Fn(m) = ti {
+                        let mid = self.hir.alloc_id();
+                        let mdef = Def {
+                            id: mid,
+                            name: m.name.clone(),
+                            kind: DefKind::Fn(self.lower_fn(m)),
+                            vis: Vis::Pub,
+                            span: m.span,
+                        };
+                        self.hir.defs.insert(mid, mdef);
+                        method_ids.push(mid);
+                    }
+                }
+                let def = Def {
+                    id,
+                    name: t.name.clone(),
+                    kind: DefKind::Trait(TraitDef {
+                        methods: method_ids,
+                    }),
+                    vis: lower_vis(t.visibility),
+                    span: t.span,
+                };
+                self.hir.defs.insert(id, def);
+                self.scope.define(t.name.clone(), id);
+            }
+            Item::Impl(imp) => {
+                let id = self.hir.alloc_id();
+                let mut method_ids = Vec::new();
+                for ii in &imp.items {
+                    if let valen_ast::ImplItem::Fn(m) = ii {
+                        let mid = self.hir.alloc_id();
+                        let mdef = Def {
+                            id: mid,
+                            name: m.name.clone(),
+                            kind: DefKind::Fn(self.lower_fn(m)),
+                            vis: Vis::Pub,
+                            span: m.span,
+                        };
+                        self.hir.defs.insert(mid, mdef);
+                        method_ids.push(mid);
+                    }
+                }
+                let trait_ref = imp
+                    .trait_ref
+                    .as_ref()
+                    .map(lower_type_ref)
+                    .unwrap_or(TyRef::Error);
+                let def = Def {
+                    id,
+                    name: SmolStr::from(""),
+                    kind: DefKind::Impl(ImplDef {
+                        trait_ref,
+                        target: lower_type_ref(&imp.target),
+                        methods: method_ids,
+                    }),
+                    vis: Vis::Internal,
+                    span: imp.span,
+                };
+                self.hir.defs.insert(id, def);
+            }
+            Item::TypeAlias(ta) => {
+                let id = self.hir.alloc_id();
+                let def = Def {
+                    id,
+                    name: ta.name.clone(),
+                    kind: DefKind::TypeAlias,
+                    vis: lower_vis(ta.visibility),
+                    span: ta.span,
+                };
+                self.hir.defs.insert(id, def);
+                self.scope.define(ta.name.clone(), id);
+            }
+        }
+    }
+
+    fn lower_fn(&self, f: &valen_ast::FnDecl) -> FnDef {
+        let params = f
+            .params
+            .iter()
+            .map(|p| ParamDef {
+                name: p.name.clone(),
+                ty: lower_type_ref(&p.ty),
+                mutable: p.mutable,
+                is_self: p.name == "self",
+            })
+            .collect();
+        FnDef {
+            params,
+            return_ty: f.return_type.as_ref().map(lower_type_ref),
+            has_body: f.body.is_some(),
+        }
+    }
+
+    pub fn lookup(&self, name: &str) -> Option<DefId> {
+        self.scope.lookup(name)
+    }
+
+    pub fn diagnostics(&self) -> &Diagnostics {
+        &self.diagnostics
+    }
+}
+
+fn lower_vis(v: Visibility) -> Vis {
+    match v {
+        Visibility::Pub => Vis::Pub,
+        Visibility::Internal => Vis::Internal,
+        Visibility::Private => Vis::Private,
+    }
+}
+
+fn lower_class_kind(k: valen_ast::ClassKind) -> ClassDefKind {
+    match k {
+        valen_ast::ClassKind::Final => ClassDefKind::Final,
+        valen_ast::ClassKind::Open => ClassDefKind::Open,
+        valen_ast::ClassKind::Abstract => ClassDefKind::Abstract,
+        valen_ast::ClassKind::Sealed => ClassDefKind::Sealed,
+    }
+}
+
+fn lower_ctor_param(p: &valen_ast::CtorParam) -> CtorParamDef {
+    CtorParamDef {
+        vis: lower_vis(p.visibility),
+        name: p.name.clone(),
+        ty: lower_type_ref(&p.ty),
+        mutable: p.mutable,
+    }
+}
+
+fn lower_type_ref(ty: &valen_ast::Type) -> TyRef {
+    match ty {
+        valen_ast::Type::Path(tp) => {
+            if tp.segments.len() == 1 {
+                let seg = &tp.segments[0];
+                let name = &seg.name;
+                if let Some(prim) = resolve_primitive(name) {
+                    return TyRef::Prim(prim);
+                }
+                if seg.generics.is_empty() {
+                    if name == "Self" {
+                        return TyRef::SelfTy;
+                    }
+                    return TyRef::Named(name.clone());
+                }
+                let args = seg.generics.iter().map(lower_type_ref).collect();
+                return TyRef::Generic(name.clone(), args);
+            }
+            let full: String = tp
+                .segments
+                .iter()
+                .map(|s| s.name.as_str())
+                .collect::<Vec<_>>()
+                .join(".");
+            TyRef::Named(SmolStr::from(full))
+        }
+        valen_ast::Type::Nullable(inner) => TyRef::Nullable(Box::new(lower_type_ref(inner))),
+        valen_ast::Type::Fn(ft) => {
+            let params = ft.params.iter().map(lower_type_ref).collect();
+            let ret = Box::new(lower_type_ref(&ft.return_type));
+            TyRef::Fn(params, ret)
+        }
+        valen_ast::Type::Tuple(_) => TyRef::Error,
+    }
+}
+
+fn resolve_primitive(name: &str) -> Option<PrimTy> {
+    match name {
+        "Int" => Some(PrimTy::Int),
+        "Long" => Some(PrimTy::Long),
+        "Float" => Some(PrimTy::Float),
+        "Double" => Some(PrimTy::Double),
+        "Bool" => Some(PrimTy::Bool),
+        "Char" => Some(PrimTy::Char),
+        "Byte" => Some(PrimTy::Byte),
+        "Short" => Some(PrimTy::Short),
+        "String" => Some(PrimTy::String),
+        "Unit" => Some(PrimTy::Unit),
+        "Nothing" => Some(PrimTy::Nothing),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use valen_ast::FileId;
+    use valen_parser::parse;
+
+    fn resolve_source(src: &str) -> ResolveResult {
+        let parsed = parse(src, FileId(0));
+        assert!(
+            !parsed.diagnostics.has_errors(),
+            "parse errors: {:?}",
+            parsed.diagnostics
+        );
+        resolve(&parsed.items)
+    }
+
+    #[test]
+    fn resolve_simple_fn() {
+        let r = resolve_source("fn main() { 42 }");
+        assert!(!r.diagnostics.has_errors());
+        assert_eq!(r.hir.defs.len(), 1);
+        let (_, def) = r.hir.defs.iter().next().unwrap();
+        assert_eq!(def.name, "main");
+        assert!(matches!(def.kind, DefKind::Fn(_)));
+    }
+
+    #[test]
+    fn resolve_fn_with_params() {
+        let r = resolve_source("fn add(a: Int, b: Int) -> Int { a }");
+        let (_, def) = r.hir.defs.iter().next().unwrap();
+        if let DefKind::Fn(f) = &def.kind {
+            assert_eq!(f.params.len(), 2);
+            assert_eq!(f.params[0].ty, TyRef::Prim(PrimTy::Int));
+            assert_eq!(f.return_ty, Some(TyRef::Prim(PrimTy::Int)));
+        } else {
+            panic!("expected FnDef");
+        }
+    }
+
+    #[test]
+    fn resolve_class_with_methods() {
+        let r = resolve_source(
+            "class Dog(pub name: String) { fn greet(self) -> String { self.name } }",
+        );
+        assert!(!r.diagnostics.has_errors());
+        let class_def = r.hir.defs.values().find(|d| d.name == "Dog").unwrap();
+        if let DefKind::Class(c) = &class_def.kind {
+            assert_eq!(c.ctor_params.len(), 1);
+            assert_eq!(c.ctor_params[0].name, "name");
+            assert_eq!(c.ctor_params[0].ty, TyRef::Prim(PrimTy::String));
+            assert_eq!(c.methods.len(), 1);
+        } else {
+            panic!("expected ClassDef");
+        }
+    }
+
+    #[test]
+    fn resolve_enum() {
+        let r = resolve_source("enum Shape { Circle(r: Float), Point }");
+        let def = r.hir.defs.values().find(|d| d.name == "Shape").unwrap();
+        if let DefKind::Enum(e) = &def.kind {
+            assert_eq!(e.variants.len(), 2);
+            assert_eq!(e.variants[0].name, "Circle");
+            assert_eq!(e.variants[0].fields.len(), 1);
+            assert_eq!(e.variants[1].name, "Point");
+            assert!(e.variants[1].fields.is_empty());
+        } else {
+            panic!("expected EnumDef");
+        }
+    }
+
+    #[test]
+    fn resolve_trait_and_impl() {
+        let r = resolve_source(
+            "trait Area { fn area(self) -> Float; }\nimpl Area for Circle { fn area(self) -> Float { 0.0 } }",
+        );
+        assert!(!r.diagnostics.has_errors());
+        let trait_def = r.hir.defs.values().find(|d| d.name == "Area").unwrap();
+        assert!(matches!(trait_def.kind, DefKind::Trait(_)));
+        let impl_def = r
+            .hir
+            .defs
+            .values()
+            .find(|d| matches!(d.kind, DefKind::Impl(_)))
+            .unwrap();
+        if let DefKind::Impl(i) = &impl_def.kind {
+            assert_eq!(i.target, TyRef::Named(SmolStr::from("Circle")));
+            assert_eq!(i.methods.len(), 1);
+        } else {
+            panic!("expected ImplDef");
+        }
+    }
+
+    #[test]
+    fn resolve_package_and_import() {
+        let r = resolve_source("package com.example;\nimport java.util.List;\nfn main() { 42 }");
+        assert!(!r.diagnostics.has_errors());
+        assert_eq!(
+            r.hir.package,
+            Some(vec![SmolStr::from("com"), SmolStr::from("example")])
+        );
+    }
+
+    #[test]
+    fn resolve_data_class() {
+        let r = resolve_source("data class Point(x: Float, y: Float);");
+        let def = r.hir.defs.values().find(|d| d.name == "Point").unwrap();
+        if let DefKind::DataClass(dc) = &def.kind {
+            assert_eq!(dc.ctor_params.len(), 2);
+        } else {
+            panic!("expected DataClassDef");
+        }
+    }
+
+    #[test]
+    fn resolve_nullable_type() {
+        let r = resolve_source("fn find(id: Int) -> String? { id }");
+        let (_, def) = r.hir.defs.iter().next().unwrap();
+        if let DefKind::Fn(f) = &def.kind {
+            assert_eq!(
+                f.return_ty,
+                Some(TyRef::Nullable(Box::new(TyRef::Prim(PrimTy::String))))
+            );
+        } else {
+            panic!("expected FnDef");
+        }
+    }
+
+    #[test]
+    fn resolve_generic_type() {
+        let r = resolve_source("fn first(xs: List<Int>) -> Option<Int> { xs }");
+        let (_, def) = r.hir.defs.iter().next().unwrap();
+        if let DefKind::Fn(f) = &def.kind {
+            assert_eq!(
+                f.params[0].ty,
+                TyRef::Generic(SmolStr::from("List"), vec![TyRef::Prim(PrimTy::Int)])
+            );
+            assert_eq!(
+                f.return_ty,
+                Some(TyRef::Generic(
+                    SmolStr::from("Option"),
+                    vec![TyRef::Prim(PrimTy::Int)]
+                ))
+            );
+        } else {
+            panic!("expected FnDef");
+        }
+    }
+
+    #[test]
+    fn scope_lookup() {
+        let r = resolve_source("fn foo() { 1 }\nfn bar() { 2 }");
+        assert_eq!(r.hir.defs.len(), 2);
+    }
 }

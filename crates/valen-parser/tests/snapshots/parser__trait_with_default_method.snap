@@ -3,6 +3,151 @@ source: crates/valen-parser/tests/parser.rs
 expression: "check(\"trait Display { fn display(self) -> String { self.name } }\")"
 ---
 === AST ===
-[]
+[
+    Trait(
+        TraitDecl {
+            visibility: Internal,
+            name: "Display",
+            generics: [],
+            items: [
+                Fn(
+                    FnDecl {
+                        visibility: Pub,
+                        name: "display",
+                        generics: [],
+                        params: [
+                            Param {
+                                name: "self",
+                                ty: Path(
+                                    TypePath {
+                                        segments: [
+                                            TypePathSegment {
+                                                name: "Self",
+                                                generics: [],
+                                                span: Span {
+                                                    start: 27,
+                                                    end: 31,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ],
+                                        span: Span {
+                                            start: 27,
+                                            end: 31,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                mutable: false,
+                                span: Span {
+                                    start: 27,
+                                    end: 31,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ],
+                        return_type: Some(
+                            Path(
+                                TypePath {
+                                    segments: [
+                                        TypePathSegment {
+                                            name: "String",
+                                            generics: [],
+                                            span: Span {
+                                                start: 36,
+                                                end: 42,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
+                                        },
+                                    ],
+                                    span: Span {
+                                        start: 36,
+                                        end: 42,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                            ),
+                        ),
+                        body: Some(
+                            Block {
+                                stmts: [],
+                                tail: Some(
+                                    Field(
+                                        FieldAccess {
+                                            receiver: Path(
+                                                Path {
+                                                    segments: [
+                                                        PathSegment {
+                                                            name: "self",
+                                                            turbofish: false,
+                                                            generics: [],
+                                                            span: Span {
+                                                                start: 45,
+                                                                end: 49,
+                                                                file_id: FileId(
+                                                                    0,
+                                                                ),
+                                                            },
+                                                        },
+                                                    ],
+                                                    span: Span {
+                                                        start: 45,
+                                                        end: 49,
+                                                        file_id: FileId(
+                                                            0,
+                                                        ),
+                                                    },
+                                                },
+                                            ),
+                                            field: "name",
+                                            span: Span {
+                                                start: 45,
+                                                end: 54,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
+                                        },
+                                    ),
+                                ),
+                                span: Span {
+                                    start: 43,
+                                    end: 56,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                        span: Span {
+                            start: 16,
+                            end: 56,
+                            file_id: FileId(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+            ],
+            span: Span {
+                start: 0,
+                end: 58,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
 === diagnostics ===
-Error V0101 45..49: expected expression
+(none)
