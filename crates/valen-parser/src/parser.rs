@@ -22,9 +22,9 @@ use valen_ast::{
     ClassDecl, ClassKind, ClassMember, ContinueExpr, CtorParam, DataClassDecl, EnumDecl, EnumField,
     EnumVariant, EnumVariantFields, Expr, FieldAccess, FileId, FnDecl, ForExpr, IfExpr, ImplBlock,
     ImplItem, ImportDecl, Item, LambdaExpr, LambdaParam, LetStmt, Literal, LoopExpr, MatchArm,
-    MatchExpr, MethodCallExpr, PackageDecl, Param, Path, PathSegment, Pattern, RangePattern,
-    ReturnExpr, Span, Stmt, StructPattern, StructPatternField, TraitDecl, TraitItem, TryExpr, Type,
-    TypePath, TypePathSegment, UnaryExpr, UnaryOp, Visibility, WhileExpr,
+    MatchExpr, MethodCallExpr, PackageDecl, Param, Path, PathSegment, Pattern, RangeExpr,
+    RangePattern, ReturnExpr, Span, Stmt, StructPattern, StructPatternField, TraitDecl, TraitItem,
+    TryExpr, Type, TypePath, TypePathSegment, UnaryExpr, UnaryOp, Visibility, WhileExpr,
 };
 use valen_diagnostics::{DiagCode, Diagnostics};
 
@@ -657,7 +657,7 @@ impl Parser {
     }
 
     fn parse_cmp(&mut self) -> Option<Expr> {
-        let mut lhs = self.parse_add()?;
+        let mut lhs = self.parse_range()?;
         loop {
             let op = match self.peek() {
                 TokenKind::Lt => BinaryOp::Lt,
@@ -667,8 +667,35 @@ impl Parser {
                 _ => break,
             };
             self.bump();
-            let rhs = self.parse_add()?;
+            let rhs = self.parse_range()?;
             lhs = combine_binary(op, lhs, rhs);
+        }
+        Some(lhs)
+    }
+
+    fn parse_range(&mut self) -> Option<Expr> {
+        let lhs = self.parse_add()?;
+        if self.at(&TokenKind::DotDot) || self.at(&TokenKind::DotDotEq) {
+            let inclusive = self.at(&TokenKind::DotDotEq);
+            self.bump();
+            let rhs = if !self.at(&TokenKind::Semi)
+                && !self.at(&TokenKind::RBrace)
+                && !self.at(&TokenKind::RParen)
+                && !self.at(&TokenKind::Comma)
+                && !self.at_eof()
+            {
+                Some(Box::new(self.parse_add()?))
+            } else {
+                None
+            };
+            let start_span = expr_span(&lhs);
+            let end_span = rhs.as_ref().map(|e| expr_span(e)).unwrap_or(start_span);
+            return Some(Expr::Range(RangeExpr {
+                start: Some(Box::new(lhs)),
+                end: rhs,
+                inclusive,
+                span: start_span.merge(end_span),
+            }));
         }
         Some(lhs)
     }
@@ -1387,6 +1414,7 @@ fn expr_span(expr: &Expr) -> Span {
         Expr::While(w) => w.span,
         Expr::Loop(l) => l.span,
         Expr::Lambda(l) => l.span,
+        Expr::Range(r) => r.span,
         Expr::Try(t) => t.span,
         Expr::StringInterp(s) => s.span,
         Expr::Safe(s) => s.span,

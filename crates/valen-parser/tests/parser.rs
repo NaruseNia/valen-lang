@@ -380,3 +380,13 @@ fn for_while_no_semicolon() {
         "fn f() { for x in xs { process(x); }\nwhile cond { tick(); }\nloop { break; } }"
     ));
 }
+
+#[test]
+fn range_exclusive() {
+    assert_snapshot!(check("fn f() { for i in 0..10 { process(i); } }"));
+}
+
+#[test]
+fn range_inclusive() {
+    assert_snapshot!(check("fn f() { for i in 1..=9 { process(i); } }"));
+}

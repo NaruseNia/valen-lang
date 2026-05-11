@@ -298,6 +298,7 @@ pub enum Expr {
     While(WhileExpr),
     Loop(LoopExpr),
     Lambda(LambdaExpr),
+    Range(RangeExpr),
     Try(TryExpr),
     StringInterp(StringInterpExpr),
     Safe(SafeExpr),
@@ -512,6 +513,14 @@ pub struct ForExpr {
 pub struct WhileExpr {
     pub cond: Box<Expr>,
     pub body: Block,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct RangeExpr {
+    pub start: Option<Box<Expr>>,
+    pub end: Option<Box<Expr>>,
+    pub inclusive: bool,
     pub span: Span,
 }
 
