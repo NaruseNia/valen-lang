@@ -1344,6 +1344,7 @@ dependencies = [
  "smol_str",
  "valen-ast",
  "valen-diagnostics",
+ "valen-parser",
 ]
 
 [[package]]
