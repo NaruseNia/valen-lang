@@ -3,7 +3,7 @@ pub mod ty;
 
 use indexmap::IndexMap;
 use smol_str::SmolStr;
-use valen_ast::Span;
+use valen_ast::{BinaryOp, Span, UnaryOp};
 
 pub type DefId = u32;
 
@@ -212,4 +212,231 @@ pub enum PrimTy {
     String,
     Unit,
     Nothing,
+}
+
+// ---------------------------------------------------------------------------
+// Ty — semantic type used during type checking (distinct from syntactic TyRef)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Ty {
+    Prim(PrimTy),
+    Named(SmolStr),
+    Generic(SmolStr, Vec<Ty>),
+    Nullable(Box<Ty>),
+    Fn(Vec<Ty>, Box<Ty>),
+    Error,
+}
+
+impl Ty {
+    pub fn unit() -> Self {
+        Ty::Prim(PrimTy::Unit)
+    }
+    pub fn nothing() -> Self {
+        Ty::Prim(PrimTy::Nothing)
+    }
+    pub fn is_error(&self) -> bool {
+        matches!(self, Ty::Error)
+    }
+    pub fn is_numeric(&self) -> bool {
+        matches!(
+            self,
+            Ty::Prim(
+                PrimTy::Int
+                    | PrimTy::Long
+                    | PrimTy::Float
+                    | PrimTy::Double
+                    | PrimTy::Byte
+                    | PrimTy::Short
+            )
+        )
+    }
+    pub fn is_integer(&self) -> bool {
+        matches!(
+            self,
+            Ty::Prim(PrimTy::Int | PrimTy::Long | PrimTy::Byte | PrimTy::Short)
+        )
+    }
+    pub fn is_bool(&self) -> bool {
+        matches!(self, Ty::Prim(PrimTy::Bool))
+    }
+}
+
+impl std::fmt::Display for Ty {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Ty::Prim(p) => write!(f, "{p}"),
+            Ty::Named(n) => write!(f, "{n}"),
+            Ty::Generic(n, args) => {
+                write!(f, "{n}<")?;
+                for (i, a) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{a}")?;
+                }
+                write!(f, ">")
+            }
+            Ty::Nullable(inner) => write!(f, "{inner}?"),
+            Ty::Fn(params, ret) => {
+                write!(f, "fn(")?;
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{p}")?;
+                }
+                write!(f, ") -> {ret}")
+            }
+            Ty::Error => write!(f, "<error>"),
+        }
+    }
+}
+
+impl std::fmt::Display for PrimTy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PrimTy::Int => write!(f, "Int"),
+            PrimTy::Long => write!(f, "Long"),
+            PrimTy::Float => write!(f, "Float"),
+            PrimTy::Double => write!(f, "Double"),
+            PrimTy::Bool => write!(f, "Bool"),
+            PrimTy::Char => write!(f, "Char"),
+            PrimTy::Byte => write!(f, "Byte"),
+            PrimTy::Short => write!(f, "Short"),
+            PrimTy::String => write!(f, "String"),
+            PrimTy::Unit => write!(f, "Unit"),
+            PrimTy::Nothing => write!(f, "Nothing"),
+        }
+    }
+}
+
+pub fn tyref_to_ty(tyref: &TyRef) -> Ty {
+    match tyref {
+        TyRef::Prim(p) => Ty::Prim(*p),
+        TyRef::Named(n) => Ty::Named(n.clone()),
+        TyRef::Generic(n, args) => Ty::Generic(n.clone(), args.iter().map(tyref_to_ty).collect()),
+        TyRef::Nullable(inner) => Ty::Nullable(Box::new(tyref_to_ty(inner))),
+        TyRef::Fn(params, ret) => Ty::Fn(
+            params.iter().map(tyref_to_ty).collect(),
+            Box::new(tyref_to_ty(ret)),
+        ),
+        TyRef::SelfTy | TyRef::Unresolved(_) | TyRef::Error => Ty::Error,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Typed HIR — expression/statement trees with Ty annotations
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone)]
+pub struct TypedBody {
+    pub stmts: Vec<TypedStmt>,
+    pub tail: Option<Box<TypedExpr>>,
+    pub ty: Ty,
+}
+
+#[derive(Debug, Clone)]
+pub enum TypedStmt {
+    Let {
+        name: SmolStr,
+        ty: Ty,
+        init: TypedExpr,
+        mutable: bool,
+        span: Span,
+    },
+    Expr(TypedExpr),
+    ExprSemi(TypedExpr),
+}
+
+#[derive(Debug, Clone)]
+pub struct TypedExpr {
+    pub kind: TypedExprKind,
+    pub ty: Ty,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub enum TypedExprKind {
+    IntLit(i64),
+    FloatLit(f64),
+    StringLit(SmolStr),
+    BoolLit(bool),
+    UnitLit,
+    LocalVar(SmolStr),
+    FieldAccess {
+        receiver: Box<TypedExpr>,
+        field: SmolStr,
+    },
+    Call {
+        callee: Box<TypedExpr>,
+        args: Vec<TypedExpr>,
+    },
+    MethodCall {
+        receiver: Box<TypedExpr>,
+        method: SmolStr,
+        args: Vec<TypedExpr>,
+    },
+    Binary {
+        op: BinaryOp,
+        lhs: Box<TypedExpr>,
+        rhs: Box<TypedExpr>,
+    },
+    Unary {
+        op: UnaryOp,
+        expr: Box<TypedExpr>,
+    },
+    If {
+        cond: Box<TypedExpr>,
+        then_branch: TypedBody,
+        else_branch: Option<Box<TypedExpr>>,
+    },
+    Match {
+        scrutinee: Box<TypedExpr>,
+        arms: Vec<TypedMatchArm>,
+    },
+    Block(TypedBody),
+    Return(Option<Box<TypedExpr>>),
+    Break(Option<Box<TypedExpr>>),
+    Continue,
+    Assign {
+        target: Box<TypedExpr>,
+        value: Box<TypedExpr>,
+    },
+    For {
+        var: SmolStr,
+        iter: Box<TypedExpr>,
+        body: TypedBody,
+    },
+    While {
+        cond: Box<TypedExpr>,
+        body: TypedBody,
+    },
+    Loop {
+        body: TypedBody,
+    },
+    Lambda {
+        params: Vec<(SmolStr, Ty)>,
+        body: Box<TypedExpr>,
+    },
+    Range {
+        start: Option<Box<TypedExpr>>,
+        end: Option<Box<TypedExpr>>,
+        inclusive: bool,
+    },
+    StringInterp(Vec<TypedStringPart>),
+    Error,
+}
+
+#[derive(Debug, Clone)]
+pub struct TypedMatchArm {
+    pub pattern: valen_ast::Pattern,
+    pub guard: Option<TypedExpr>,
+    pub body: TypedExpr,
+}
+
+#[derive(Debug, Clone)]
+pub enum TypedStringPart {
+    Text(SmolStr),
+    Expr(TypedExpr),
 }
