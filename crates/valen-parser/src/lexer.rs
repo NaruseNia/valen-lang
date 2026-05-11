@@ -69,6 +69,10 @@ enum RawTok {
     In,
     #[token("while")]
     While,
+    #[token("break")]
+    Break,
+    #[token("continue")]
+    Continue,
     #[token("loop")]
     Loop,
     #[token("true")]
@@ -297,6 +301,8 @@ fn map_token(raw: RawTok) -> TokenKind {
         RawTok::For => TokenKind::For,
         RawTok::In => TokenKind::In,
         RawTok::While => TokenKind::While,
+        RawTok::Break => TokenKind::Break,
+        RawTok::Continue => TokenKind::Continue,
         RawTok::Loop => TokenKind::Loop,
         RawTok::True => TokenKind::BoolLit(true),
         RawTok::False => TokenKind::BoolLit(false),

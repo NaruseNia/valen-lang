@@ -1,0 +1,165 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"fn f() { loop { if skip { continue; } process(); } }\")"
+---
+=== AST ===
+[
+    Fn(
+        FnDecl {
+            visibility: Internal,
+            name: "f",
+            generics: [],
+            params: [],
+            return_type: None,
+            body: Some(
+                Block {
+                    stmts: [],
+                    tail: Some(
+                        Loop(
+                            LoopExpr {
+                                body: Block {
+                                    stmts: [
+                                        ExprSemi(
+                                            If(
+                                                IfExpr {
+                                                    cond: Path(
+                                                        Path {
+                                                            segments: [
+                                                                PathSegment {
+                                                                    name: "skip",
+                                                                    turbofish: false,
+                                                                    generics: [],
+                                                                    span: Span {
+                                                                        start: 19,
+                                                                        end: 23,
+                                                                        file_id: FileId(
+                                                                            0,
+                                                                        ),
+                                                                    },
+                                                                },
+                                                            ],
+                                                            span: Span {
+                                                                start: 19,
+                                                                end: 23,
+                                                                file_id: FileId(
+                                                                    0,
+                                                                ),
+                                                            },
+                                                        },
+                                                    ),
+                                                    then_branch: Block {
+                                                        stmts: [
+                                                            ExprSemi(
+                                                                Continue(
+                                                                    ContinueExpr {
+                                                                        span: Span {
+                                                                            start: 26,
+                                                                            end: 34,
+                                                                            file_id: FileId(
+                                                                                0,
+                                                                            ),
+                                                                        },
+                                                                    },
+                                                                ),
+                                                            ),
+                                                        ],
+                                                        tail: None,
+                                                        span: Span {
+                                                            start: 24,
+                                                            end: 37,
+                                                            file_id: FileId(
+                                                                0,
+                                                            ),
+                                                        },
+                                                    },
+                                                    else_branch: None,
+                                                    span: Span {
+                                                        start: 16,
+                                                        end: 37,
+                                                        file_id: FileId(
+                                                            0,
+                                                        ),
+                                                    },
+                                                },
+                                            ),
+                                        ),
+                                        ExprSemi(
+                                            Call(
+                                                CallExpr {
+                                                    callee: Path(
+                                                        Path {
+                                                            segments: [
+                                                                PathSegment {
+                                                                    name: "process",
+                                                                    turbofish: false,
+                                                                    generics: [],
+                                                                    span: Span {
+                                                                        start: 38,
+                                                                        end: 45,
+                                                                        file_id: FileId(
+                                                                            0,
+                                                                        ),
+                                                                    },
+                                                                },
+                                                            ],
+                                                            span: Span {
+                                                                start: 38,
+                                                                end: 45,
+                                                                file_id: FileId(
+                                                                    0,
+                                                                ),
+                                                            },
+                                                        },
+                                                    ),
+                                                    args: [],
+                                                    span: Span {
+                                                        start: 38,
+                                                        end: 47,
+                                                        file_id: FileId(
+                                                            0,
+                                                        ),
+                                                    },
+                                                },
+                                            ),
+                                        ),
+                                    ],
+                                    tail: None,
+                                    span: Span {
+                                        start: 14,
+                                        end: 50,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                                span: Span {
+                                    start: 9,
+                                    end: 50,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    span: Span {
+                        start: 7,
+                        end: 52,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            span: Span {
+                start: 0,
+                end: 52,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

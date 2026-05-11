@@ -292,10 +292,13 @@ pub enum Expr {
     Match(MatchExpr),
     Block(Block),
     Return(ReturnExpr),
+    Break(BreakExpr),
+    Continue(ContinueExpr),
     For(ForExpr),
     While(WhileExpr),
     Loop(LoopExpr),
     Lambda(LambdaExpr),
+    Range(RangeExpr),
     Try(TryExpr),
     StringInterp(StringInterpExpr),
     Safe(SafeExpr),
@@ -488,6 +491,17 @@ pub struct ReturnExpr {
 }
 
 #[derive(Debug, Clone)]
+pub struct BreakExpr {
+    pub value: Option<Box<Expr>>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct ContinueExpr {
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
 pub struct ForExpr {
     pub var: SmolStr,
     pub iter: Box<Expr>,
@@ -499,6 +513,14 @@ pub struct ForExpr {
 pub struct WhileExpr {
     pub cond: Box<Expr>,
     pub body: Block,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct RangeExpr {
+    pub start: Option<Box<Expr>>,
+    pub end: Option<Box<Expr>>,
+    pub inclusive: bool,
     pub span: Span,
 }
 

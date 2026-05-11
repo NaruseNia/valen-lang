@@ -18,12 +18,13 @@
 use smol_str::SmolStr;
 use valen_ast::token::TokenKind;
 use valen_ast::{
-    AtPattern, BinaryExpr, BinaryOp, BindingPattern, Block, CallArg, CallExpr, ClassDecl,
-    ClassKind, ClassMember, CtorParam, DataClassDecl, EnumDecl, EnumField, EnumVariant,
-    EnumVariantFields, Expr, FieldAccess, FileId, FnDecl, IfExpr, ImplBlock, ImplItem, ImportDecl,
-    Item, LetStmt, Literal, MatchArm, MatchExpr, MethodCallExpr, PackageDecl, Param, Path,
-    PathSegment, Pattern, RangePattern, ReturnExpr, Span, Stmt, StructPattern, StructPatternField,
-    TraitDecl, TraitItem, TryExpr, Type, TypePath, TypePathSegment, UnaryExpr, UnaryOp, Visibility,
+    AtPattern, BinaryExpr, BinaryOp, BindingPattern, Block, BreakExpr, CallArg, CallExpr,
+    ClassDecl, ClassKind, ClassMember, ContinueExpr, CtorParam, DataClassDecl, EnumDecl, EnumField,
+    EnumVariant, EnumVariantFields, Expr, FieldAccess, FileId, FnDecl, ForExpr, IfExpr, ImplBlock,
+    ImplItem, ImportDecl, Item, LambdaExpr, LambdaParam, LetStmt, Literal, LoopExpr, MatchArm,
+    MatchExpr, MethodCallExpr, PackageDecl, Param, Path, PathSegment, Pattern, RangeExpr,
+    RangePattern, ReturnExpr, Span, Stmt, StructPattern, StructPatternField, TraitDecl, TraitItem,
+    TryExpr, Type, TypePath, TypePathSegment, UnaryExpr, UnaryOp, Visibility, WhileExpr,
 };
 use valen_diagnostics::{DiagCode, Diagnostics};
 
@@ -559,7 +560,15 @@ impl Parser {
             }
 
             let expr = self.parse_expr()?;
-            let is_block_expr = matches!(&expr, Expr::If(_) | Expr::Match(_) | Expr::Block(_));
+            let is_block_expr = matches!(
+                &expr,
+                Expr::If(_)
+                    | Expr::Match(_)
+                    | Expr::Block(_)
+                    | Expr::For(_)
+                    | Expr::While(_)
+                    | Expr::Loop(_)
+            );
             if self.at(&TokenKind::Semi) {
                 self.bump();
                 stmts.push(Stmt::ExprSemi(expr));
@@ -648,7 +657,7 @@ impl Parser {
     }
 
     fn parse_cmp(&mut self) -> Option<Expr> {
-        let mut lhs = self.parse_add()?;
+        let mut lhs = self.parse_range()?;
         loop {
             let op = match self.peek() {
                 TokenKind::Lt => BinaryOp::Lt,
@@ -658,8 +667,35 @@ impl Parser {
                 _ => break,
             };
             self.bump();
-            let rhs = self.parse_add()?;
+            let rhs = self.parse_range()?;
             lhs = combine_binary(op, lhs, rhs);
+        }
+        Some(lhs)
+    }
+
+    fn parse_range(&mut self) -> Option<Expr> {
+        let lhs = self.parse_add()?;
+        if self.at(&TokenKind::DotDot) || self.at(&TokenKind::DotDotEq) {
+            let inclusive = self.at(&TokenKind::DotDotEq);
+            self.bump();
+            let rhs = if !self.at(&TokenKind::Semi)
+                && !self.at(&TokenKind::RBrace)
+                && !self.at(&TokenKind::RParen)
+                && !self.at(&TokenKind::Comma)
+                && !self.at_eof()
+            {
+                Some(Box::new(self.parse_add()?))
+            } else {
+                None
+            };
+            let start_span = expr_span(&lhs);
+            let end_span = rhs.as_ref().map(|e| expr_span(e)).unwrap_or(start_span);
+            return Some(Expr::Range(RangeExpr {
+                start: Some(Box::new(lhs)),
+                end: rhs,
+                inclusive,
+                span: start_span.merge(end_span),
+            }));
         }
         Some(lhs)
     }
@@ -821,7 +857,13 @@ impl Parser {
             }
             TokenKind::If => self.parse_if_expr(),
             TokenKind::Match => self.parse_match_expr(),
+            TokenKind::For => self.parse_for_expr(),
+            TokenKind::While => self.parse_while_expr(),
+            TokenKind::Loop => self.parse_loop_expr(),
+            TokenKind::Break => self.parse_break_expr(),
+            TokenKind::Continue => self.parse_continue_expr(),
             TokenKind::Return => self.parse_return_expr(),
+            TokenKind::Pipe | TokenKind::PipePipe => self.parse_lambda_expr(),
             _ => {
                 self.diagnostics.error(
                     DiagCode::PARSE_EXPECTED_EXPR,
@@ -1133,6 +1175,106 @@ impl Parser {
         }))
     }
 
+    fn parse_for_expr(&mut self) -> Option<Expr> {
+        let start = self.expect(TokenKind::For)?;
+        let var = self.expect_ident()?;
+        self.expect(TokenKind::In)?;
+        let iter = self.parse_expr()?;
+        let body = self.parse_block()?;
+        let span = start.merge(body.span);
+        Some(Expr::For(ForExpr {
+            var,
+            iter: Box::new(iter),
+            body,
+            span,
+        }))
+    }
+
+    fn parse_while_expr(&mut self) -> Option<Expr> {
+        let start = self.expect(TokenKind::While)?;
+        let cond = self.parse_expr()?;
+        let body = self.parse_block()?;
+        let span = start.merge(body.span);
+        Some(Expr::While(WhileExpr {
+            cond: Box::new(cond),
+            body,
+            span,
+        }))
+    }
+
+    fn parse_loop_expr(&mut self) -> Option<Expr> {
+        let start = self.expect(TokenKind::Loop)?;
+        let body = self.parse_block()?;
+        let span = start.merge(body.span);
+        Some(Expr::Loop(LoopExpr { body, span }))
+    }
+
+    fn parse_break_expr(&mut self) -> Option<Expr> {
+        let start = self.expect(TokenKind::Break)?;
+        let value = if !self.at(&TokenKind::Semi) && !self.at(&TokenKind::RBrace) && !self.at_eof()
+        {
+            Some(Box::new(self.parse_expr()?))
+        } else {
+            None
+        };
+        let end = value.as_ref().map(|v| expr_span(v)).unwrap_or(start);
+        Some(Expr::Break(BreakExpr {
+            value,
+            span: start.merge(end),
+        }))
+    }
+
+    fn parse_continue_expr(&mut self) -> Option<Expr> {
+        let start = self.expect(TokenKind::Continue)?;
+        Some(Expr::Continue(ContinueExpr { span: start }))
+    }
+
+    fn parse_lambda_expr(&mut self) -> Option<Expr> {
+        let start = self.peek_span();
+        let params = if self.eat(&TokenKind::PipePipe).is_some() {
+            Vec::new()
+        } else {
+            self.expect(TokenKind::Pipe)?;
+            let mut ps = Vec::new();
+            while !self.at(&TokenKind::Pipe) && !self.at_eof() {
+                if !ps.is_empty() {
+                    self.expect(TokenKind::Comma)?;
+                }
+                let p_start = self.peek_span();
+                let name = self.expect_ident()?;
+                let ty = if self.eat(&TokenKind::Colon).is_some() {
+                    Some(self.parse_type()?)
+                } else {
+                    None
+                };
+                let p_span = ty
+                    .as_ref()
+                    .map(|t| p_start.merge(type_span(t)))
+                    .unwrap_or(p_start);
+                ps.push(LambdaParam {
+                    name,
+                    ty,
+                    span: p_span,
+                });
+            }
+            self.expect(TokenKind::Pipe)?;
+            ps
+        };
+        let return_type = if self.eat(&TokenKind::Arrow).is_some() {
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+        let body = self.parse_expr()?;
+        let span = start.merge(expr_span(&body));
+        Some(Expr::Lambda(LambdaExpr {
+            params,
+            return_type,
+            body: Box::new(body),
+            span,
+        }))
+    }
+
     fn at_eof(&self) -> bool {
         matches!(self.peek(), TokenKind::Eof)
     }
@@ -1266,10 +1408,13 @@ fn expr_span(expr: &Expr) -> Span {
         Expr::Match(m) => m.span,
         Expr::Block(b) => b.span,
         Expr::Return(r) => r.span,
+        Expr::Break(b) => b.span,
+        Expr::Continue(c) => c.span,
         Expr::For(f) => f.span,
         Expr::While(w) => w.span,
         Expr::Loop(l) => l.span,
         Expr::Lambda(l) => l.span,
+        Expr::Range(r) => r.span,
         Expr::Try(t) => t.span,
         Expr::StringInterp(s) => s.span,
         Expr::Safe(s) => s.span,

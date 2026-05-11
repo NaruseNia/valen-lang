@@ -45,6 +45,8 @@ pub enum TokenKind {
     In,
     While,
     Loop,
+    Break,
+    Continue,
     True,
     False,
     As,

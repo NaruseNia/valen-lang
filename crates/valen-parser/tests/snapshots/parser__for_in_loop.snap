@@ -1,0 +1,163 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"fn f() { for x in xs { println(x); } }\")"
+---
+=== AST ===
+[
+    Fn(
+        FnDecl {
+            visibility: Internal,
+            name: "f",
+            generics: [],
+            params: [],
+            return_type: None,
+            body: Some(
+                Block {
+                    stmts: [],
+                    tail: Some(
+                        For(
+                            ForExpr {
+                                var: "x",
+                                iter: Path(
+                                    Path {
+                                        segments: [
+                                            PathSegment {
+                                                name: "xs",
+                                                turbofish: false,
+                                                generics: [],
+                                                span: Span {
+                                                    start: 18,
+                                                    end: 20,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ],
+                                        span: Span {
+                                            start: 18,
+                                            end: 20,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                body: Block {
+                                    stmts: [
+                                        ExprSemi(
+                                            Call(
+                                                CallExpr {
+                                                    callee: Path(
+                                                        Path {
+                                                            segments: [
+                                                                PathSegment {
+                                                                    name: "println",
+                                                                    turbofish: false,
+                                                                    generics: [],
+                                                                    span: Span {
+                                                                        start: 23,
+                                                                        end: 30,
+                                                                        file_id: FileId(
+                                                                            0,
+                                                                        ),
+                                                                    },
+                                                                },
+                                                            ],
+                                                            span: Span {
+                                                                start: 23,
+                                                                end: 30,
+                                                                file_id: FileId(
+                                                                    0,
+                                                                ),
+                                                            },
+                                                        },
+                                                    ),
+                                                    args: [
+                                                        CallArg {
+                                                            name: None,
+                                                            value: Path(
+                                                                Path {
+                                                                    segments: [
+                                                                        PathSegment {
+                                                                            name: "x",
+                                                                            turbofish: false,
+                                                                            generics: [],
+                                                                            span: Span {
+                                                                                start: 31,
+                                                                                end: 32,
+                                                                                file_id: FileId(
+                                                                                    0,
+                                                                                ),
+                                                                            },
+                                                                        },
+                                                                    ],
+                                                                    span: Span {
+                                                                        start: 31,
+                                                                        end: 32,
+                                                                        file_id: FileId(
+                                                                            0,
+                                                                        ),
+                                                                    },
+                                                                },
+                                                            ),
+                                                            span: Span {
+                                                                start: 31,
+                                                                end: 32,
+                                                                file_id: FileId(
+                                                                    0,
+                                                                ),
+                                                            },
+                                                        },
+                                                    ],
+                                                    span: Span {
+                                                        start: 23,
+                                                        end: 33,
+                                                        file_id: FileId(
+                                                            0,
+                                                        ),
+                                                    },
+                                                },
+                                            ),
+                                        ),
+                                    ],
+                                    tail: None,
+                                    span: Span {
+                                        start: 21,
+                                        end: 36,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                                span: Span {
+                                    start: 9,
+                                    end: 36,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    span: Span {
+                        start: 7,
+                        end: 38,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            span: Span {
+                start: 0,
+                end: 38,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)
