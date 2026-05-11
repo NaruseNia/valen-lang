@@ -1,0 +1,57 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"class Foo {}\\nfn main() {}\")"
+---
+=== AST ===
+[
+    Class(
+        ClassDecl {
+            visibility: Internal,
+            kind: Final,
+            name: "Foo",
+            generics: [],
+            ctor_params: [],
+            superclass: None,
+            traits: [],
+            body: [],
+            span: Span {
+                start: 0,
+                end: 12,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+    Fn(
+        FnDecl {
+            visibility: Internal,
+            name: "main",
+            generics: [],
+            params: [],
+            return_type: None,
+            body: Some(
+                Block {
+                    stmts: [],
+                    tail: None,
+                    span: Span {
+                        start: 23,
+                        end: 25,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            span: Span {
+                start: 13,
+                end: 25,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

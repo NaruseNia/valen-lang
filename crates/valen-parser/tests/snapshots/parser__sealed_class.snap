@@ -1,0 +1,28 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"sealed class Foo {}\")"
+---
+=== AST ===
+[
+    Class(
+        ClassDecl {
+            visibility: Internal,
+            kind: Sealed,
+            name: "Foo",
+            generics: [],
+            ctor_params: [],
+            superclass: None,
+            traits: [],
+            body: [],
+            span: Span {
+                start: 0,
+                end: 19,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

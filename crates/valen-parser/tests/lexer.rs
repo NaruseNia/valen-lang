@@ -44,6 +44,33 @@ fn line_comment_is_skipped() {
 }
 
 #[test]
-fn unknown_char_produces_error_token() {
+fn at_sign_is_token() {
     assert_snapshot!(fmt("fn main() { @ }"));
+}
+
+#[test]
+fn unknown_char_produces_error_token() {
+    assert_snapshot!(fmt("fn main() { $ }"));
+}
+
+#[test]
+fn class_keywords() {
+    assert_snapshot!(fmt("pub sealed class Foo {}"));
+}
+
+#[test]
+fn all_keywords_reserved() {
+    assert_snapshot!(fmt(
+        "fn let mut self return if else match class data enum trait impl pub internal private open override abstract sealed package import for in while loop as"
+    ));
+}
+
+#[test]
+fn float_literal() {
+    assert_snapshot!(fmt("fn main() { let x = 3.14; }"));
+}
+
+#[test]
+fn dot_and_double_colon() {
+    assert_snapshot!(fmt("foo.bar::baz"));
 }

@@ -1,0 +1,8 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"class {}\")"
+---
+=== AST ===
+[]
+=== diagnostics ===
+Error V0101 6..7: expected identifier

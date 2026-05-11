@@ -1,0 +1,9 @@
+---
+source: crates/valen-parser/tests/lexer.rs
+expression: "fmt(\"foo.bar::baz\")"
+---
+Ident("foo") @ 0..3
+Dot @ 3..4
+Ident("bar") @ 4..7
+DoubleColon @ 7..9
+Ident("baz") @ 9..12
