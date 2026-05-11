@@ -58,9 +58,14 @@ impl Area for Shape {
 - 同一 trait/type 対に対する impl はグローバル一意
 - downstream module での再定義禁止
 
+**trait 充足ルール:**
+- trait method の実装は **`impl Trait for Type { ... }` ブロック内でのみ** 成立する
+- class 本体の method が trait の method と同名・同シグネチャであっても、trait 充足にはならない（両者は独立）
+- class 本体に同名 method がある場合、`value.foo()` は class 本体 method を優先解決する
+
 **衝突解決:**
 - class 本体 member（method / associated function）が適用可能なら最優先
-- trait method の候補が複数で曖昧になる場合は UFCS `Trait::foo(v, ...)` で解決
+- trait method の候補が複数で曖昧になる場合は UFCS `Trait::foo(value, args)` で解決
 - 詳細なメソッド解決規則は [§5.6](05-classes.md) を参照
 
 ## 7.5 演算子オーバーロード

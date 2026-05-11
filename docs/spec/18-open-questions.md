@@ -2,11 +2,7 @@
 
 ## 実装時に詰める項目
 
-1. **enum bytecode ABI の実験検証**
-   - Java pattern switch
-   - Jackson / Gson シリアライゼーション
-   - reflection での class 名前解決
-   - Gradle incremental compilation
+1. ~~**enum bytecode ABI の実験検証**~~ → **解決済み（Phase 0 spike）** `docs/enum-abi-report.md` 参照
 2. **coherence 仕様補則**
    - generic nominal type の所有判定例（`Vec<Foo>` の所有は `Vec` 側か `Foo` 側か、両方か）
    - Gradle subproject 跨ぎの module 境界運用ルール
@@ -14,30 +10,19 @@
 3. **Java overload resolution 規則**
    - Int vs int vs Integer の優先度
    - null 許容位置
+   - **Note:** 暗黙数値変換なし（§2.1）により大幅にシンプル化
 
-## 3巡目 Codex レビューで挙がった積み残し（優先度付き）
+## 3巡目 Codex + grill-me で解決済みの項目
 
-以下は 2026-04 の Codex 3巡目レビュー（内容 82-83/100）で指摘された、83-85 へ到達するための残課題。今回の改訂では open-questions に棚上げし、次の改訂サイクルで詰める。
+以下は 2026-05 の grill-me セッションおよび Codex レビューで解決された。
 
-### 重大
+### 解決済み
 
-4. **UFCS の記法一本化**
-   - 現状：§4.4 は `map(xs, f)` を UFCS と定義、§5.6 は曖昧性解消を `Trait::foo(v)`、§17.3 は `greet(p)` を UFCS と呼ぶ
-   - 矛盾：`foo(x)` が top-level fn か trait UFCS かを構文で区別できない
-   - 方針候補：**UFCS = `Trait::foo(v)` 一本化、`foo(v)` は top-level fn 限定**（章横断で修正）
-
-5. **`override fn` と trait 実装モデルの噛み合わせ**
-   - 現状：§5.6 は「class 本体 method が trait requirement と同一 signature なら `override fn` 必須」、§7.2 は「trait 実装は `impl Trait for Type` 専用」
-   - 矛盾：class 本体 method は trait 充足の場ではないはずなのに `override` を要求している
-   - 方針候補：`override fn` を **class 継承専用** に切る。trait 充足は `impl Trait for Type` ブロック内でのみ成立させる
-
-6. **メソッド解決の overload 規則**
-   - §5.6 は「適用可能 signature で候補形成」まで。未定義の edge case：
-     - class 内 overload 同士の優先（`fn show(self)` vs `fn show(self, fmt)`）
-     - 継承した method の候補扱い
-     - named arg を含む適用可能性
-     - 数値変換 / generic 制約で複数適用可能になったときの tie-break
-   - 方針候補：Java overload resolution 規則（§18 項目 3）と合流させる
+4. ~~**UFCS の記法一本化**~~ → **解決:** `Trait::method(receiver, args)` に一本化。`map(xs, f)` / `greet(p)` 形式は削除（§4.4）
+5. ~~**`override fn` と trait 実装モデルの噛み合わせ**~~ → **解決:** trait 充足は `impl` ブロックのみ。class 本体 method は trait と無関係。`override fn` は class 継承専用（§5.6, §7.4）
+6. **メソッド解決の overload 規則** — 暗黙数値変換なし（§2.1）により候補は型完全一致のみ。残る edge case:
+   - 継承した method の候補扱い
+   - named arg を含む適用可能性
 
 ### 高
 
@@ -51,21 +36,33 @@
    - 穴：bytecode レベルで「interface を implements しない」「metadata で隠す」「static helper に lower」のどれかが未記述
    - 方針候補：「`internal/private trait` は JVM 公開 interface としては emit せず、Valen 専用 metadata + bridge/lowered dispatch で表現する」を §6.5.4 に追記
 
-### 中
+### 解決済み（中）
 
-9. **`data class` superclass 継承時の自動生成動作**
-   - 現状：§5.2 は「sealed/open/abstract superclass 継承は可」だが、`equals`/`hashCode`/`copy` が super state を見るかが未定義
-   - 方針候補：
-     - オプション A（厳格）: MVP では superclass を marker（state / methodなし）に限定
-     - オプション B（Kotlin 同様）: 自動生成対象は primary constructor field のみと明記、superclass state は無視
-
+9. ~~**`data class` superclass 継承時の自動生成動作**~~ → **解決:** 自身の primary constructor params のみ対象。親の state は含めない（§5.2）
 10. **`@valen.Closed` の annotation 契約詳細**
     - 現状：§20.3 で target を Java sealed interface / sealed class と書いているのみ
     - 不足：`@Target(TYPE)` / `@Retention(CLASS)` / 配布形態（classpath に `valen-runtime.jar` として置くか、コンパイラ組み込みか）
     - 方針候補：`@Target(TYPE) @Retention(CLASS)` を §20.3 に明記、配布は `valen-runtime.jar` を標準
 
-### 低
+### 解決済み（低）
 
-11. **§9.2 Java 例のコードフェンス**
-    - `@Closed sealed interface Color` 例が ```valen フェンスになっているが、これは Java ソース
-    - 方針：```java フェンスに修正（細部品質）
+11. ~~**§9.2 Java 例のコードフェンス**~~ — 修正対象のみ（細部品質）
+
+## grill-me 4巡目で新規確定した仕様（2026-05-11）
+
+| # | 論点 | 決定 | 反映先 |
+|---|------|------|--------|
+| G1 | UFCS 統一 | `Trait::method(recv, args)` 一本化 | §4.4 |
+| G2 | trait 充足 | `impl` ブロックのみ | §5.6, §7.4 |
+| G3 | Error 型 | `Error` trait 制約 + 同一E型のみ `?` | §8.2, §8.3 |
+| G4 | Java null | `safe {}` 内戻り値は全て `T?` | §8.4 |
+| G5 | 数値変換 | 暗黙変換なし、明示メソッドのみ | §2.1 |
+| G6 | break/continue | MVP 導入、`break expr;` で値返却可 | §3.4 |
+| G7 | 型推論 | ローカル推論あり、fn シグネチャ明示 | §4.5 |
+| G8 | import | MVP: 単一 + alias のみ | §10.1 |
+| G9 | 等値比較 | `==` 構造比較、`===` 参照比較 | §2.2 |
+| G10 | クロージャ | 参照キャプチャ、mut 可 | §15.2 |
+| G11 | `as` | MVP は import alias のみ | §1.2 |
+| G12 | package | 必須、省略はエラー | §10.1 |
+| G13 | data class 継承 | auto-gen は自身 ctor params のみ | §5.2 |
+| G14 | リテラル型 | 42=Int, 42L=Long, 3.14=Double, 3.14f=Float | §2.1 |

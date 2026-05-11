@@ -13,12 +13,26 @@ class data enum trait impl
 pub internal private
 open abstract sealed override
 package import
-for in while loop
+for in while loop break continue
 true false
 as
 ```
 
 予約語（将来用）：`suspend async await yield typealias`
+
+### `as` キーワードの用途
+
+MVP では `as` は **import alias 専用**:
+
+```valen
+import java.util.HashMap as HMap;
+```
+
+型キャスト（`expr as Type`）は **Phase 1.5** で導入予定。MVP ではダウンキャストは `match` パターンで代替する。
+
+### 演算子
+
+`===` / `!==`（参照比較）は MVP で利用可能。§2.2 参照。
 
 **`@`** は annotation 用の予約 sigil（§20 参照）。MVP では Valen コード内で annotation を書けないため、`@` を識別子前に置くとパーサエラーとなる。
 
