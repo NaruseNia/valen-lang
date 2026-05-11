@@ -3,9 +3,11 @@ use smol_str::SmolStr;
 use valen_ast::{self, Item, Visibility};
 use valen_diagnostics::Diagnostics;
 
+use valen_diagnostics::DiagCode;
+
 use crate::{
     ClassDef, ClassDefKind, CtorParamDef, DataClassDef, Def, DefId, DefKind, EnumDef,
-    EnumVariantDef, FnDef, Hir, ImplDef, ParamDef, PrimTy, TraitDef, TyRef, Vis,
+    EnumVariantDef, FnDef, Hir, ImplDef, ImplEntry, ParamDef, PrimTy, TraitDef, TyRef, Vis,
 };
 
 pub struct Resolver {
@@ -72,7 +74,57 @@ impl Resolver {
             self.register_item(item);
         }
 
-        // Second pass: resolve bodies (future — needs expression resolution)
+        // Second pass: build method indexes and validate
+        self.build_method_index();
+        self.check_duplicate_names();
+    }
+
+    fn build_method_index(&mut self) {
+        let defs: Vec<_> = self.hir.defs.values().cloned().collect();
+        for def in &defs {
+            match &def.kind {
+                DefKind::Class(c) => {
+                    self.hir
+                        .type_methods
+                        .insert(def.name.clone(), c.methods.clone());
+                }
+                DefKind::Impl(imp) => {
+                    let target_name = match &imp.target {
+                        TyRef::Named(n) => n.clone(),
+                        TyRef::Prim(p) => SmolStr::from(format!("{p:?}")),
+                        _ => continue,
+                    };
+                    let trait_name = match &imp.trait_ref {
+                        TyRef::Named(n) => n.clone(),
+                        _ => continue,
+                    };
+                    self.hir.trait_impls.push(ImplEntry {
+                        trait_name,
+                        target_name,
+                        methods: imp.methods.clone(),
+                    });
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn check_duplicate_names(&mut self) {
+        let mut seen: IndexMap<SmolStr, (DefId, valen_ast::Span)> = IndexMap::new();
+        for (name_ref, &id) in &self.scope.names {
+            let Some(def) = self.hir.defs.get(&id) else {
+                continue;
+            };
+            if let Some(&(_, _prev_span)) = seen.get(name_ref.as_str()) {
+                self.diagnostics.error(
+                    DiagCode::NAME_NOT_FOUND,
+                    def.span,
+                    SmolStr::from(format!("duplicate definition `{}`", def.name)),
+                );
+            } else {
+                seen.insert(name_ref.clone(), (id, def.span));
+            }
+        }
     }
 
     fn register_item(&mut self, item: &Item) {
@@ -504,5 +556,80 @@ mod tests {
     fn scope_lookup() {
         let r = resolve_source("fn foo() { 1 }\nfn bar() { 2 }");
         assert_eq!(r.hir.defs.len(), 2);
+    }
+
+    // --- TASK-004 後半: method resolution + visibility ---
+
+    #[test]
+    fn method_resolution_class_body() {
+        let r = resolve_source(
+            "class Dog(pub name: String) { fn greet(self) -> String { self.name } }",
+        );
+        let res = r.hir.resolve_method("Dog", "greet");
+        assert!(matches!(res, crate::MethodResolution::Found(_)));
+    }
+
+    #[test]
+    fn method_resolution_not_found() {
+        let r = resolve_source("class Dog(pub name: String) {}");
+        let res = r.hir.resolve_method("Dog", "bark");
+        assert!(matches!(res, crate::MethodResolution::NotFound));
+    }
+
+    #[test]
+    fn method_resolution_trait_impl() {
+        let r = resolve_source(
+            "class Circle {}\ntrait Area { fn area(self) -> Float; }\nimpl Area for Circle { fn area(self) -> Float { 0.0 } }",
+        );
+        let res = r.hir.resolve_method("Circle", "area");
+        assert!(matches!(res, crate::MethodResolution::Found(_)));
+    }
+
+    #[test]
+    fn method_resolution_class_body_priority() {
+        let r = resolve_source(
+            "class Foo { fn show(self) -> String { self } }\ntrait Display { fn show(self) -> String; }\nimpl Display for Foo { fn show(self) -> String { self } }",
+        );
+        let res = r.hir.resolve_method("Foo", "show");
+        if let crate::MethodResolution::Found(id) = res {
+            let def = r.hir.defs.get(&id).unwrap();
+            assert_eq!(def.vis, Vis::Internal);
+        } else {
+            panic!("expected class body method to win");
+        }
+    }
+
+    #[test]
+    fn visibility_pub_accessible() {
+        let r = resolve_source("pub fn main() { 42 }");
+        let (_, def) = r.hir.defs.iter().next().unwrap();
+        assert!(r.hir.check_visibility(def.id, None));
+    }
+
+    #[test]
+    fn visibility_private_blocked() {
+        let r = resolve_source("class Foo { private fn secret(self) -> Int { 42 } }");
+        let secret = r.hir.defs.values().find(|d| d.name == "secret").unwrap();
+        assert!(!r.hir.check_visibility(secret.id, None));
+        assert!(r.hir.check_visibility(secret.id, Some("Foo")));
+    }
+
+    #[test]
+    fn type_method_index_built() {
+        let r = resolve_source(
+            "class Dog { fn bark(self) -> String { self } fn fetch(self) -> String { self } }",
+        );
+        let methods = r.hir.type_methods.get("Dog").unwrap();
+        assert_eq!(methods.len(), 2);
+    }
+
+    #[test]
+    fn impl_index_built() {
+        let r = resolve_source(
+            "trait Show { fn show(self) -> String; }\nimpl Show for Dog { fn show(self) -> String { self } }",
+        );
+        assert_eq!(r.hir.trait_impls.len(), 1);
+        assert_eq!(r.hir.trait_impls[0].trait_name, "Show");
+        assert_eq!(r.hir.trait_impls[0].target_name, "Dog");
     }
 }
