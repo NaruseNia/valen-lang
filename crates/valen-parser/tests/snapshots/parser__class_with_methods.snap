@@ -1,0 +1,8 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"class Dog(pub name: String) { fn greet(self) -> String { self.name } }\")"
+---
+=== AST ===
+[]
+=== diagnostics ===
+Error V0101 57..61: expected expression

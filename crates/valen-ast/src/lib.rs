@@ -79,6 +79,7 @@ pub enum ClassKind {
 
 #[derive(Debug, Clone)]
 pub struct CtorParam {
+    pub visibility: Visibility,
     pub name: SmolStr,
     pub ty: Type,
     pub mutable: bool,

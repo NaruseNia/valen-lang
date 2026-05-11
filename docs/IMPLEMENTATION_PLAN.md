@@ -22,7 +22,7 @@ Last updated: 2026-05-11（Phase 0 完了、grill-me 4巡確定、TASK-001 完�
 
 ### Phase 1 進捗
 - [x] **TASK-001:** Parser 拡張 — fn params/return type, if/else, match（フルパターン）, call/method call/field/try, paths, return（PR #18）
-- [ ] TASK-002: Parser 拡張 — enum/trait/impl/import/package
+- [x] **TASK-002:** Parser 拡張 — class ctor/body, data class, enum, trait, impl, package, import
 - [ ] TASK-003: Parser 拡張 — for/while/loop/break/continue/lambda
 
 ### 完了条件

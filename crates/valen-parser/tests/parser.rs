@@ -247,3 +247,80 @@ fn return_expr() {
 fn return_no_value() {
     assert_snapshot!(check("fn f() { return; }"));
 }
+
+// --- TASK-002: class ctor/body, data class, enum, trait, impl, package, import ---
+
+#[test]
+fn class_with_ctor_params() {
+    assert_snapshot!(check("class User(pub name: String, mut age: Int) {}"));
+}
+
+#[test]
+fn class_with_methods() {
+    assert_snapshot!(check(
+        "class Dog(pub name: String) { fn greet(self) -> String { self.name } }"
+    ));
+}
+
+#[test]
+fn class_with_superclass() {
+    assert_snapshot!(check("class Dog(pub name: String) : Animal {}"));
+}
+
+#[test]
+fn sealed_class_no_body() {
+    assert_snapshot!(check("sealed class Payment;"));
+}
+
+#[test]
+fn data_class() {
+    assert_snapshot!(check("data class Point(x: Float, y: Float);"));
+}
+
+#[test]
+fn enum_with_variants() {
+    assert_snapshot!(check(
+        "enum Shape { Circle(r: Float), Rectangle(w: Float, h: Float), Point }"
+    ));
+}
+
+#[test]
+fn trait_definition() {
+    assert_snapshot!(check("trait Area { fn area(self) -> Float; }"));
+}
+
+#[test]
+fn trait_with_default_method() {
+    assert_snapshot!(check(
+        "trait Display { fn display(self) -> String { self.name } }"
+    ));
+}
+
+#[test]
+fn impl_block() {
+    assert_snapshot!(check(
+        "impl Area for Circle { fn area(self) -> Float { self.r } }"
+    ));
+}
+
+#[test]
+fn package_decl() {
+    assert_snapshot!(check("package com.example.foo;"));
+}
+
+#[test]
+fn import_single() {
+    assert_snapshot!(check("import java.util.List;"));
+}
+
+#[test]
+fn import_with_alias() {
+    assert_snapshot!(check("import java.util.HashMap as HMap;"));
+}
+
+#[test]
+fn full_file() {
+    assert_snapshot!(check(
+        "package com.example;\nimport java.util.List;\n\npub fn main() { let x: Int = 42; x }"
+    ));
+}

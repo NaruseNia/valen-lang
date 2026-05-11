@@ -1,0 +1,25 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"package com.example.foo;\")"
+---
+=== AST ===
+[
+    Package(
+        PackageDecl {
+            path: [
+                "com",
+                "example",
+                "foo",
+            ],
+            span: Span {
+                start: 0,
+                end: 24,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

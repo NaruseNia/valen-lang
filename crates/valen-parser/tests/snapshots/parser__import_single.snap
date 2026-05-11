@@ -1,0 +1,26 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"import java.util.List;\")"
+---
+=== AST ===
+[
+    Import(
+        ImportDecl {
+            path: [
+                "java",
+                "util",
+                "List",
+            ],
+            alias: None,
+            span: Span {
+                start: 0,
+                end: 22,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)
