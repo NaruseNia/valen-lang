@@ -1322,9 +1322,11 @@ version = "0.1.0-dev"
 dependencies = [
  "ristretto_classfile",
  "smol_str",
+ "thiserror",
  "valen-ast",
  "valen-diagnostics",
  "valen-hir",
+ "valen-parser",
 ]
 
 [[package]]

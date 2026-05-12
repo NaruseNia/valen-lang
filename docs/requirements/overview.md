@@ -38,8 +38,8 @@ Valen は JVM をターゲットとする新規プログラミング言語。ADT
 | REQ-TYPE-006 | ジェネリクス（erasure, in/out variance） | Must | Draft |
 | REQ-TYPE-007 | typealias（所有権なし） | Should | Draft |
 | REQ-TYPE-008 | ローカル型推論あり・fn シグネチャ明示 | Must | Done |
-| REQ-CLASS-001 | class + primary constructor | Must | Draft |
-| REQ-CLASS-002 | data class（equals/hashCode/toString/copy 自動生成） | Must | Draft |
+| REQ-CLASS-001 | class + primary constructor | Must | Done |
+| REQ-CLASS-002 | data class（equals/hashCode/toString/copy 自動生成） | Must | Done |
 | REQ-CLASS-003 | 継承（open/abstract/sealed opt-in、単一継承+複数 trait） | Must | Draft |
 | REQ-CLASS-004 | sealed class（closed OOP hierarchy） | Must | Draft |
 | REQ-CLASS-005 | メソッド解決規則（class 本体優先→trait→UFCS） | Must | Done |
@@ -62,7 +62,7 @@ Valen は JVM をターゲットとする新規プログラミング言語。ADT
 | REQ-EMIT-002 | enum → sealed interface + record/singleton emit | Must | Done |
 | REQ-EMIT-003 | class → .class emit（default constructor） | Must | Done |
 | REQ-EMIT-004 | Java 25 opt-in サポート | Should | Draft |
-| REQ-TOOL-001 | valenc CLI（build / check / version） | Must | Draft |
+| REQ-TOOL-001 | valenc CLI（build / check / version） | Must | Done |
 | REQ-TOOL-002 | Gradle プラグイン（compileValen タスク） | Must | Draft |
 | REQ-TOOL-003 | LSP サーバー（syntax error + diagnostics + goto def） | Must | Draft |
 | REQ-TOOL-004 | valenfmt（最小版） | Should | Draft |

@@ -1,0 +1,7 @@
+package com.example;
+
+pub class User(pub name: String, pub mut age: Int) {
+    fn greet(self) -> String {
+        "Hello"
+    }
+}
