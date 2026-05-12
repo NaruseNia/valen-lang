@@ -29,6 +29,7 @@ Last updated: 2026-05-12（Phase 0 完了、TASK-001〜008 完了、M2 達成、
 - [x] **TASK-006:** Coherence — orphan rule, blanket impl 禁止, 重複検出, trait 充足検査（PR #24）
 - [x] **TASK-007:** Exhaustiveness check — enum/sealed class/Bool exhaustive match（PR #25）→ **M2: 型チェック通過**
 - [x] **TASK-008:** Codegen — class/data class emit via codegen IR（PR #26）— HIR→JvmIR→bytecode アーキテクチャ導入
+- [x] **TASK-009:** Codegen — enum ADT フル emit（sealed interface + record/singleton variants）
 
 ### 完了条件
 - 最小限の `class Foo {}` を `.vln` → `Foo.class` に emit できる PoC が動く
