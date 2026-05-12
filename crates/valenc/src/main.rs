@@ -128,7 +128,7 @@ fn compile(inputs: &[PathBuf], out_dir: &PathBuf) -> anyhow::Result<()> {
             anyhow::bail!("coherence errors in {}", input.display());
         }
 
-        let outputs = valen_codegen::compile_hir(hir)?;
+        let outputs = valen_codegen::compile_hir(hir, &tc.bodies)?;
         for output in &outputs {
             let parts: Vec<&str> = output.internal_name.split('/').collect();
             if parts.len() > 1 {

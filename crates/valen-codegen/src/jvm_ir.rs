@@ -193,8 +193,25 @@ pub enum JvmOp {
     IfNull(Label),
     IfNonNull(Label),
 
-    IMul,
-    IAdd,
+    Arith(ArithOp, JvmType),
+    Neg(JvmType),
+    Cmp(CmpKind),
+    Convert {
+        from: JvmType,
+        to: JvmType,
+    },
+    Bitwise(BitwiseOp, JvmType),
+
+    IfLt(Label),
+    IfGe(Label),
+    IfGt(Label),
+    IfLe(Label),
+    IfICmpLt(Label),
+    IfICmpGe(Label),
+    IfICmpGt(Label),
+    IfICmpLe(Label),
+
+    AThrow,
 
     /// Declares the verification frame state at a branch target.
     /// Must appear immediately after a Label that is a branch target.
@@ -204,6 +221,34 @@ pub enum JvmOp {
     },
 
     StubBody,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArithOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CmpKind {
+    LCmp,
+    FCmpL,
+    FCmpG,
+    DCmpL,
+    DCmpG,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BitwiseOp {
+    And,
+    Or,
+    Xor,
+    Shl,
+    Shr,
+    UShr,
 }
 
 impl JvmOp {
@@ -249,7 +294,13 @@ impl JvmOp {
             JvmOp::Goto(_) => 0,
             JvmOp::IfEq(_) | JvmOp::IfNe(_) | JvmOp::IfNull(_) | JvmOp::IfNonNull(_) => -1,
             JvmOp::IfICmpEq(_) | JvmOp::IfICmpNe(_) | JvmOp::IfACmpEq(_) | JvmOp::IfACmpNe(_) => -2,
-            JvmOp::IMul | JvmOp::IAdd => -1, // pop 2, push 1
+            JvmOp::Arith(..) | JvmOp::Bitwise(..) => -1, // pop 2, push 1
+            JvmOp::Neg(_) => 0,                          // pop 1, push 1
+            JvmOp::Cmp(_) => -1,                         // pop 2, push 1
+            JvmOp::Convert { .. } => 0,                  // pop 1, push 1
+            JvmOp::IfLt(_) | JvmOp::IfGe(_) | JvmOp::IfGt(_) | JvmOp::IfLe(_) => -1,
+            JvmOp::IfICmpLt(_) | JvmOp::IfICmpGe(_) | JvmOp::IfICmpGt(_) | JvmOp::IfICmpLe(_) => -2,
+            JvmOp::AThrow => -1,
             JvmOp::Frame { .. } => 0,
             JvmOp::StubBody => 0,
         }

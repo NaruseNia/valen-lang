@@ -2,6 +2,7 @@ pub mod class_emit;
 pub mod data_class_methods;
 pub mod descriptor;
 pub mod emit;
+pub mod expr;
 pub mod jvm_ir;
 pub mod lower;
 #[cfg(test)]
@@ -18,8 +19,11 @@ pub struct ClassFileOutput {
     pub bytes: Vec<u8>,
 }
 
-pub fn compile_hir(hir: &valen_hir::Hir) -> Result<Vec<ClassFileOutput>, emit::CodegenError> {
-    let jvm_classes = lower::lower_hir(hir);
+pub fn compile_hir(
+    hir: &valen_hir::Hir,
+    typed_bodies: &indexmap::IndexMap<smol_str::SmolStr, valen_hir::TypedBody>,
+) -> Result<Vec<ClassFileOutput>, emit::CodegenError> {
+    let jvm_classes = lower::lower_hir(hir, typed_bodies);
     jvm_classes.iter().map(emit::emit_class).collect()
 }
 
