@@ -24,6 +24,9 @@ expression: "check(\"pub fn main() {}\")"
                     },
                 },
             ),
+            is_open: false,
+            is_override: false,
+            is_abstract: false,
             span: Span {
                 start: 0,
                 end: 16,

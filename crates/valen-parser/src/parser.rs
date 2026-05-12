@@ -75,7 +75,9 @@ impl Parser {
         let start = self.peek_span();
         let vis = self.parse_visibility();
         match self.peek() {
-            TokenKind::Fn => self.parse_fn_decl(vis, start).map(Item::Fn),
+            TokenKind::Fn => self
+                .parse_fn_decl(vis, start, false, false, false)
+                .map(Item::Fn),
             TokenKind::Class => self
                 .parse_class(vis, ClassKind::Final, start)
                 .map(Item::Class),
@@ -137,7 +139,14 @@ impl Parser {
         }
     }
 
-    fn parse_fn_decl(&mut self, visibility: Visibility, start: Span) -> Option<FnDecl> {
+    fn parse_fn_decl(
+        &mut self,
+        visibility: Visibility,
+        start: Span,
+        is_open: bool,
+        is_override: bool,
+        is_abstract: bool,
+    ) -> Option<FnDecl> {
         self.expect(TokenKind::Fn)?;
         let name = self.expect_ident()?;
         self.expect(TokenKind::LParen)?;
@@ -159,6 +168,9 @@ impl Parser {
             params,
             return_type,
             body: Some(body),
+            is_open,
+            is_override,
+            is_abstract,
             span,
         })
     }
@@ -353,8 +365,8 @@ impl Parser {
                     let is_open = self.eat(&TokenKind::Open).is_some();
                     let is_override = self.eat(&TokenKind::Override).is_some();
                     let is_abstract = self.eat(&TokenKind::Abstract).is_some();
-                    let _ = (is_open, is_override, is_abstract);
-                    let method = self.parse_fn_decl(vis, member_start)?;
+                    let method =
+                        self.parse_fn_decl(vis, member_start, is_open, is_override, is_abstract)?;
                     members.push(ClassMember::Method(method));
                 }
                 _ => {
@@ -471,6 +483,7 @@ impl Parser {
                 None
             };
             let end = self.prev_span();
+            let is_abstract = body.is_none();
             items.push(TraitItem::Fn(FnDecl {
                 visibility: Visibility::Pub,
                 name: fn_name,
@@ -478,6 +491,9 @@ impl Parser {
                 params,
                 return_type,
                 body,
+                is_open: false,
+                is_override: false,
+                is_abstract,
                 span: item_start.merge(end),
             }));
         }
@@ -500,7 +516,7 @@ impl Parser {
         let mut items = Vec::new();
         while !self.at(&TokenKind::RBrace) && !self.at_eof() {
             let item_start = self.peek_span();
-            let fn_decl = self.parse_fn_decl(Visibility::Pub, item_start)?;
+            let fn_decl = self.parse_fn_decl(Visibility::Pub, item_start, false, false, false)?;
             items.push(ImplItem::Fn(fn_decl));
         }
         let end = self.expect(TokenKind::RBrace)?;

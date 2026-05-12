@@ -113,6 +113,9 @@ expression: "check(\"fn f() { if cond { do_thing(); } }\")"
                     },
                 },
             ),
+            is_open: false,
+            is_override: false,
+            is_abstract: false,
             span: Span {
                 start: 0,
                 end: 34,

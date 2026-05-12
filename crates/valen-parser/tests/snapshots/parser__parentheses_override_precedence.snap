@@ -85,6 +85,9 @@ expression: "check(\"fn main() { (1 + 2) * 3 }\")"
                     },
                 },
             ),
+            is_open: false,
+            is_override: false,
+            is_abstract: false,
             span: Span {
                 start: 0,
                 end: 25,

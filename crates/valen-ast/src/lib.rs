@@ -45,6 +45,9 @@ pub struct FnDecl {
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
     pub body: Option<Block>,
+    pub is_open: bool,
+    pub is_override: bool,
+    pub is_abstract: bool,
     pub span: Span,
 }
 
