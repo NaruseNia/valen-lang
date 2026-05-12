@@ -15,3 +15,6 @@ valen-diagnostics = { workspace = true }
 ristretto_classfile = { workspace = true }
 smol_str = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+valen-parser = { workspace = true }

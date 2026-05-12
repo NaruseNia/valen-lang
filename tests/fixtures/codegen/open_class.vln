@@ -1,0 +1,7 @@
+package com.example;
+
+pub open class Animal(pub name: String) {
+    open fn speak(self) -> String {
+        "..."
+    }
+}

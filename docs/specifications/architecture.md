@@ -23,7 +23,10 @@ Valen コンパイラ `valenc` は Rust で実装され、`.vln` ソースから
        │
        ▼
 ┌──────────────┐
-│valen-codegen │  HIR → JVM bytecode via ristretto_classfile
+│valen-codegen │  HIR → codegen IR → JVM bytecode
+│              │
+│  lower.rs    │  HIR Def → JvmClass/JvmMethod/JvmOp (symbolic refs)
+│  emit.rs     │  JvmClass → ristretto_classfile ClassFile → bytes
 │              │  → Vec<ClassFileOutput> (.class bytes)
 └──────────────┘
 ```
