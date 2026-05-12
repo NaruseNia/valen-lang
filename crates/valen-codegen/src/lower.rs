@@ -21,6 +21,9 @@ pub fn lower_hir(hir: &Hir) -> Vec<JvmClass> {
             DefKind::DataClass(data_def) => {
                 classes.push(lower_data_class(hir, def, data_def, pkg));
             }
+            DefKind::Enum(enum_def) => {
+                classes.extend(lower_enum(def, enum_def, pkg));
+            }
             _ => {}
         }
     }
@@ -84,6 +87,7 @@ fn lower_class(
         methods,
         source_file: None,
         permitted_subclasses: permitted,
+        is_record: false,
     }
 }
 
@@ -130,6 +134,7 @@ fn lower_data_class(
         methods,
         source_file: None,
         permitted_subclasses: vec![],
+        is_record: false,
     }
 }
 
@@ -271,6 +276,175 @@ fn superclass_matches(tyref: &valen_hir::TyRef, name: &str) -> bool {
         valen_hir::TyRef::Named(n) => n.as_str() == name,
         valen_hir::TyRef::Generic(n, _) => n.as_str() == name,
         _ => false,
+    }
+}
+
+fn lower_enum(def: &Def, enum_def: &valen_hir::EnumDef, pkg: Option<&[SmolStr]>) -> Vec<JvmClass> {
+    let enum_internal = class_internal_name(&def.name, pkg);
+    let mut classes = Vec::new();
+
+    let variant_internals: Vec<String> = enum_def
+        .variants
+        .iter()
+        .map(|v| format!("{enum_internal}${}", v.name))
+        .collect();
+
+    classes.push(JvmClass {
+        version: JvmVersion::Java21,
+        access: JvmClassAccess {
+            is_public: matches!(def.vis, Vis::Pub),
+            is_abstract: true,
+            is_interface: true,
+            ..Default::default()
+        },
+        name: enum_internal.clone(),
+        super_class: "java/lang/Object".to_string(),
+        interfaces: vec![],
+        fields: vec![],
+        methods: vec![],
+        source_file: None,
+        permitted_subclasses: variant_internals.clone(),
+        is_record: false,
+    });
+
+    for (variant, variant_internal) in enum_def.variants.iter().zip(variant_internals.iter()) {
+        if variant.fields.is_empty() {
+            classes.push(lower_unit_variant(variant_internal, &enum_internal));
+        } else {
+            classes.push(lower_record_variant(
+                variant_internal,
+                &enum_internal,
+                &variant.fields,
+                pkg,
+            ));
+        }
+    }
+
+    classes
+}
+
+fn lower_record_variant(
+    variant_internal: &str,
+    enum_internal: &str,
+    fields: &[(SmolStr, valen_hir::TyRef)],
+    pkg: Option<&[SmolStr]>,
+) -> JvmClass {
+    let jvm_fields: Vec<JvmField> = fields
+        .iter()
+        .map(|(name, tyref)| JvmField {
+            access: JvmFieldAccess {
+                is_private: true,
+                is_final: true,
+                ..Default::default()
+            },
+            name: name.to_string(),
+            ty: tyref_to_jvm(tyref, pkg),
+        })
+        .collect();
+
+    let ctor = generate_ctor(variant_internal, "java/lang/Record", &jvm_fields);
+
+    JvmClass {
+        version: JvmVersion::Java21,
+        access: JvmClassAccess {
+            is_public: true,
+            is_final: true,
+            is_super: true,
+            ..Default::default()
+        },
+        name: variant_internal.to_string(),
+        super_class: "java/lang/Record".to_string(),
+        interfaces: vec![enum_internal.to_string()],
+        fields: jvm_fields,
+        methods: vec![ctor],
+        source_file: None,
+        permitted_subclasses: vec![],
+        is_record: true,
+    }
+}
+
+fn lower_unit_variant(variant_internal: &str, enum_internal: &str) -> JvmClass {
+    let self_ty = JvmType::Object(variant_internal.to_string());
+
+    let instance_field = JvmField {
+        access: JvmFieldAccess {
+            is_public: true,
+            is_static: true,
+            is_final: true,
+            ..Default::default()
+        },
+        name: "INSTANCE".to_string(),
+        ty: self_ty.clone(),
+    };
+
+    let private_ctor = JvmMethod {
+        access: JvmMethodAccess {
+            is_private: true,
+            ..Default::default()
+        },
+        name: "<init>".to_string(),
+        params: vec![],
+        return_type: JvmType::Void,
+        body: Some(JvmMethodBody {
+            max_locals: 1,
+            ops: vec![
+                JvmOp::LoadThis,
+                JvmOp::InvokeSpecial {
+                    owner: "java/lang/Object".to_string(),
+                    name: "<init>".to_string(),
+                    params: vec![],
+                    ret: JvmType::Void,
+                },
+                JvmOp::Return(JvmType::Void),
+            ],
+        }),
+    };
+
+    let clinit = JvmMethod {
+        access: JvmMethodAccess {
+            is_static: true,
+            ..Default::default()
+        },
+        name: "<clinit>".to_string(),
+        params: vec![],
+        return_type: JvmType::Void,
+        body: Some(JvmMethodBody {
+            max_locals: 0,
+            ops: vec![
+                JvmOp::New(variant_internal.to_string()),
+                JvmOp::Dup,
+                JvmOp::InvokeSpecial {
+                    owner: variant_internal.to_string(),
+                    name: "<init>".to_string(),
+                    params: vec![],
+                    ret: JvmType::Void,
+                },
+                JvmOp::PutStatic {
+                    owner: variant_internal.to_string(),
+                    name: "INSTANCE".to_string(),
+                    descriptor: self_ty,
+                },
+                JvmOp::Return(JvmType::Void),
+            ],
+        }),
+    };
+
+    JvmClass {
+        version: JvmVersion::Java21,
+        access: JvmClassAccess {
+            is_public: true,
+            is_final: true,
+            is_super: true,
+            ..Default::default()
+        },
+        name: variant_internal.to_string(),
+        super_class: "java/lang/Object".to_string(),
+        interfaces: vec![enum_internal.to_string()],
+        fields: vec![instance_field],
+        methods: vec![private_ctor, clinit],
+        source_file: None,
+        permitted_subclasses: vec![],
+        is_record: false,
     }
 }
 
@@ -499,5 +673,110 @@ mod tests {
         // body is StubBody for now
         let body = greet.body.as_ref().unwrap();
         assert!(matches!(body.ops[0], JvmOp::StubBody));
+    }
+
+    #[test]
+    fn lower_enum_mixed_variants() {
+        let mut hir = Hir::default();
+        let id = hir.alloc_id();
+        hir.defs.insert(
+            id,
+            Def {
+                id,
+                name: SmolStr::from("Shape"),
+                kind: DefKind::Enum(EnumDef {
+                    variants: vec![
+                        EnumVariantDef {
+                            name: "Circle".into(),
+                            fields: vec![("r".into(), TyRef::Prim(PrimTy::Float))],
+                        },
+                        EnumVariantDef {
+                            name: "Point".into(),
+                            fields: vec![],
+                        },
+                    ],
+                }),
+                vis: Vis::Pub,
+                span: valen_ast::Span {
+                    start: 0,
+                    end: 0,
+                    file_id: FileId(0),
+                },
+            },
+        );
+
+        let classes = lower_hir(&hir);
+        assert_eq!(classes.len(), 3); // sealed iface + Circle + Point
+
+        // sealed interface
+        let iface = &classes[0];
+        assert_eq!(iface.name, "Shape");
+        assert!(iface.access.is_interface);
+        assert!(iface.access.is_abstract);
+        assert_eq!(iface.permitted_subclasses.len(), 2);
+        assert!(iface
+            .permitted_subclasses
+            .contains(&"Shape$Circle".to_string()));
+        assert!(iface
+            .permitted_subclasses
+            .contains(&"Shape$Point".to_string()));
+
+        // record variant
+        let circle = &classes[1];
+        assert_eq!(circle.name, "Shape$Circle");
+        assert!(circle.access.is_final);
+        assert!(circle.is_record);
+        assert_eq!(circle.super_class, "java/lang/Record");
+        assert_eq!(circle.interfaces, vec!["Shape"]);
+        assert_eq!(circle.fields.len(), 1);
+        assert_eq!(circle.fields[0].name, "r");
+        assert!(circle.fields[0].access.is_private);
+        assert!(circle.fields[0].access.is_final);
+        assert_eq!(circle.methods.len(), 1); // <init>
+
+        // unit variant
+        let point = &classes[2];
+        assert_eq!(point.name, "Shape$Point");
+        assert!(point.access.is_final);
+        assert!(!point.is_record);
+        assert_eq!(point.super_class, "java/lang/Object");
+        assert_eq!(point.interfaces, vec!["Shape"]);
+        assert_eq!(point.fields.len(), 1); // INSTANCE
+        assert_eq!(point.fields[0].name, "INSTANCE");
+        assert!(point.fields[0].access.is_static);
+        assert!(point.fields[0].access.is_public);
+        assert_eq!(point.methods.len(), 2); // <init> + <clinit>
+        assert!(point.methods[0].access.is_private); // private ctor
+        assert!(point.methods[1].access.is_static); // clinit
+    }
+
+    #[test]
+    fn lower_enum_with_package() {
+        let mut hir = Hir::default();
+        hir.package = Some(vec!["com".into(), "app".into()]);
+        let id = hir.alloc_id();
+        hir.defs.insert(
+            id,
+            Def {
+                id,
+                name: SmolStr::from("Color"),
+                kind: DefKind::Enum(EnumDef {
+                    variants: vec![EnumVariantDef {
+                        name: "Red".into(),
+                        fields: vec![],
+                    }],
+                }),
+                vis: Vis::Pub,
+                span: valen_ast::Span {
+                    start: 0,
+                    end: 0,
+                    file_id: FileId(0),
+                },
+            },
+        );
+
+        let classes = lower_hir(&hir);
+        assert_eq!(classes[0].name, "com/app/Color");
+        assert_eq!(classes[1].name, "com/app/Color$Red");
     }
 }

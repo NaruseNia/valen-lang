@@ -2,7 +2,6 @@ pub mod class_emit;
 pub mod data_class_methods;
 pub mod descriptor;
 pub mod emit;
-pub mod enum_emit;
 pub mod jvm_ir;
 pub mod lower;
 #[cfg(test)]
@@ -133,5 +132,88 @@ mod integration_tests {
         hir.package = Some(vec!["com".into(), "example".into()]);
         let classes = compile_and_verify(&hir);
         assert_eq!(classes[0].class_name().unwrap(), "com/example/App");
+    }
+
+    #[test]
+    fn e2e_enum_sealed_interface_and_variants() {
+        use ristretto_classfile::attributes::Attribute;
+
+        let hir = enum_def(
+            "Shape",
+            vec![
+                variant("Circle", vec![("r".into(), TyRef::Prim(PrimTy::Float))]),
+                unit_variant("Point"),
+            ],
+        );
+        let classes = compile_and_verify(&hir);
+        assert_eq!(classes.len(), 3);
+
+        // sealed interface
+        let iface = &classes[0];
+        assert_eq!(iface.class_name().unwrap(), "Shape");
+        assert!(iface
+            .access_flags
+            .contains(ClassAccessFlags::INTERFACE | ClassAccessFlags::ABSTRACT));
+        let has_permitted = iface
+            .attributes
+            .iter()
+            .any(|a| matches!(a, Attribute::PermittedSubclasses { .. }));
+        assert!(has_permitted);
+
+        // record variant
+        let circle = &classes[1];
+        assert_eq!(circle.class_name().unwrap(), "Shape$Circle");
+        assert!(circle.access_flags.contains(ClassAccessFlags::FINAL));
+        assert_eq!(circle.fields.len(), 1);
+        let has_record = circle
+            .attributes
+            .iter()
+            .any(|a| matches!(a, Attribute::Record { .. }));
+        assert!(has_record);
+
+        // unit variant
+        let point = &classes[2];
+        assert_eq!(point.class_name().unwrap(), "Shape$Point");
+        assert!(point.access_flags.contains(ClassAccessFlags::FINAL));
+        assert_eq!(point.fields.len(), 1); // INSTANCE
+        assert!(point.fields[0].access_flags.contains(
+            FieldAccessFlags::PUBLIC | FieldAccessFlags::STATIC | FieldAccessFlags::FINAL
+        ));
+        assert_eq!(point.methods.len(), 2); // <init> + <clinit>
+    }
+
+    #[test]
+    fn e2e_enum_unit_only() {
+        let hir = enum_def(
+            "Color",
+            vec![
+                unit_variant("Red"),
+                unit_variant("Green"),
+                unit_variant("Blue"),
+            ],
+        );
+        let classes = compile_and_verify(&hir);
+        assert_eq!(classes.len(), 4); // iface + 3 singletons
+    }
+
+    #[test]
+    fn e2e_enum_record_only() {
+        let hir = enum_def(
+            "Result",
+            vec![
+                variant("Ok", vec![("value".into(), TyRef::Prim(PrimTy::Int))]),
+                variant("Err", vec![("msg".into(), TyRef::Prim(PrimTy::String))]),
+            ],
+        );
+        let classes = compile_and_verify(&hir);
+        assert_eq!(classes.len(), 3); // iface + Ok + Err
+                                      // both variants have Record attribute
+        for c in &classes[1..] {
+            let has_record = c
+                .attributes
+                .iter()
+                .any(|a| matches!(a, ristretto_classfile::attributes::Attribute::Record { .. }));
+            assert!(has_record);
+        }
     }
 }

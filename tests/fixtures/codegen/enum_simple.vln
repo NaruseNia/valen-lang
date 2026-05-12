@@ -1,0 +1,7 @@
+package com.example;
+
+pub enum Shape {
+    Circle(r: Float),
+    Rect(w: Float, h: Float),
+    Point,
+}

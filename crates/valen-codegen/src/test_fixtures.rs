@@ -134,6 +134,33 @@ pub fn param(name: &str, ty: TyRef) -> ParamDef {
     }
 }
 
+pub fn enum_def(name: &str, variants: Vec<EnumVariantDef>) -> Hir {
+    let mut hir = Hir::default();
+    let id = hir.alloc_id();
+    hir.defs.insert(
+        id,
+        Def {
+            id,
+            name: SmolStr::from(name),
+            kind: DefKind::Enum(EnumDef { variants }),
+            vis: Vis::Pub,
+            span: span(),
+        },
+    );
+    hir
+}
+
+pub fn variant(name: &str, fields: Vec<(SmolStr, TyRef)>) -> EnumVariantDef {
+    EnumVariantDef {
+        name: SmolStr::from(name),
+        fields,
+    }
+}
+
+pub fn unit_variant(name: &str) -> EnumVariantDef {
+    variant(name, vec![])
+}
+
 pub fn compile_and_verify(hir: &Hir) -> Vec<ristretto_classfile::ClassFile<'static>> {
     let outputs = crate::compile_hir(hir).expect("compile_hir failed");
     outputs
