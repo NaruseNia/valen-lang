@@ -84,6 +84,18 @@ impl<'a> ExprLowering<'a> {
         slot
     }
 
+    fn pop_if_needed(&mut self, ty: &Ty) {
+        if matches!(ty, Ty::Prim(PrimTy::Unit) | Ty::Error) {
+            return;
+        }
+        let jvm_ty = self.ty_to_jvm(ty);
+        if jvm_ty.is_wide() {
+            self.ops.push(JvmOp::Pop2);
+        } else {
+            self.ops.push(JvmOp::Pop);
+        }
+    }
+
     fn ty_to_jvm(&self, ty: &Ty) -> JvmType {
         match ty {
             Ty::Prim(p) => match p {
@@ -134,15 +146,11 @@ impl<'a> ExprLowering<'a> {
             }
             TypedStmt::Expr(expr) => {
                 self.lower_expr(expr);
-                if !matches!(expr.ty, Ty::Prim(PrimTy::Unit) | Ty::Error) {
-                    self.ops.push(JvmOp::Pop);
-                }
+                self.pop_if_needed(&expr.ty);
             }
             TypedStmt::ExprSemi(expr) => {
                 self.lower_expr(expr);
-                if !matches!(expr.ty, Ty::Prim(PrimTy::Unit) | Ty::Error) {
-                    self.ops.push(JvmOp::Pop);
-                }
+                self.pop_if_needed(&expr.ty);
             }
         }
     }

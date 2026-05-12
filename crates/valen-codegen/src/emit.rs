@@ -308,8 +308,16 @@ fn emit_body(
             Instruction::Goto(ref mut t)
             | Instruction::Ifeq(ref mut t)
             | Instruction::Ifne(ref mut t)
+            | Instruction::Iflt(ref mut t)
+            | Instruction::Ifge(ref mut t)
+            | Instruction::Ifgt(ref mut t)
+            | Instruction::Ifle(ref mut t)
             | Instruction::If_icmpeq(ref mut t)
             | Instruction::If_icmpne(ref mut t)
+            | Instruction::If_icmplt(ref mut t)
+            | Instruction::If_icmpge(ref mut t)
+            | Instruction::If_icmpgt(ref mut t)
+            | Instruction::If_icmple(ref mut t)
             | Instruction::If_acmpeq(ref mut t)
             | Instruction::If_acmpne(ref mut t)
             | Instruction::Ifnull(ref mut t)
@@ -529,6 +537,7 @@ fn emit_op(
         }
         JvmOp::Dup => vec![Instruction::Dup],
         JvmOp::Pop => vec![Instruction::Pop],
+        JvmOp::Pop2 => vec![Instruction::Pop2],
         JvmOp::Swap => vec![Instruction::Swap],
 
         JvmOp::PushInt(n) => vec![push_int(*n, cp)?],

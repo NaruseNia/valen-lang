@@ -168,6 +168,7 @@ pub enum JvmOp {
     New(String),
     Dup,
     Pop,
+    Pop2,
     Swap,
 
     PushInt(i32),
@@ -254,33 +255,47 @@ pub enum BitwiseOp {
 impl JvmOp {
     pub fn stack_delta(&self) -> i32 {
         match self {
-            JvmOp::LoadThis | JvmOp::LoadLocal(..) => 1,
-            JvmOp::StoreLocal(..) => -1,
-            JvmOp::GetField { .. } => 0,  // pop receiver, push value
-            JvmOp::PutField { .. } => -2, // pop receiver + value
-            JvmOp::GetStatic { .. } => 1,
-            JvmOp::PutStatic { .. } => -1,
+            JvmOp::LoadThis => 1,
+            JvmOp::LoadLocal(_, ty) => ty.slot_count() as i32,
+            JvmOp::StoreLocal(_, ty) => -(ty.slot_count() as i32),
+            JvmOp::GetField { descriptor, .. } => -1 + descriptor.slot_count() as i32, // pop receiver, push value
+            JvmOp::PutField { descriptor, .. } => -1 - descriptor.slot_count() as i32, // pop receiver + value
+            JvmOp::GetStatic { descriptor, .. } => descriptor.slot_count() as i32,
+            JvmOp::PutStatic { descriptor, .. } => -(descriptor.slot_count() as i32),
             JvmOp::InvokeSpecial { params, ret, .. } | JvmOp::InvokeVirtual { params, ret, .. } => {
-                let consumed = 1 + params.len() as i32; // receiver + args
-                let produced = if matches!(ret, JvmType::Void) { 0 } else { 1 };
+                let consumed: i32 = 1 + params.iter().map(|t| t.slot_count() as i32).sum::<i32>();
+                let produced = if matches!(ret, JvmType::Void) {
+                    0
+                } else {
+                    ret.slot_count() as i32
+                };
                 produced - consumed
             }
             JvmOp::InvokeStatic { params, ret, .. } => {
-                let consumed = params.len() as i32;
-                let produced = if matches!(ret, JvmType::Void) { 0 } else { 1 };
+                let consumed: i32 = params.iter().map(|t| t.slot_count() as i32).sum();
+                let produced = if matches!(ret, JvmType::Void) {
+                    0
+                } else {
+                    ret.slot_count() as i32
+                };
                 produced - consumed
             }
             JvmOp::InvokeInterface { params, ret, .. } => {
-                let consumed = 1 + params.len() as i32;
-                let produced = if matches!(ret, JvmType::Void) { 0 } else { 1 };
+                let consumed: i32 = 1 + params.iter().map(|t| t.slot_count() as i32).sum::<i32>();
+                let produced = if matches!(ret, JvmType::Void) {
+                    0
+                } else {
+                    ret.slot_count() as i32
+                };
                 produced - consumed
             }
             JvmOp::New(_) => 1,
             JvmOp::Dup => 1,
             JvmOp::Pop => -1,
+            JvmOp::Pop2 => -2,
             JvmOp::Swap => 0,
             JvmOp::PushInt(_) | JvmOp::PushFloat(_) | JvmOp::PushString(_) | JvmOp::PushNull => 1,
-            JvmOp::PushLong(_) | JvmOp::PushDouble(_) => 1,
+            JvmOp::PushLong(_) | JvmOp::PushDouble(_) => 2,
             JvmOp::Checkcast(_) => 0,
             JvmOp::Instanceof(_) => 0, // pop ref, push int
             JvmOp::Return(ty) => {
@@ -294,10 +309,16 @@ impl JvmOp {
             JvmOp::Goto(_) => 0,
             JvmOp::IfEq(_) | JvmOp::IfNe(_) | JvmOp::IfNull(_) | JvmOp::IfNonNull(_) => -1,
             JvmOp::IfICmpEq(_) | JvmOp::IfICmpNe(_) | JvmOp::IfACmpEq(_) | JvmOp::IfACmpNe(_) => -2,
-            JvmOp::Arith(..) | JvmOp::Bitwise(..) => -1, // pop 2, push 1
-            JvmOp::Neg(_) => 0,                          // pop 1, push 1
-            JvmOp::Cmp(_) => -1,                         // pop 2, push 1
-            JvmOp::Convert { .. } => 0,                  // pop 1, push 1
+            JvmOp::Arith(_, ty) | JvmOp::Bitwise(_, ty) => -(ty.slot_count() as i32),
+            JvmOp::Neg(_) => 0,
+            JvmOp::Cmp(kind) => {
+                let operand_slots: i32 = match kind {
+                    CmpKind::LCmp | CmpKind::DCmpL | CmpKind::DCmpG => 4,
+                    CmpKind::FCmpL | CmpKind::FCmpG => 2,
+                };
+                1 - operand_slots
+            }
+            JvmOp::Convert { from, to } => to.slot_count() as i32 - from.slot_count() as i32,
             JvmOp::IfLt(_) | JvmOp::IfGe(_) | JvmOp::IfGt(_) | JvmOp::IfLe(_) => -1,
             JvmOp::IfICmpLt(_) | JvmOp::IfICmpGe(_) | JvmOp::IfICmpGt(_) | JvmOp::IfICmpLe(_) => -2,
             JvmOp::AThrow => -1,
