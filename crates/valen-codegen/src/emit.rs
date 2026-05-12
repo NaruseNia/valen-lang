@@ -1,0 +1,962 @@
+use std::collections::HashMap;
+
+use ristretto_classfile::attributes::{Attribute, Instruction, StackFrame, VerificationType};
+use ristretto_classfile::{
+    BaseType, ClassAccessFlags, ClassFile, ConstantPool, Field, FieldAccessFlags, FieldType,
+    JavaString, Method, MethodAccessFlags, JAVA_21,
+};
+
+use crate::descriptor::{jvm_method_descriptor, jvm_type_descriptor};
+use crate::jvm_ir::{JvmClass, JvmField, JvmMethodBody, JvmOp, JvmType, Label};
+use crate::ClassFileOutput;
+
+#[derive(Debug, thiserror::Error)]
+pub enum CodegenError {
+    #[error("classfile error: {0}")]
+    ClassFile(#[from] ristretto_classfile::Error),
+    #[error("unresolved label: {0}")]
+    UnresolvedLabel(Label),
+}
+
+pub fn emit_class(jvm_class: &JvmClass) -> Result<ClassFileOutput, CodegenError> {
+    let mut cp = ConstantPool::default();
+
+    let this_class = cp.add_class(&jvm_class.name)?;
+    let super_class = cp.add_class(&jvm_class.super_class)?;
+
+    let interfaces: Vec<u16> = jvm_class
+        .interfaces
+        .iter()
+        .map(|name| cp.add_class(name.as_str()))
+        .collect::<Result<_, _>>()?;
+
+    let fields: Vec<Field> = jvm_class
+        .fields
+        .iter()
+        .map(|f| emit_field(&mut cp, f))
+        .collect::<Result<_, _>>()?;
+
+    let code_name = cp.add_utf8("Code")?;
+
+    let methods: Vec<Method> = jvm_class
+        .methods
+        .iter()
+        .map(|m| emit_method(&mut cp, m, code_name))
+        .collect::<Result<_, _>>()?;
+
+    let mut attributes = Vec::new();
+
+    if !jvm_class.permitted_subclasses.is_empty() {
+        let ps_name = cp.add_utf8("PermittedSubclasses")?;
+        let class_indexes: Vec<u16> = jvm_class
+            .permitted_subclasses
+            .iter()
+            .map(|name| cp.add_class(name.as_str()))
+            .collect::<Result<_, _>>()?;
+        attributes.push(Attribute::PermittedSubclasses {
+            name_index: ps_name,
+            class_indexes,
+        });
+    }
+
+    let mut access_flags = ClassAccessFlags::empty();
+    if jvm_class.access.is_public {
+        access_flags |= ClassAccessFlags::PUBLIC;
+    }
+    if jvm_class.access.is_final {
+        access_flags |= ClassAccessFlags::FINAL;
+    }
+    if jvm_class.access.is_abstract {
+        access_flags |= ClassAccessFlags::ABSTRACT;
+    }
+    if jvm_class.access.is_interface {
+        access_flags |= ClassAccessFlags::INTERFACE;
+    }
+    if jvm_class.access.is_super {
+        access_flags |= ClassAccessFlags::SUPER;
+    }
+
+    let class_file = ClassFile {
+        version: JAVA_21,
+        constant_pool: cp,
+        access_flags,
+        this_class,
+        super_class,
+        interfaces,
+        fields,
+        methods,
+        attributes,
+        ..Default::default()
+    };
+
+    class_file.verify()?;
+
+    let mut bytes = Vec::new();
+    class_file.to_bytes(&mut bytes)?;
+
+    Ok(ClassFileOutput {
+        internal_name: jvm_class.name.clone(),
+        bytes,
+    })
+}
+
+fn emit_field(cp: &mut ConstantPool, field: &JvmField) -> Result<Field, CodegenError> {
+    let name_index = cp.add_utf8(&field.name)?;
+    let desc_str = jvm_type_descriptor(&field.ty);
+    let descriptor_index = cp.add_utf8(&desc_str)?;
+
+    let mut access_flags = FieldAccessFlags::empty();
+    if field.access.is_public {
+        access_flags |= FieldAccessFlags::PUBLIC;
+    }
+    if field.access.is_private {
+        access_flags |= FieldAccessFlags::PRIVATE;
+    }
+    if field.access.is_protected {
+        access_flags |= FieldAccessFlags::PROTECTED;
+    }
+    if field.access.is_final {
+        access_flags |= FieldAccessFlags::FINAL;
+    }
+    if field.access.is_static {
+        access_flags |= FieldAccessFlags::STATIC;
+    }
+
+    let field_type = descriptor_to_field_type(&desc_str);
+
+    Ok(Field {
+        access_flags,
+        name_index,
+        descriptor_index,
+        field_type,
+        attributes: vec![],
+    })
+}
+
+fn emit_method(
+    cp: &mut ConstantPool,
+    method: &crate::jvm_ir::JvmMethod,
+    code_name_index: u16,
+) -> Result<Method, CodegenError> {
+    let name_index = cp.add_utf8(&method.name)?;
+    let desc_str = jvm_method_descriptor(&method.params, &method.return_type);
+    let descriptor_index = cp.add_utf8(&desc_str)?;
+
+    let mut access_flags = MethodAccessFlags::empty();
+    if method.access.is_public {
+        access_flags |= MethodAccessFlags::PUBLIC;
+    }
+    if method.access.is_private {
+        access_flags |= MethodAccessFlags::PRIVATE;
+    }
+    if method.access.is_protected {
+        access_flags |= MethodAccessFlags::PROTECTED;
+    }
+    if method.access.is_static {
+        access_flags |= MethodAccessFlags::STATIC;
+    }
+    if method.access.is_final {
+        access_flags |= MethodAccessFlags::FINAL;
+    }
+    if method.access.is_abstract {
+        access_flags |= MethodAccessFlags::ABSTRACT;
+    }
+    if method.access.is_bridge {
+        access_flags |= MethodAccessFlags::BRIDGE;
+    }
+    if method.access.is_synthetic {
+        access_flags |= MethodAccessFlags::SYNTHETIC;
+    }
+
+    let attributes = match &method.body {
+        Some(body) => {
+            let (instructions, max_stack, stack_frames) = emit_body(cp, body)?;
+            let mut code_attrs = Vec::new();
+            if !stack_frames.is_empty() {
+                let smt_name = cp.add_utf8("StackMapTable")?;
+                code_attrs.push(Attribute::StackMapTable {
+                    name_index: smt_name,
+                    frames: stack_frames,
+                });
+            }
+            vec![Attribute::Code {
+                name_index: code_name_index,
+                max_stack,
+                max_locals: body.max_locals,
+                code: instructions,
+                exception_table: vec![],
+                attributes: code_attrs,
+            }]
+        }
+        None => vec![],
+    };
+
+    Ok(Method {
+        access_flags,
+        name_index,
+        descriptor_index,
+        attributes,
+    })
+}
+
+struct FrameInfo {
+    instr_index: usize,
+    locals: Vec<JvmType>,
+    stack: Vec<JvmType>,
+}
+
+fn emit_body(
+    cp: &mut ConstantPool,
+    body: &JvmMethodBody,
+) -> Result<(Vec<Instruction>, u16, Vec<StackFrame>), CodegenError> {
+    let mut instructions = Vec::new();
+    let mut label_positions: HashMap<Label, usize> = HashMap::new();
+    let mut fixups: Vec<(usize, Label)> = Vec::new();
+    let mut max_stack: i32 = 0;
+    let mut stack: i32 = 0;
+    let mut frames: Vec<FrameInfo> = Vec::new();
+    let mut pending_label = false;
+
+    for op in &body.ops {
+        match op {
+            JvmOp::Label(label) => {
+                label_positions.insert(*label, instructions.len());
+                pending_label = true;
+            }
+            JvmOp::Frame {
+                locals,
+                stack: frame_stack,
+            } => {
+                if pending_label {
+                    frames.push(FrameInfo {
+                        instr_index: instructions.len(),
+                        locals: locals.clone(),
+                        stack: frame_stack.clone(),
+                    });
+                    pending_label = false;
+                }
+            }
+            JvmOp::StubBody => {
+                pending_label = false;
+                let exc_class = cp.add_class("java/lang/UnsupportedOperationException")?;
+                let exc_init = cp.add_method_ref(exc_class, "<init>", "(Ljava/lang/String;)V")?;
+                let msg = cp.add_string("not yet implemented")?;
+                instructions.push(Instruction::New(exc_class));
+                instructions.push(Instruction::Dup);
+                instructions.push(Instruction::Ldc_w(msg));
+                instructions.push(Instruction::Invokespecial(exc_init));
+                instructions.push(Instruction::Athrow);
+                stack += 2;
+                max_stack = max_stack.max(stack);
+                stack = 0;
+            }
+            _ => {
+                pending_label = false;
+                let instr = emit_op(cp, op, &mut fixups, instructions.len())?;
+                instructions.extend(instr);
+                stack += op.stack_delta();
+                if stack < 0 {
+                    stack = 0;
+                }
+                max_stack = max_stack.max(stack);
+            }
+        }
+    }
+
+    for (instr_idx, label) in &fixups {
+        let target = label_positions
+            .get(label)
+            .ok_or(CodegenError::UnresolvedLabel(*label))?;
+        let target_u16 = *target as u16;
+        match &mut instructions[*instr_idx] {
+            Instruction::Goto(ref mut t)
+            | Instruction::Ifeq(ref mut t)
+            | Instruction::Ifne(ref mut t)
+            | Instruction::If_icmpeq(ref mut t)
+            | Instruction::If_icmpne(ref mut t)
+            | Instruction::If_acmpeq(ref mut t)
+            | Instruction::If_acmpne(ref mut t)
+            | Instruction::Ifnull(ref mut t)
+            | Instruction::Ifnonnull(ref mut t) => {
+                *t = target_u16;
+            }
+            _ => {}
+        }
+    }
+
+    let stack_frames = build_stack_frames(cp, &frames)?;
+
+    Ok((instructions, max_stack.max(1) as u16, stack_frames))
+}
+
+fn build_stack_frames(
+    cp: &mut ConstantPool,
+    frames: &[FrameInfo],
+) -> Result<Vec<StackFrame>, CodegenError> {
+    let mut result = Vec::new();
+    let mut prev_offset: i32 = -1;
+
+    for frame in frames {
+        let offset = frame.instr_index as i32;
+        let delta = (offset - prev_offset - 1) as u16;
+        prev_offset = offset;
+
+        let locals: Vec<VerificationType> = frame
+            .locals
+            .iter()
+            .map(|t| jvm_type_to_verification(cp, t))
+            .collect::<Result<_, _>>()?;
+        let stack: Vec<VerificationType> = frame
+            .stack
+            .iter()
+            .map(|t| jvm_type_to_verification(cp, t))
+            .collect::<Result<_, _>>()?;
+
+        result.push(StackFrame::FullFrame {
+            frame_type: 255,
+            offset_delta: delta,
+            locals,
+            stack,
+        });
+    }
+
+    Ok(result)
+}
+
+fn jvm_type_to_verification(
+    cp: &mut ConstantPool,
+    ty: &JvmType,
+) -> Result<VerificationType, CodegenError> {
+    Ok(match ty {
+        JvmType::Int | JvmType::Byte | JvmType::Short | JvmType::Char | JvmType::Boolean => {
+            VerificationType::Integer
+        }
+        JvmType::Long => VerificationType::Long,
+        JvmType::Float => VerificationType::Float,
+        JvmType::Double => VerificationType::Double,
+        JvmType::Object(name) => {
+            let idx = cp.add_class(name)?;
+            VerificationType::Object { cpool_index: idx }
+        }
+        JvmType::Array(elem) => {
+            let desc = jvm_type_descriptor(&JvmType::Array(elem.clone()));
+            let idx = cp.add_class(&desc)?;
+            VerificationType::Object { cpool_index: idx }
+        }
+        JvmType::Void => VerificationType::Top,
+    })
+}
+
+fn emit_op(
+    cp: &mut ConstantPool,
+    op: &JvmOp,
+    fixups: &mut Vec<(usize, Label)>,
+    current_pos: usize,
+) -> Result<Vec<Instruction>, CodegenError> {
+    Ok(match op {
+        JvmOp::LoadThis => vec![Instruction::Aload_0],
+        JvmOp::LoadLocal(slot, ty) => vec![load_instruction(*slot, ty)],
+        JvmOp::StoreLocal(slot, ty) => vec![store_instruction(*slot, ty)],
+
+        JvmOp::GetField {
+            owner,
+            name,
+            descriptor,
+        } => {
+            let desc_str = jvm_type_descriptor(descriptor);
+            let class_idx = cp.add_class(owner)?;
+            let idx = cp.add_field_ref(class_idx, name, &desc_str)?;
+            vec![Instruction::Getfield(idx)]
+        }
+        JvmOp::PutField {
+            owner,
+            name,
+            descriptor,
+        } => {
+            let desc_str = jvm_type_descriptor(descriptor);
+            let class_idx = cp.add_class(owner)?;
+            let idx = cp.add_field_ref(class_idx, name, &desc_str)?;
+            vec![Instruction::Putfield(idx)]
+        }
+        JvmOp::GetStatic {
+            owner,
+            name,
+            descriptor,
+        } => {
+            let desc_str = jvm_type_descriptor(descriptor);
+            let class_idx = cp.add_class(owner)?;
+            let idx = cp.add_field_ref(class_idx, name, &desc_str)?;
+            vec![Instruction::Getstatic(idx)]
+        }
+
+        JvmOp::InvokeSpecial {
+            owner,
+            name,
+            params,
+            ret,
+        } => {
+            let desc = jvm_method_descriptor(params, ret);
+            let class_idx = cp.add_class(owner)?;
+            let idx = cp.add_method_ref(class_idx, name, &desc)?;
+            vec![Instruction::Invokespecial(idx)]
+        }
+        JvmOp::InvokeVirtual {
+            owner,
+            name,
+            params,
+            ret,
+        } => {
+            let desc = jvm_method_descriptor(params, ret);
+            let class_idx = cp.add_class(owner)?;
+            let idx = cp.add_method_ref(class_idx, name, &desc)?;
+            vec![Instruction::Invokevirtual(idx)]
+        }
+        JvmOp::InvokeStatic {
+            owner,
+            name,
+            params,
+            ret,
+        } => {
+            let desc = jvm_method_descriptor(params, ret);
+            let class_idx = cp.add_class(owner)?;
+            let idx = cp.add_method_ref(class_idx, name, &desc)?;
+            vec![Instruction::Invokestatic(idx)]
+        }
+        JvmOp::InvokeInterface {
+            owner,
+            name,
+            params,
+            ret,
+        } => {
+            let desc = jvm_method_descriptor(params, ret);
+            let class_idx = cp.add_class(owner)?;
+            let idx = cp.add_interface_method_ref(class_idx, name, &desc)?;
+            let nargs = 1 + params.iter().map(|t| t.slot_count() as u8).sum::<u8>();
+            vec![Instruction::Invokeinterface(idx, nargs)]
+        }
+
+        JvmOp::New(class) => {
+            let idx = cp.add_class(class)?;
+            vec![Instruction::New(idx)]
+        }
+        JvmOp::Dup => vec![Instruction::Dup],
+        JvmOp::Pop => vec![Instruction::Pop],
+        JvmOp::Swap => vec![Instruction::Swap],
+
+        JvmOp::PushInt(n) => vec![push_int(*n, cp)?],
+        JvmOp::PushLong(n) => {
+            let idx = cp.add_long(*n)?;
+            vec![Instruction::Ldc2_w(idx)]
+        }
+        JvmOp::PushFloat(n) => {
+            if *n == 0.0 {
+                vec![Instruction::Fconst_0]
+            } else if *n == 1.0 {
+                vec![Instruction::Fconst_1]
+            } else if *n == 2.0 {
+                vec![Instruction::Fconst_2]
+            } else {
+                let idx = cp.add_float(*n)?;
+                vec![ldc_or_ldc_w(idx)]
+            }
+        }
+        JvmOp::PushDouble(n) => {
+            if *n == 0.0 {
+                vec![Instruction::Dconst_0]
+            } else if *n == 1.0 {
+                vec![Instruction::Dconst_1]
+            } else {
+                let idx = cp.add_double(*n)?;
+                vec![Instruction::Ldc2_w(idx)]
+            }
+        }
+        JvmOp::PushString(s) => {
+            let idx = cp.add_string(s)?;
+            vec![ldc_or_ldc_w(idx)]
+        }
+        JvmOp::PushNull => vec![Instruction::Aconst_null],
+
+        JvmOp::Checkcast(class) => {
+            let idx = cp.add_class(class)?;
+            vec![Instruction::Checkcast(idx)]
+        }
+        JvmOp::Instanceof(class) => {
+            let idx = cp.add_class(class)?;
+            vec![Instruction::Instanceof(idx)]
+        }
+
+        JvmOp::Return(ty) => vec![return_instruction(ty)],
+
+        JvmOp::Goto(label) => {
+            fixups.push((current_pos, *label));
+            vec![Instruction::Goto(0)]
+        }
+        JvmOp::IfEq(label) => {
+            fixups.push((current_pos, *label));
+            vec![Instruction::Ifeq(0)]
+        }
+        JvmOp::IfNe(label) => {
+            fixups.push((current_pos, *label));
+            vec![Instruction::Ifne(0)]
+        }
+        JvmOp::IfICmpEq(label) => {
+            fixups.push((current_pos, *label));
+            vec![Instruction::If_icmpeq(0)]
+        }
+        JvmOp::IfICmpNe(label) => {
+            fixups.push((current_pos, *label));
+            vec![Instruction::If_icmpne(0)]
+        }
+        JvmOp::IfACmpEq(label) => {
+            fixups.push((current_pos, *label));
+            vec![Instruction::If_acmpeq(0)]
+        }
+        JvmOp::IfACmpNe(label) => {
+            fixups.push((current_pos, *label));
+            vec![Instruction::If_acmpne(0)]
+        }
+        JvmOp::IfNull(label) => {
+            fixups.push((current_pos, *label));
+            vec![Instruction::Ifnull(0)]
+        }
+        JvmOp::IfNonNull(label) => {
+            fixups.push((current_pos, *label));
+            vec![Instruction::Ifnonnull(0)]
+        }
+
+        JvmOp::IMul => vec![Instruction::Imul],
+        JvmOp::IAdd => vec![Instruction::Iadd],
+
+        JvmOp::Label(_) | JvmOp::StubBody | JvmOp::Frame { .. } => vec![],
+    })
+}
+
+fn load_instruction(slot: u16, ty: &JvmType) -> Instruction {
+    match ty {
+        JvmType::Int | JvmType::Byte | JvmType::Short | JvmType::Char | JvmType::Boolean => {
+            match slot {
+                0 => Instruction::Iload_0,
+                1 => Instruction::Iload_1,
+                2 => Instruction::Iload_2,
+                3 => Instruction::Iload_3,
+                s => Instruction::Iload(s as u8),
+            }
+        }
+        JvmType::Long => match slot {
+            0 => Instruction::Lload_0,
+            1 => Instruction::Lload_1,
+            2 => Instruction::Lload_2,
+            3 => Instruction::Lload_3,
+            s => Instruction::Lload(s as u8),
+        },
+        JvmType::Float => match slot {
+            0 => Instruction::Fload_0,
+            1 => Instruction::Fload_1,
+            2 => Instruction::Fload_2,
+            3 => Instruction::Fload_3,
+            s => Instruction::Fload(s as u8),
+        },
+        JvmType::Double => match slot {
+            0 => Instruction::Dload_0,
+            1 => Instruction::Dload_1,
+            2 => Instruction::Dload_2,
+            3 => Instruction::Dload_3,
+            s => Instruction::Dload(s as u8),
+        },
+        _ => match slot {
+            0 => Instruction::Aload_0,
+            1 => Instruction::Aload_1,
+            2 => Instruction::Aload_2,
+            3 => Instruction::Aload_3,
+            s => Instruction::Aload(s as u8),
+        },
+    }
+}
+
+fn store_instruction(slot: u16, ty: &JvmType) -> Instruction {
+    match ty {
+        JvmType::Int | JvmType::Byte | JvmType::Short | JvmType::Char | JvmType::Boolean => {
+            match slot {
+                0 => Instruction::Istore_0,
+                1 => Instruction::Istore_1,
+                2 => Instruction::Istore_2,
+                3 => Instruction::Istore_3,
+                s => Instruction::Istore(s as u8),
+            }
+        }
+        JvmType::Long => match slot {
+            0 => Instruction::Lstore_0,
+            1 => Instruction::Lstore_1,
+            2 => Instruction::Lstore_2,
+            3 => Instruction::Lstore_3,
+            s => Instruction::Lstore(s as u8),
+        },
+        JvmType::Float => match slot {
+            0 => Instruction::Fstore_0,
+            1 => Instruction::Fstore_1,
+            2 => Instruction::Fstore_2,
+            3 => Instruction::Fstore_3,
+            s => Instruction::Fstore(s as u8),
+        },
+        JvmType::Double => match slot {
+            0 => Instruction::Dstore_0,
+            1 => Instruction::Dstore_1,
+            2 => Instruction::Dstore_2,
+            3 => Instruction::Dstore_3,
+            s => Instruction::Dstore(s as u8),
+        },
+        _ => match slot {
+            0 => Instruction::Astore_0,
+            1 => Instruction::Astore_1,
+            2 => Instruction::Astore_2,
+            3 => Instruction::Astore_3,
+            s => Instruction::Astore(s as u8),
+        },
+    }
+}
+
+fn return_instruction(ty: &JvmType) -> Instruction {
+    match ty {
+        JvmType::Void => Instruction::Return,
+        JvmType::Int | JvmType::Byte | JvmType::Short | JvmType::Char | JvmType::Boolean => {
+            Instruction::Ireturn
+        }
+        JvmType::Long => Instruction::Lreturn,
+        JvmType::Float => Instruction::Freturn,
+        JvmType::Double => Instruction::Dreturn,
+        _ => Instruction::Areturn,
+    }
+}
+
+fn push_int(n: i32, cp: &mut ConstantPool) -> Result<Instruction, CodegenError> {
+    Ok(match n {
+        -1 => Instruction::Iconst_m1,
+        0 => Instruction::Iconst_0,
+        1 => Instruction::Iconst_1,
+        2 => Instruction::Iconst_2,
+        3 => Instruction::Iconst_3,
+        4 => Instruction::Iconst_4,
+        5 => Instruction::Iconst_5,
+        -128..=127 => Instruction::Bipush(n as i8),
+        -32768..=32767 => Instruction::Sipush(n as i16),
+        _ => {
+            let idx = cp.add_integer(n)?;
+            ldc_or_ldc_w(idx)
+        }
+    })
+}
+
+fn ldc_or_ldc_w(idx: u16) -> Instruction {
+    if idx <= 255 {
+        Instruction::Ldc(idx as u8)
+    } else {
+        Instruction::Ldc_w(idx)
+    }
+}
+
+fn descriptor_to_field_type(desc: &str) -> FieldType {
+    match desc {
+        "I" => FieldType::Base(BaseType::Int),
+        "J" => FieldType::Base(BaseType::Long),
+        "F" => FieldType::Base(BaseType::Float),
+        "D" => FieldType::Base(BaseType::Double),
+        "Z" => FieldType::Base(BaseType::Boolean),
+        "B" => FieldType::Base(BaseType::Byte),
+        "S" => FieldType::Base(BaseType::Short),
+        "C" => FieldType::Base(BaseType::Char),
+        s if s.starts_with('L') && s.ends_with(';') => {
+            FieldType::Object(JavaString::from(&s[1..s.len() - 1]))
+        }
+        s if s.starts_with('[') => {
+            let inner = descriptor_to_field_type(&s[1..]);
+            FieldType::Array(Box::new(inner))
+        }
+        _ => FieldType::Object(JavaString::from(desc)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::jvm_ir::*;
+
+    fn simple_class(name: &str, fields: Vec<JvmField>, methods: Vec<JvmMethod>) -> JvmClass {
+        JvmClass {
+            version: crate::JvmVersion::Java21,
+            access: JvmClassAccess {
+                is_public: true,
+                is_final: true,
+                is_super: true,
+                ..Default::default()
+            },
+            name: name.to_string(),
+            super_class: "java/lang/Object".to_string(),
+            interfaces: vec![],
+            fields,
+            methods,
+            source_file: None,
+            permitted_subclasses: vec![],
+        }
+    }
+
+    #[test]
+    fn emit_empty_class_via_ir() {
+        let ctor = JvmMethod {
+            access: JvmMethodAccess {
+                is_public: true,
+                ..Default::default()
+            },
+            name: "<init>".to_string(),
+            params: vec![],
+            return_type: JvmType::Void,
+            body: Some(JvmMethodBody {
+                max_locals: 1,
+                ops: vec![
+                    JvmOp::LoadThis,
+                    JvmOp::InvokeSpecial {
+                        owner: "java/lang/Object".to_string(),
+                        name: "<init>".to_string(),
+                        params: vec![],
+                        ret: JvmType::Void,
+                    },
+                    JvmOp::Return(JvmType::Void),
+                ],
+            }),
+        };
+
+        let jvm_class = simple_class("Foo", vec![], vec![ctor]);
+        let output = emit_class(&jvm_class).unwrap();
+        assert_eq!(output.internal_name, "Foo");
+        assert_eq!(&output.bytes[0..4], &[0xCA, 0xFE, 0xBA, 0xBE]);
+
+        let parsed = ClassFile::from_bytes(&output.bytes).unwrap();
+        assert_eq!(parsed.class_name().unwrap(), "Foo");
+        assert!(parsed.access_flags.contains(ClassAccessFlags::PUBLIC));
+        assert!(parsed.access_flags.contains(ClassAccessFlags::FINAL));
+        assert_eq!(parsed.methods.len(), 1);
+    }
+
+    #[test]
+    fn emit_class_with_fields() {
+        let ctor = JvmMethod {
+            access: JvmMethodAccess {
+                is_public: true,
+                ..Default::default()
+            },
+            name: "<init>".to_string(),
+            params: vec![
+                JvmType::Object("java/lang/String".to_string()),
+                JvmType::Int,
+            ],
+            return_type: JvmType::Void,
+            body: Some(JvmMethodBody {
+                max_locals: 3,
+                ops: vec![
+                    JvmOp::LoadThis,
+                    JvmOp::InvokeSpecial {
+                        owner: "java/lang/Object".to_string(),
+                        name: "<init>".to_string(),
+                        params: vec![],
+                        ret: JvmType::Void,
+                    },
+                    JvmOp::LoadThis,
+                    JvmOp::LoadLocal(1, JvmType::Object("java/lang/String".to_string())),
+                    JvmOp::PutField {
+                        owner: "User".to_string(),
+                        name: "name".to_string(),
+                        descriptor: JvmType::Object("java/lang/String".to_string()),
+                    },
+                    JvmOp::LoadThis,
+                    JvmOp::LoadLocal(2, JvmType::Int),
+                    JvmOp::PutField {
+                        owner: "User".to_string(),
+                        name: "age".to_string(),
+                        descriptor: JvmType::Int,
+                    },
+                    JvmOp::Return(JvmType::Void),
+                ],
+            }),
+        };
+
+        let fields = vec![
+            JvmField {
+                access: JvmFieldAccess {
+                    is_public: true,
+                    is_final: true,
+                    ..Default::default()
+                },
+                name: "name".to_string(),
+                ty: JvmType::Object("java/lang/String".to_string()),
+            },
+            JvmField {
+                access: JvmFieldAccess {
+                    is_private: true,
+                    ..Default::default()
+                },
+                name: "age".to_string(),
+                ty: JvmType::Int,
+            },
+        ];
+
+        let jvm_class = simple_class("User", fields, vec![ctor]);
+        let output = emit_class(&jvm_class).unwrap();
+        let parsed = ClassFile::from_bytes(&output.bytes).unwrap();
+
+        assert_eq!(parsed.fields.len(), 2);
+        assert!(parsed.fields[0]
+            .access_flags
+            .contains(FieldAccessFlags::PUBLIC));
+        assert!(parsed.fields[0]
+            .access_flags
+            .contains(FieldAccessFlags::FINAL));
+        assert!(parsed.fields[1]
+            .access_flags
+            .contains(FieldAccessFlags::PRIVATE));
+    }
+
+    #[test]
+    fn emit_stub_method() {
+        let ctor = JvmMethod {
+            access: JvmMethodAccess {
+                is_public: true,
+                ..Default::default()
+            },
+            name: "<init>".to_string(),
+            params: vec![],
+            return_type: JvmType::Void,
+            body: Some(JvmMethodBody {
+                max_locals: 1,
+                ops: vec![
+                    JvmOp::LoadThis,
+                    JvmOp::InvokeSpecial {
+                        owner: "java/lang/Object".to_string(),
+                        name: "<init>".to_string(),
+                        params: vec![],
+                        ret: JvmType::Void,
+                    },
+                    JvmOp::Return(JvmType::Void),
+                ],
+            }),
+        };
+
+        let stub = JvmMethod {
+            access: JvmMethodAccess {
+                is_public: true,
+                ..Default::default()
+            },
+            name: "greet".to_string(),
+            params: vec![],
+            return_type: JvmType::Object("java/lang/String".to_string()),
+            body: Some(JvmMethodBody {
+                max_locals: 1,
+                ops: vec![JvmOp::StubBody],
+            }),
+        };
+
+        let jvm_class = simple_class("Foo", vec![], vec![ctor, stub]);
+        let output = emit_class(&jvm_class).unwrap();
+        let parsed = ClassFile::from_bytes(&output.bytes).unwrap();
+        assert_eq!(parsed.methods.len(), 2);
+    }
+
+    #[test]
+    fn emit_permitted_subclasses() {
+        let ctor = JvmMethod {
+            access: JvmMethodAccess {
+                is_public: true,
+                ..Default::default()
+            },
+            name: "<init>".to_string(),
+            params: vec![],
+            return_type: JvmType::Void,
+            body: Some(JvmMethodBody {
+                max_locals: 1,
+                ops: vec![
+                    JvmOp::LoadThis,
+                    JvmOp::InvokeSpecial {
+                        owner: "java/lang/Object".to_string(),
+                        name: "<init>".to_string(),
+                        params: vec![],
+                        ret: JvmType::Void,
+                    },
+                    JvmOp::Return(JvmType::Void),
+                ],
+            }),
+        };
+
+        let jvm_class = JvmClass {
+            version: crate::JvmVersion::Java21,
+            access: JvmClassAccess {
+                is_public: true,
+                is_abstract: true,
+                is_super: true,
+                ..Default::default()
+            },
+            name: "Payment".to_string(),
+            super_class: "java/lang/Object".to_string(),
+            interfaces: vec![],
+            fields: vec![],
+            methods: vec![ctor],
+            source_file: None,
+            permitted_subclasses: vec!["Card".to_string(), "Cash".to_string()],
+        };
+
+        let output = emit_class(&jvm_class).unwrap();
+        let parsed = ClassFile::from_bytes(&output.bytes).unwrap();
+        let has_permitted = parsed
+            .attributes
+            .iter()
+            .any(|a| matches!(a, Attribute::PermittedSubclasses { .. }));
+        assert!(has_permitted);
+    }
+
+    #[test]
+    fn roundtrip_lower_and_emit() {
+        use smol_str::SmolStr;
+        use valen_ast::FileId;
+        use valen_hir::*;
+
+        let mut hir = Hir::default();
+        let id = hir.alloc_id();
+        hir.defs.insert(
+            id,
+            Def {
+                id,
+                name: SmolStr::from("Point"),
+                kind: DefKind::DataClass(DataClassDef {
+                    ctor_params: vec![
+                        CtorParamDef {
+                            vis: Vis::Pub,
+                            name: "x".into(),
+                            ty: TyRef::Prim(PrimTy::Int),
+                            mutable: false,
+                        },
+                        CtorParamDef {
+                            vis: Vis::Pub,
+                            name: "y".into(),
+                            ty: TyRef::Prim(PrimTy::Int),
+                            mutable: false,
+                        },
+                    ],
+                }),
+                vis: Vis::Pub,
+                span: valen_ast::Span {
+                    start: 0,
+                    end: 0,
+                    file_id: FileId(0),
+                },
+            },
+        );
+
+        let jvm_classes = crate::lower::lower_hir(&hir);
+        assert_eq!(jvm_classes.len(), 1);
+
+        let output = emit_class(&jvm_classes[0]).unwrap();
+        let parsed = ClassFile::from_bytes(&output.bytes).unwrap();
+        assert_eq!(parsed.class_name().unwrap(), "Point");
+        assert!(parsed.access_flags.contains(ClassAccessFlags::FINAL));
+        assert_eq!(parsed.fields.len(), 2);
+        // <init>, equals, hashCode, toString, copy
+        assert_eq!(parsed.methods.len(), 5);
+    }
+}

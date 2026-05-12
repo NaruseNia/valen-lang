@@ -1,0 +1,250 @@
+pub type Label = u32;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum JvmType {
+    Byte,
+    Short,
+    Int,
+    Long,
+    Float,
+    Double,
+    Char,
+    Boolean,
+    Void,
+    Object(String),
+    Array(Box<JvmType>),
+}
+
+impl JvmType {
+    pub fn is_wide(&self) -> bool {
+        matches!(self, JvmType::Long | JvmType::Double)
+    }
+
+    pub fn slot_count(&self) -> u16 {
+        if self.is_wide() {
+            2
+        } else {
+            1
+        }
+    }
+
+    pub fn is_reference(&self) -> bool {
+        matches!(self, JvmType::Object(_) | JvmType::Array(_))
+    }
+
+    pub fn boxed_name(prim: &JvmType) -> Option<&'static str> {
+        match prim {
+            JvmType::Int => Some("java/lang/Integer"),
+            JvmType::Long => Some("java/lang/Long"),
+            JvmType::Float => Some("java/lang/Float"),
+            JvmType::Double => Some("java/lang/Double"),
+            JvmType::Boolean => Some("java/lang/Boolean"),
+            JvmType::Char => Some("java/lang/Character"),
+            JvmType::Byte => Some("java/lang/Byte"),
+            JvmType::Short => Some("java/lang/Short"),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct JvmClass {
+    pub version: crate::JvmVersion,
+    pub access: JvmClassAccess,
+    pub name: String,
+    pub super_class: String,
+    pub interfaces: Vec<String>,
+    pub fields: Vec<JvmField>,
+    pub methods: Vec<JvmMethod>,
+    pub source_file: Option<String>,
+    pub permitted_subclasses: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct JvmClassAccess {
+    pub is_public: bool,
+    pub is_final: bool,
+    pub is_abstract: bool,
+    pub is_interface: bool,
+    pub is_super: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct JvmField {
+    pub access: JvmFieldAccess,
+    pub name: String,
+    pub ty: JvmType,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct JvmFieldAccess {
+    pub is_public: bool,
+    pub is_private: bool,
+    pub is_protected: bool,
+    pub is_final: bool,
+    pub is_static: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct JvmMethod {
+    pub access: JvmMethodAccess,
+    pub name: String,
+    pub params: Vec<JvmType>,
+    pub return_type: JvmType,
+    pub body: Option<JvmMethodBody>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct JvmMethodAccess {
+    pub is_public: bool,
+    pub is_private: bool,
+    pub is_protected: bool,
+    pub is_static: bool,
+    pub is_final: bool,
+    pub is_abstract: bool,
+    pub is_bridge: bool,
+    pub is_synthetic: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct JvmMethodBody {
+    pub max_locals: u16,
+    pub ops: Vec<JvmOp>,
+}
+
+#[derive(Debug, Clone)]
+pub enum JvmOp {
+    LoadThis,
+    LoadLocal(u16, JvmType),
+    StoreLocal(u16, JvmType),
+
+    GetField {
+        owner: String,
+        name: String,
+        descriptor: JvmType,
+    },
+    PutField {
+        owner: String,
+        name: String,
+        descriptor: JvmType,
+    },
+    GetStatic {
+        owner: String,
+        name: String,
+        descriptor: JvmType,
+    },
+
+    InvokeSpecial {
+        owner: String,
+        name: String,
+        params: Vec<JvmType>,
+        ret: JvmType,
+    },
+    InvokeVirtual {
+        owner: String,
+        name: String,
+        params: Vec<JvmType>,
+        ret: JvmType,
+    },
+    InvokeStatic {
+        owner: String,
+        name: String,
+        params: Vec<JvmType>,
+        ret: JvmType,
+    },
+    InvokeInterface {
+        owner: String,
+        name: String,
+        params: Vec<JvmType>,
+        ret: JvmType,
+    },
+
+    New(String),
+    Dup,
+    Pop,
+    Swap,
+
+    PushInt(i32),
+    PushLong(i64),
+    PushFloat(f32),
+    PushDouble(f64),
+    PushString(String),
+    PushNull,
+
+    Checkcast(String),
+    Instanceof(String),
+
+    Return(JvmType),
+
+    Label(Label),
+    Goto(Label),
+    IfEq(Label),
+    IfNe(Label),
+    IfICmpEq(Label),
+    IfICmpNe(Label),
+    IfACmpEq(Label),
+    IfACmpNe(Label),
+    IfNull(Label),
+    IfNonNull(Label),
+
+    IMul,
+    IAdd,
+
+    /// Declares the verification frame state at a branch target.
+    /// Must appear immediately after a Label that is a branch target.
+    Frame {
+        locals: Vec<JvmType>,
+        stack: Vec<JvmType>,
+    },
+
+    StubBody,
+}
+
+impl JvmOp {
+    pub fn stack_delta(&self) -> i32 {
+        match self {
+            JvmOp::LoadThis | JvmOp::LoadLocal(..) => 1,
+            JvmOp::StoreLocal(..) => -1,
+            JvmOp::GetField { .. } => 0,  // pop receiver, push value
+            JvmOp::PutField { .. } => -2, // pop receiver + value
+            JvmOp::GetStatic { .. } => 1,
+            JvmOp::InvokeSpecial { params, ret, .. } | JvmOp::InvokeVirtual { params, ret, .. } => {
+                let consumed = 1 + params.len() as i32; // receiver + args
+                let produced = if matches!(ret, JvmType::Void) { 0 } else { 1 };
+                produced - consumed
+            }
+            JvmOp::InvokeStatic { params, ret, .. } => {
+                let consumed = params.len() as i32;
+                let produced = if matches!(ret, JvmType::Void) { 0 } else { 1 };
+                produced - consumed
+            }
+            JvmOp::InvokeInterface { params, ret, .. } => {
+                let consumed = 1 + params.len() as i32;
+                let produced = if matches!(ret, JvmType::Void) { 0 } else { 1 };
+                produced - consumed
+            }
+            JvmOp::New(_) => 1,
+            JvmOp::Dup => 1,
+            JvmOp::Pop => -1,
+            JvmOp::Swap => 0,
+            JvmOp::PushInt(_) | JvmOp::PushFloat(_) | JvmOp::PushString(_) | JvmOp::PushNull => 1,
+            JvmOp::PushLong(_) | JvmOp::PushDouble(_) => 1,
+            JvmOp::Checkcast(_) => 0,
+            JvmOp::Instanceof(_) => 0, // pop ref, push int
+            JvmOp::Return(ty) => {
+                if matches!(ty, JvmType::Void) {
+                    0
+                } else {
+                    -1
+                }
+            }
+            JvmOp::Label(_) => 0,
+            JvmOp::Goto(_) => 0,
+            JvmOp::IfEq(_) | JvmOp::IfNe(_) | JvmOp::IfNull(_) | JvmOp::IfNonNull(_) => -1,
+            JvmOp::IfICmpEq(_) | JvmOp::IfICmpNe(_) | JvmOp::IfACmpEq(_) | JvmOp::IfACmpNe(_) => -2,
+            JvmOp::IMul | JvmOp::IAdd => -1, // pop 2, push 1
+            JvmOp::Frame { .. } => 0,
+            JvmOp::StubBody => 0,
+        }
+    }
+}
