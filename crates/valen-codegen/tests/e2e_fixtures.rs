@@ -121,3 +121,43 @@ fn fixture_open_class() {
     // <init> + speak (stub)
     assert_eq!(c.methods.len(), 2);
 }
+
+#[test]
+fn fixture_enum_simple() {
+    let classes = compile_fixture("enum_simple.vln");
+    // Shape (sealed iface) + Circle (record) + Rect (record) + Point (singleton)
+    assert_eq!(classes.len(), 4);
+
+    let iface = &classes[0];
+    assert_eq!(iface.class_name().unwrap(), "com/example/Shape");
+    assert!(iface
+        .access_flags
+        .contains(ClassAccessFlags::INTERFACE | ClassAccessFlags::ABSTRACT));
+
+    let circle = &classes[1];
+    assert_eq!(circle.class_name().unwrap(), "com/example/Shape$Circle");
+    assert!(circle.access_flags.contains(ClassAccessFlags::FINAL));
+    assert_eq!(circle.fields.len(), 1);
+
+    let rect = &classes[2];
+    assert_eq!(rect.class_name().unwrap(), "com/example/Shape$Rect");
+    assert_eq!(rect.fields.len(), 2);
+
+    let point = &classes[3];
+    assert_eq!(point.class_name().unwrap(), "com/example/Shape$Point");
+    assert!(point.fields[0]
+        .access_flags
+        .contains(FieldAccessFlags::STATIC));
+}
+
+#[test]
+fn fixture_enum_unit_only() {
+    let classes = compile_fixture("enum_unit_only.vln");
+    assert_eq!(classes.len(), 4); // iface + Red + Green + Blue
+
+    for c in &classes[1..] {
+        assert!(c.access_flags.contains(ClassAccessFlags::FINAL));
+        assert_eq!(c.fields.len(), 1); // INSTANCE
+        assert_eq!(c.methods.len(), 2); // <init> + <clinit>
+    }
+}

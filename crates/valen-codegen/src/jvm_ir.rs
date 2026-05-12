@@ -58,6 +58,7 @@ pub struct JvmClass {
     pub methods: Vec<JvmMethod>,
     pub source_file: Option<String>,
     pub permitted_subclasses: Vec<String>,
+    pub is_record: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -129,6 +130,11 @@ pub enum JvmOp {
         descriptor: JvmType,
     },
     GetStatic {
+        owner: String,
+        name: String,
+        descriptor: JvmType,
+    },
+    PutStatic {
         owner: String,
         name: String,
         descriptor: JvmType,
@@ -208,6 +214,7 @@ impl JvmOp {
             JvmOp::GetField { .. } => 0,  // pop receiver, push value
             JvmOp::PutField { .. } => -2, // pop receiver + value
             JvmOp::GetStatic { .. } => 1,
+            JvmOp::PutStatic { .. } => -1,
             JvmOp::InvokeSpecial { params, ret, .. } | JvmOp::InvokeVirtual { params, ret, .. } => {
                 let consumed = 1 + params.len() as i32; // receiver + args
                 let produced = if matches!(ret, JvmType::Void) { 0 } else { 1 };

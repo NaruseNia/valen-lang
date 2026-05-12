@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use ristretto_classfile::attributes::{Attribute, Instruction, StackFrame, VerificationType};
+use ristretto_classfile::attributes::{
+    Attribute, Instruction, Record, StackFrame, VerificationType,
+};
 use ristretto_classfile::{
     BaseType, ClassAccessFlags, ClassFile, ConstantPool, Field, FieldAccessFlags, FieldType,
     JavaString, Method, MethodAccessFlags, JAVA_21,
@@ -56,6 +58,24 @@ pub fn emit_class(jvm_class: &JvmClass) -> Result<ClassFileOutput, CodegenError>
         attributes.push(Attribute::PermittedSubclasses {
             name_index: ps_name,
             class_indexes,
+        });
+    }
+
+    if jvm_class.is_record {
+        let record_name = cp.add_utf8("Record")?;
+        let mut records = Vec::new();
+        for field in &jvm_class.fields {
+            let fname = cp.add_utf8(&field.name)?;
+            let fdesc = cp.add_utf8(jvm_type_descriptor(&field.ty))?;
+            records.push(Record {
+                name_index: fname,
+                descriptor_index: fdesc,
+                attributes: vec![],
+            });
+        }
+        attributes.push(Attribute::Record {
+            name_index: record_name,
+            records,
         });
     }
 
@@ -388,6 +408,16 @@ fn emit_op(
             let idx = cp.add_field_ref(class_idx, name, &desc_str)?;
             vec![Instruction::Getstatic(idx)]
         }
+        JvmOp::PutStatic {
+            owner,
+            name,
+            descriptor,
+        } => {
+            let desc_str = jvm_type_descriptor(descriptor);
+            let class_idx = cp.add_class(owner)?;
+            let idx = cp.add_field_ref(class_idx, name, &desc_str)?;
+            vec![Instruction::Putstatic(idx)]
+        }
 
         JvmOp::InvokeSpecial {
             owner,
@@ -696,6 +726,7 @@ mod tests {
             methods,
             source_file: None,
             permitted_subclasses: vec![],
+            is_record: false,
         }
     }
 
@@ -899,6 +930,7 @@ mod tests {
             methods: vec![ctor],
             source_file: None,
             permitted_subclasses: vec!["Card".to_string(), "Cash".to_string()],
+            is_record: false,
         };
 
         let output = emit_class(&jvm_class).unwrap();

@@ -1,0 +1,7 @@
+package com.example;
+
+pub enum Color {
+    Red,
+    Green,
+    Blue,
+}
