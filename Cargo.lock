@@ -1326,6 +1326,7 @@ dependencies = [
  "valen-ast",
  "valen-diagnostics",
  "valen-hir",
+ "valen-parser",
 ]
 
 [[package]]
