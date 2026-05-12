@@ -1,4 +1,5 @@
 pub mod coherence;
+pub mod exhaustive;
 pub mod resolve;
 pub mod ty;
 
