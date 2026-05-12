@@ -1,5 +1,6 @@
+use indexmap::IndexMap;
 use smol_str::SmolStr;
-use valen_hir::{ClassDefKind, Def, DefKind, FnDef, Hir, Vis};
+use valen_hir::{ClassDefKind, Def, DefKind, FnDef, Hir, TypedBody, Vis};
 
 use crate::data_class_methods;
 use crate::descriptor::{class_internal_name, tyref_to_jvm};
@@ -9,14 +10,14 @@ use crate::jvm_ir::{
 };
 use crate::JvmVersion;
 
-pub fn lower_hir(hir: &Hir) -> Vec<JvmClass> {
+pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<SmolStr, TypedBody>) -> Vec<JvmClass> {
     let pkg = hir.package.as_deref();
     let mut classes = Vec::new();
 
     for (_id, def) in &hir.defs {
         match &def.kind {
             DefKind::Class(class_def) => {
-                classes.push(lower_class(hir, def, class_def, pkg));
+                classes.push(lower_class(hir, def, class_def, typed_bodies, pkg));
             }
             DefKind::DataClass(data_def) => {
                 classes.push(lower_data_class(hir, def, data_def, pkg));
@@ -35,6 +36,7 @@ fn lower_class(
     hir: &Hir,
     def: &Def,
     class_def: &valen_hir::ClassDef,
+    typed_bodies: &IndexMap<SmolStr, TypedBody>,
     pkg: Option<&[SmolStr]>,
 ) -> JvmClass {
     let internal = class_internal_name(&def.name, pkg);
@@ -70,7 +72,8 @@ fn lower_class(
     for &mid in &class_def.methods {
         if let Some(method_def) = hir.defs.get(&mid) {
             if let DefKind::Fn(fn_def) = &method_def.kind {
-                methods.push(lower_method_stub(method_def, fn_def, pkg));
+                let body = typed_bodies.get(method_def.name.as_str());
+                methods.push(lower_method(method_def, fn_def, body, &internal, pkg));
             }
         }
     }
@@ -194,7 +197,13 @@ fn generate_ctor(class_internal: &str, super_class: &str, fields: &[JvmField]) -
     }
 }
 
-fn lower_method_stub(def: &Def, fn_def: &FnDef, pkg: Option<&[SmolStr]>) -> JvmMethod {
+fn lower_method(
+    def: &Def,
+    fn_def: &FnDef,
+    typed_body: Option<&TypedBody>,
+    class_internal: &str,
+    pkg: Option<&[SmolStr]>,
+) -> JvmMethod {
     let params: Vec<JvmType> = fn_def
         .params
         .iter()
@@ -210,15 +219,30 @@ fn lower_method_stub(def: &Def, fn_def: &FnDef, pkg: Option<&[SmolStr]>) -> JvmM
 
     let has_self = fn_def.params.iter().any(|p| p.is_self);
 
-    let body = if fn_def.has_body {
+    let body = if !fn_def.has_body {
+        None
+    } else if let Some(tb) = typed_body {
+        let param_pairs: Vec<(SmolStr, JvmType)> = fn_def
+            .params
+            .iter()
+            .filter(|p| !p.is_self)
+            .map(|p| (p.name.clone(), tyref_to_jvm(&p.ty, pkg)))
+            .collect();
+        Some(crate::expr::lower_body(
+            tb,
+            class_internal,
+            &param_pairs,
+            &return_type,
+            has_self,
+            pkg,
+        ))
+    } else {
         let max_locals =
             if has_self { 1 } else { 0 } + params.iter().map(|t| t.slot_count()).sum::<u16>();
         Some(JvmMethodBody {
             max_locals,
             ops: vec![JvmOp::StubBody],
         })
-    } else {
-        None
     };
 
     JvmMethod {
@@ -488,7 +512,7 @@ mod tests {
     #[test]
     fn lower_empty_class() {
         let hir = make_hir_with_class("Foo", ClassDefKind::Final, vec![], Vis::Pub);
-        let classes = lower_hir(&hir);
+        let classes = lower_hir(&hir, &IndexMap::new());
         assert_eq!(classes.len(), 1);
         let c = &classes[0];
         assert_eq!(c.name, "Foo");
@@ -517,7 +541,7 @@ mod tests {
             },
         ];
         let hir = make_hir_with_class("User", ClassDefKind::Final, params, Vis::Pub);
-        let classes = lower_hir(&hir);
+        let classes = lower_hir(&hir, &IndexMap::new());
         let c = &classes[0];
         assert_eq!(c.fields.len(), 2);
 
@@ -536,7 +560,7 @@ mod tests {
     #[test]
     fn lower_abstract_class() {
         let hir = make_hir_with_class("Shape", ClassDefKind::Abstract, vec![], Vis::Pub);
-        let classes = lower_hir(&hir);
+        let classes = lower_hir(&hir, &IndexMap::new());
         let c = &classes[0];
         assert!(c.access.is_abstract);
         assert!(!c.access.is_final);
@@ -545,7 +569,7 @@ mod tests {
     #[test]
     fn lower_open_class() {
         let hir = make_hir_with_class("Animal", ClassDefKind::Open, vec![], Vis::Pub);
-        let classes = lower_hir(&hir);
+        let classes = lower_hir(&hir, &IndexMap::new());
         let c = &classes[0];
         assert!(!c.access.is_abstract);
         assert!(!c.access.is_final);
@@ -585,7 +609,7 @@ mod tests {
             },
         );
 
-        let classes = lower_hir(&hir);
+        let classes = lower_hir(&hir, &IndexMap::new());
         assert_eq!(classes.len(), 1);
         let c = &classes[0];
         assert_eq!(c.name, "Point");
@@ -606,7 +630,7 @@ mod tests {
     fn lower_class_with_package() {
         let mut hir = make_hir_with_class("Foo", ClassDefKind::Final, vec![], Vis::Pub);
         hir.package = Some(vec!["com".into(), "example".into()]);
-        let classes = lower_hir(&hir);
+        let classes = lower_hir(&hir, &IndexMap::new());
         assert_eq!(classes[0].name, "com/example/Foo");
     }
 
@@ -661,7 +685,7 @@ mod tests {
             },
         );
 
-        let classes = lower_hir(&hir);
+        let classes = lower_hir(&hir, &IndexMap::new());
         let c = &classes[0];
         assert_eq!(c.methods.len(), 2); // <init> + greet
         let greet = &c.methods[1];
@@ -705,7 +729,7 @@ mod tests {
             },
         );
 
-        let classes = lower_hir(&hir);
+        let classes = lower_hir(&hir, &IndexMap::new());
         assert_eq!(classes.len(), 3); // sealed iface + Circle + Point
 
         // sealed interface
@@ -775,7 +799,7 @@ mod tests {
             },
         );
 
-        let classes = lower_hir(&hir);
+        let classes = lower_hir(&hir, &IndexMap::new());
         assert_eq!(classes[0].name, "com/app/Color");
         assert_eq!(classes[1].name, "com/app/Color$Red");
     }

@@ -1320,6 +1320,7 @@ dependencies = [
 name = "valen-codegen"
 version = "0.1.0-dev"
 dependencies = [
+ "indexmap",
  "ristretto_classfile",
  "smol_str",
  "thiserror",

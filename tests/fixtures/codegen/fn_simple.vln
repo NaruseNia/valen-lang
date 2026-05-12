@@ -1,0 +1,11 @@
+package com.example;
+
+pub class Math {
+    fn add(self, a: Int, b: Int) -> Int {
+        a + b
+    }
+
+    fn negate(self, x: Int) -> Int {
+        -x
+    }
+}

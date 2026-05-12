@@ -12,7 +12,7 @@ fn fixture_path(name: &str) -> std::path::PathBuf {
         .join(name)
 }
 
-fn compile_fixture(name: &str) -> Vec<ClassFile<'static>> {
+fn compile_fixture_outputs(name: &str) -> Vec<valen_codegen::ClassFileOutput> {
     let path = fixture_path(name);
     let source = std::fs::read_to_string(&path).expect("read fixture");
     let file_id = FileId(0);
@@ -33,15 +33,22 @@ fn compile_fixture(name: &str) -> Vec<ClassFile<'static>> {
         "resolve errors in {name}"
     );
 
-    let outputs = valen_codegen::compile_hir(&resolve_result.hir).expect("codegen failed");
+    let tc = valen_hir::ty::type_check(&resolve_result.hir, &parse_result.items);
+
+    let outputs =
+        valen_codegen::compile_hir(&resolve_result.hir, &tc.bodies).expect("codegen failed");
     assert!(!outputs.is_empty(), "no class files generated for {name}");
 
+    for o in &outputs {
+        assert_eq!(&o.bytes[0..4], &[0xCA, 0xFE, 0xBA, 0xBE]);
+    }
     outputs
+}
+
+fn compile_fixture(name: &str) -> Vec<ClassFile<'static>> {
+    compile_fixture_outputs(name)
         .iter()
-        .map(|o| {
-            assert_eq!(&o.bytes[0..4], &[0xCA, 0xFE, 0xBA, 0xBE]);
-            ClassFile::from_bytes(&o.bytes).expect("ClassFile::from_bytes failed")
-        })
+        .map(|o| ClassFile::from_bytes(&o.bytes).expect("ClassFile::from_bytes failed"))
         .collect()
 }
 
@@ -160,4 +167,31 @@ fn fixture_enum_unit_only() {
         assert_eq!(c.fields.len(), 1); // INSTANCE
         assert_eq!(c.methods.len(), 2); // <init> + <clinit>
     }
+}
+
+#[test]
+fn fixture_fn_simple() {
+    let classes = compile_fixture("fn_simple.vln");
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+    assert_eq!(c.class_name().unwrap(), "com/example/Math");
+    // <init> + add + negate
+    assert_eq!(c.methods.len(), 3);
+}
+
+#[test]
+fn fixture_fn_if_else() {
+    let classes = compile_fixture("fn_if_else.vln");
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+    assert_eq!(c.class_name().unwrap(), "com/example/Logic");
+    // <init> + max
+    assert_eq!(c.methods.len(), 2);
+}
+
+#[test]
+fn fixture_fn_loop() {
+    let outputs = compile_fixture_outputs("fn_while_loop.vln");
+    assert_eq!(outputs.len(), 1);
+    assert_eq!(outputs[0].internal_name, "com/example/Loops");
 }

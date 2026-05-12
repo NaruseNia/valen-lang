@@ -1,4 +1,4 @@
-use crate::jvm_ir::{JvmMethod, JvmMethodAccess, JvmMethodBody, JvmOp, JvmType};
+use crate::jvm_ir::{ArithOp, JvmMethod, JvmMethodAccess, JvmMethodBody, JvmOp, JvmType};
 
 pub fn generate_equals(class_internal: &str, fields: &[(String, JvmType)]) -> JvmMethod {
     let obj = JvmType::Object("java/lang/Object".to_string());
@@ -169,7 +169,7 @@ pub fn generate_hash_code(class_internal: &str, fields: &[(String, JvmType)]) ->
         // result = 31 * result + hash(field)
         ops.push(JvmOp::PushInt(31));
         ops.push(JvmOp::LoadLocal(result_slot, JvmType::Int));
-        ops.push(JvmOp::IMul);
+        ops.push(JvmOp::Arith(ArithOp::Mul, JvmType::Int));
 
         ops.push(JvmOp::LoadThis);
         ops.push(JvmOp::GetField {
@@ -199,7 +199,7 @@ pub fn generate_hash_code(class_internal: &str, fields: &[(String, JvmType)]) ->
             params: vec![hash_param],
             ret: JvmType::Int,
         });
-        ops.push(JvmOp::IAdd);
+        ops.push(JvmOp::Arith(ArithOp::Add, JvmType::Int));
         ops.push(JvmOp::StoreLocal(result_slot, JvmType::Int));
     }
 

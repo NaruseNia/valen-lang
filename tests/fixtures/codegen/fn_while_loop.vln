@@ -1,0 +1,9 @@
+package com.example;
+
+pub class Loops {
+    fn nothing(self) {
+        loop {
+            break
+        }
+    }
+}
