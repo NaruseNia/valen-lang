@@ -52,3 +52,19 @@ depends = ["fmt", "clippy"]
 [tasks.precommit]
 description = "Pre-commit checks (same as CLAUDE.md checklist)"
 depends = ["check", "clippy", "fmt", "test"]
+
+# ---------------------------------------------------------------------------
+# Tool binaries
+# ---------------------------------------------------------------------------
+
+[tasks.valenc]
+description = "Run the Valen compiler"
+run = "cargo run -p valenc --"
+
+[tasks.valenfmt]
+description = "Run the Valen formatter"
+run = "cargo run -p valenfmt --"
+
+[tasks.lsp]
+description = "Run the Valen LSP server"
+run = "cargo run -p valen-lsp --"
