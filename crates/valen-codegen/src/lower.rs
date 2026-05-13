@@ -197,6 +197,30 @@ fn generate_ctor(class_internal: &str, super_class: &str, fields: &[JvmField]) -
     }
 }
 
+fn generate_getter(class_internal: &str, field_name: &str, field_ty: &JvmType) -> JvmMethod {
+    JvmMethod {
+        access: JvmMethodAccess {
+            is_public: true,
+            ..Default::default()
+        },
+        name: field_name.to_string(),
+        params: vec![],
+        return_type: field_ty.clone(),
+        body: Some(JvmMethodBody {
+            max_locals: 1,
+            ops: vec![
+                JvmOp::LoadThis,
+                JvmOp::GetField {
+                    owner: class_internal.to_string(),
+                    name: field_name.to_string(),
+                    descriptor: field_ty.clone(),
+                },
+                JvmOp::Return(field_ty.clone()),
+            ],
+        }),
+    }
+}
+
 fn lower_method(
     def: &Def,
     fn_def: &FnDef,
@@ -368,6 +392,11 @@ fn lower_record_variant(
 
     let ctor = generate_ctor(variant_internal, "java/lang/Record", &jvm_fields);
 
+    let mut methods = vec![ctor];
+    for field in &jvm_fields {
+        methods.push(generate_getter(variant_internal, &field.name, &field.ty));
+    }
+
     JvmClass {
         version: JvmVersion::Java21,
         access: JvmClassAccess {
@@ -380,7 +409,7 @@ fn lower_record_variant(
         super_class: "java/lang/Record".to_string(),
         interfaces: vec![enum_internal.to_string()],
         fields: jvm_fields,
-        methods: vec![ctor],
+        methods,
         source_file: None,
         permitted_subclasses: vec![],
         is_record: true,
@@ -756,7 +785,7 @@ mod tests {
         assert_eq!(circle.fields[0].name, "r");
         assert!(circle.fields[0].access.is_private);
         assert!(circle.fields[0].access.is_final);
-        assert_eq!(circle.methods.len(), 1); // <init>
+        assert_eq!(circle.methods.len(), 2); // <init> + getter for r
 
         // unit variant
         let point = &classes[2];

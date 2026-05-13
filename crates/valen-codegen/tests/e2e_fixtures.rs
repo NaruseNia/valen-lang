@@ -195,3 +195,23 @@ fn fixture_fn_loop() {
     assert_eq!(outputs.len(), 1);
     assert_eq!(outputs[0].internal_name, "com/example/Loops");
 }
+
+#[test]
+fn fixture_fn_match() {
+    let classes = compile_fixture("fn_match.vln");
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+    assert_eq!(c.class_name().unwrap(), "com/example/Matcher");
+    // <init> + describe
+    assert_eq!(c.methods.len(), 2);
+}
+
+#[test]
+fn fixture_fn_string_interp() {
+    let classes = compile_fixture("fn_string_interp.vln");
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+    assert_eq!(c.class_name().unwrap(), "com/example/Greeter");
+    // <init> + greet
+    assert_eq!(c.methods.len(), 2);
+}

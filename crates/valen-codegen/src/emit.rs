@@ -113,9 +113,13 @@ pub fn emit_class(jvm_class: &JvmClass) -> Result<ClassFileOutput, CodegenError>
 
     match class_file.verify() {
         Ok(()) => {}
-        Err(ristretto_classfile::Error::VerificationError(_)) => {
+        Err(ristretto_classfile::Error::VerificationError(ref msg)) => {
             // StackMapTable verification may fail for complex control flow;
             // strip StackMapTable attributes and retry
+            eprintln!(
+                "[codegen] stripping StackMapTable from class '{}': {}",
+                jvm_class.name, msg
+            );
             for method in &mut class_file.methods {
                 for attr in &mut method.attributes {
                     if let Attribute::Code { attributes, .. } = attr {
@@ -291,9 +295,7 @@ fn emit_body(
                 let instr = emit_op(cp, op, &mut fixups, instructions.len())?;
                 instructions.extend(instr);
                 stack += op.stack_delta();
-                if stack < 0 {
-                    stack = 0;
-                }
+                debug_assert!(stack >= 0, "JVM stack underflow detected");
                 max_stack = max_stack.max(stack);
             }
         }

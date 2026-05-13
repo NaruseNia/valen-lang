@@ -1,0 +1,11 @@
+package com.example;
+
+pub class Matcher {
+    fn describe(self, x: Int) -> Int {
+        match x {
+            0 => 100,
+            1 => 200,
+            _ => 0,
+        }
+    }
+}
