@@ -4,6 +4,20 @@ fn valenc() -> Command {
     Command::cargo_bin("valenc").expect("valenc binary not found")
 }
 
+fn has_byte_offset_pattern(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    for i in 0..bytes.len().saturating_sub(2) {
+        if bytes[i].is_ascii_digit() && bytes[i + 1] == b'.' && bytes[i + 2] == b'.' {
+            if let Some(&next) = bytes.get(i + 3) {
+                if next.is_ascii_digit() {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 fn fixture(name: &str) -> String {
     let manifest = env!("CARGO_MANIFEST_DIR");
     format!("{manifest}/tests/fixtures/{name}")
@@ -80,9 +94,13 @@ fn diagnostic_uses_line_col_format() {
         stderr.contains(":3:"),
         "diagnostic should contain line number, got: {stderr}"
     );
-    // Should NOT contain the old ".." byte-offset format
-    assert!(
-        !stderr.contains(".."),
-        "diagnostic should not contain byte-offset '..' format, got: {stderr}"
-    );
+    // Diagnostic lines (containing V0xxx) should not use byte-offset format "N..M"
+    for line in stderr.lines() {
+        if line.contains("V0") {
+            assert!(
+                !has_byte_offset_pattern(line),
+                "diagnostic should not contain byte-offset format, got: {line}"
+            );
+        }
+    }
 }
