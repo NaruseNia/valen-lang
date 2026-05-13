@@ -65,8 +65,13 @@ impl fmt::Display for Diagnostic {
 
 impl DiagCode {
     pub const LEX_UNKNOWN_CHAR: DiagCode = DiagCode(1);
+    pub const LEX_INT_OVERFLOW: DiagCode = DiagCode(2);
     pub const PARSE_EXPECTED_SEMI: DiagCode = DiagCode(100);
     pub const PARSE_EXPECTED_EXPR: DiagCode = DiagCode(101);
+    pub const PARSE_EXPECTED_TOKEN: DiagCode = DiagCode(102);
+    pub const PARSE_EXPECTED_IDENT: DiagCode = DiagCode(103);
+    pub const PARSE_EXPECTED_TYPE: DiagCode = DiagCode(104);
+    pub const PARSE_UNEXPECTED_TOKEN: DiagCode = DiagCode(105);
     pub const NAME_NOT_FOUND: DiagCode = DiagCode(200);
     pub const TYPE_MISMATCH: DiagCode = DiagCode(300);
     pub const UNDECLARED_VAR: DiagCode = DiagCode(301);

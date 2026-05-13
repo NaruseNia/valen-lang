@@ -66,8 +66,7 @@ pub struct ClassDecl {
     pub name: SmolStr,
     pub generics: Vec<GenericParam>,
     pub ctor_params: Vec<CtorParam>,
-    pub superclass: Option<Type>,
-    pub traits: Vec<Type>,
+    pub supertypes: Vec<Type>,
     pub body: Vec<ClassMember>,
     pub span: Span,
 }
