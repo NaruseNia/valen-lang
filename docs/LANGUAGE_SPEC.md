@@ -40,3 +40,4 @@ Valen の芯は以下の4点。新機能提案はこの芯を補強するかで�
 - [18. 今後の仕様課題](spec/18-open-questions.md)
 - [19. ライセンス](spec/19-license.md)
 - [20. アノテーション](spec/20-annotations.md)
+- [21. 将来機能バックログ](spec/21-future-feature-backlog.md)
