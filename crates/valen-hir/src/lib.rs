@@ -132,6 +132,8 @@ pub struct Def {
     pub kind: DefKind,
     pub vis: Vis,
     pub span: Span,
+    /// Package this definition belongs to (from the enclosing `package` declaration).
+    pub package: Option<Vec<SmolStr>>,
 }
 
 /// Visibility level of a definition.

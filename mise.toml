@@ -68,3 +68,21 @@ run = "cargo run -p valenfmt --"
 [tasks.lsp]
 description = "Run the Valen LSP server"
 run = "cargo run -p valen-lsp --"
+
+[tasks."stdlib:build"]
+description = "Build Valen stdlib to .class files"
+run = """
+mkdir -p build/stdlib
+cargo run -q -p valenc -- build \
+  stdlib/valen/core/core.vln \
+  stdlib/valen/io/io.vln \
+  -o build/stdlib
+"""
+
+[tasks."stdlib:check"]
+description = "Check Valen stdlib compiles"
+run = """
+cargo run -q -p valenc -- check \
+  stdlib/valen/core/core.vln \
+  stdlib/valen/io/io.vln
+"""

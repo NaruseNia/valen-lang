@@ -1,0 +1,5 @@
+package valen.io;
+
+pub data class IoError(
+    pub message: String,
+);
