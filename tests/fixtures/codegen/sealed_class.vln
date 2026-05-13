@@ -1,0 +1,7 @@
+package com.example;
+
+pub sealed class Animal {}
+
+pub class Cat : Animal {}
+
+pub class Fish : Animal {}

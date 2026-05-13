@@ -1,0 +1,8 @@
+package com.example;
+
+pub class Funcs {
+    fn apply(self, x: Int) -> Int {
+        let f = |a: Int| -> Int { a + 1 };
+        f(x)
+    }
+}

@@ -1,0 +1,13 @@
+package com.example;
+
+pub trait Greeter {
+    fn greet(self) -> String;
+}
+
+pub class Dog {}
+
+impl Greeter for Dog {
+    fn greet(self) -> String {
+        "Woof"
+    }
+}

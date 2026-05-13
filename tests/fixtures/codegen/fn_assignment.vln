@@ -1,0 +1,10 @@
+package com.example;
+
+pub class Mutate {
+    fn accumulate(self, n: Int) -> Int {
+        let mut x = 0;
+        x = x + n;
+        x += n;
+        x
+    }
+}
