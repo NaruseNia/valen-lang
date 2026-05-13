@@ -1,13 +1,18 @@
+//! Trait coherence checking: orphan rule, blanket impl rejection, duplicate impl
+//! detection, and trait satisfaction verification.
+
 use indexmap::IndexSet;
 use smol_str::SmolStr;
 use valen_diagnostics::{DiagCode, Diagnostics};
 
 use crate::{DefKind, FnDef, Hir, TyRef};
 
+/// Output of the coherence checking pass.
 pub struct CoherenceResult {
     pub diagnostics: Diagnostics,
 }
 
+/// Check all trait impls in the HIR for coherence violations.
 pub fn check_coherence(hir: &Hir, imports: &[SmolStr]) -> CoherenceResult {
     let mut checker = CoherenceChecker {
         hir,

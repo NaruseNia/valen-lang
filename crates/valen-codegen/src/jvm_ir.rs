@@ -1,25 +1,42 @@
+//! Platform-independent JVM IR. Lowered from typed HIR before final classfile emission.
+
+/// Branch-target label identifier.
 pub type Label = u32;
 
+/// JVM type representation used throughout the IR.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum JvmType {
+    /// `byte` (8-bit signed).
     Byte,
+    /// `short` (16-bit signed).
     Short,
+    /// `int` (32-bit signed).
     Int,
+    /// `long` (64-bit signed).
     Long,
+    /// `float` (32-bit IEEE 754).
     Float,
+    /// `double` (64-bit IEEE 754).
     Double,
+    /// `char` (16-bit unsigned Unicode).
     Char,
+    /// `boolean`.
     Boolean,
+    /// `void` (return-only).
     Void,
+    /// Reference type by internal name (e.g. `java/lang/String`).
     Object(String),
+    /// Array of the given element type.
     Array(Box<JvmType>),
 }
 
 impl JvmType {
+    /// Returns `true` for 64-bit types (`long`, `double`) that occupy two slots.
     pub fn is_wide(&self) -> bool {
         matches!(self, JvmType::Long | JvmType::Double)
     }
 
+    /// Number of local-variable / stack slots this type occupies (1 or 2).
     pub fn slot_count(&self) -> u16 {
         if self.is_wide() {
             2
@@ -28,10 +45,12 @@ impl JvmType {
         }
     }
 
+    /// Returns `true` for reference types (`Object`, `Array`).
     pub fn is_reference(&self) -> bool {
         matches!(self, JvmType::Object(_) | JvmType::Array(_))
     }
 
+    /// Returns the boxed wrapper class internal name for a primitive type.
     pub fn boxed_name(prim: &JvmType) -> Option<&'static str> {
         match prim {
             JvmType::Int => Some("java/lang/Integer"),
@@ -47,20 +66,25 @@ impl JvmType {
     }
 }
 
+/// IR representation of a single JVM class, interface, or record.
 #[derive(Debug, Clone)]
 pub struct JvmClass {
     pub version: crate::JvmVersion,
     pub access: JvmClassAccess,
+    /// JVM internal name (e.g. `com/example/Foo`).
     pub name: String,
     pub super_class: String,
     pub interfaces: Vec<String>,
     pub fields: Vec<JvmField>,
     pub methods: Vec<JvmMethod>,
     pub source_file: Option<String>,
+    /// Sealed type permitted subclasses (for `PermittedSubclasses` attribute).
     pub permitted_subclasses: Vec<String>,
+    /// Whether this class should carry the `Record` attribute.
     pub is_record: bool,
 }
 
+/// Access flags for a JVM class.
 #[derive(Debug, Clone, Default)]
 pub struct JvmClassAccess {
     pub is_public: bool,
@@ -70,6 +94,7 @@ pub struct JvmClassAccess {
     pub is_super: bool,
 }
 
+/// IR representation of a JVM field.
 #[derive(Debug, Clone)]
 pub struct JvmField {
     pub access: JvmFieldAccess,
@@ -77,6 +102,7 @@ pub struct JvmField {
     pub ty: JvmType,
 }
 
+/// Access flags for a JVM field.
 #[derive(Debug, Clone, Default)]
 pub struct JvmFieldAccess {
     pub is_public: bool,
@@ -86,6 +112,7 @@ pub struct JvmFieldAccess {
     pub is_static: bool,
 }
 
+/// IR representation of a JVM method.
 #[derive(Debug, Clone)]
 pub struct JvmMethod {
     pub access: JvmMethodAccess,
@@ -95,6 +122,7 @@ pub struct JvmMethod {
     pub body: Option<JvmMethodBody>,
 }
 
+/// Access flags for a JVM method.
 #[derive(Debug, Clone, Default)]
 pub struct JvmMethodAccess {
     pub is_public: bool,
@@ -107,12 +135,14 @@ pub struct JvmMethodAccess {
     pub is_synthetic: bool,
 }
 
+/// Method body containing local slot count and JVM operations.
 #[derive(Debug, Clone)]
 pub struct JvmMethodBody {
     pub max_locals: u16,
     pub ops: Vec<JvmOp>,
 }
 
+/// A single JVM bytecode-level operation in the IR.
 #[derive(Debug, Clone)]
 pub enum JvmOp {
     LoadThis,
@@ -221,9 +251,11 @@ pub enum JvmOp {
         stack: Vec<JvmType>,
     },
 
+    /// Placeholder body that emits `throw new UnsupportedOperationException`.
     StubBody,
 }
 
+/// Arithmetic binary operation kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArithOp {
     Add,
@@ -233,15 +265,22 @@ pub enum ArithOp {
     Rem,
 }
 
+/// Floating-point / long comparison instruction kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CmpKind {
+    /// `lcmp` — long compare.
     LCmp,
+    /// `fcmpl` — float compare (NaN → -1).
     FCmpL,
+    /// `fcmpg` — float compare (NaN → 1).
     FCmpG,
+    /// `dcmpl` — double compare (NaN → -1).
     DCmpL,
+    /// `dcmpg` — double compare (NaN → 1).
     DCmpG,
 }
 
+/// Bitwise / shift operation kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BitwiseOp {
     And,
@@ -249,10 +288,12 @@ pub enum BitwiseOp {
     Xor,
     Shl,
     Shr,
+    /// Unsigned (logical) right shift.
     UShr,
 }
 
 impl JvmOp {
+    /// Returns the net stack-slot change produced by this operation.
     pub fn stack_delta(&self) -> i32 {
         match self {
             JvmOp::LoadThis => 1,

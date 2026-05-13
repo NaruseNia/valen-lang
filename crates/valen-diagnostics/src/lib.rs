@@ -5,6 +5,7 @@ use std::fmt;
 use smol_str::SmolStr;
 use valen_ast::Span;
 
+/// Severity level of a diagnostic message.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity {
     Error,
@@ -22,16 +23,20 @@ impl fmt::Display for Severity {
     }
 }
 
+/// A single compiler diagnostic with location, severity, and optional labels.
 #[derive(Debug, Clone)]
 pub struct Diagnostic {
     pub severity: Severity,
     pub code: DiagCode,
     pub message: SmolStr,
+    /// Primary source location that triggered this diagnostic.
     pub primary: Span,
+    /// Additional labeled spans providing context.
     pub labels: Vec<Label>,
     pub notes: Vec<SmolStr>,
 }
 
+/// A secondary labeled span attached to a [`Diagnostic`].
 #[derive(Debug, Clone)]
 pub struct Label {
     pub span: Span,
@@ -112,10 +117,12 @@ impl Diagnostics {
         Self::default()
     }
 
+    /// Append an already-constructed diagnostic.
     pub fn push(&mut self, diag: Diagnostic) {
         self.entries.push(diag);
     }
 
+    /// Record an error-level diagnostic.
     pub fn error(&mut self, code: DiagCode, span: Span, message: impl Into<SmolStr>) {
         self.entries.push(Diagnostic {
             severity: Severity::Error,
@@ -127,6 +134,7 @@ impl Diagnostics {
         });
     }
 
+    /// Record a warning-level diagnostic.
     pub fn warning(&mut self, code: DiagCode, span: Span, message: impl Into<SmolStr>) {
         self.entries.push(Diagnostic {
             severity: Severity::Warning,
@@ -138,6 +146,7 @@ impl Diagnostics {
         });
     }
 
+    /// Record a hint-level diagnostic.
     pub fn hint(&mut self, code: DiagCode, span: Span, message: impl Into<SmolStr>) {
         self.entries.push(Diagnostic {
             severity: Severity::Hint,
@@ -149,10 +158,12 @@ impl Diagnostics {
         });
     }
 
+    /// Iterate over all collected diagnostics.
     pub fn iter(&self) -> impl Iterator<Item = &Diagnostic> {
         self.entries.iter()
     }
 
+    /// Returns `true` if any error-level diagnostic has been recorded.
     pub fn has_errors(&self) -> bool {
         self.entries.iter().any(|d| d.severity == Severity::Error)
     }

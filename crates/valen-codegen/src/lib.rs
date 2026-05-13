@@ -1,3 +1,5 @@
+//! JVM bytecode generation from typed HIR. Targets Java 21 classfile format via `ristretto_classfile`.
+
 pub mod class_emit;
 pub mod data_class_methods;
 pub mod descriptor;
@@ -9,17 +11,24 @@ pub mod lower;
 #[cfg(test)]
 mod test_fixtures;
 
+/// Target JVM version for classfile output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JvmVersion {
+    /// Java 21 (LTS baseline).
     Java21,
+    /// Java 25 (opt-in forward target).
     Java25,
 }
 
+/// A compiled `.class` file ready to be written to disk.
 pub struct ClassFileOutput {
+    /// JVM internal name (e.g. `com/example/Foo`).
     pub internal_name: String,
+    /// Raw classfile bytes.
     pub bytes: Vec<u8>,
 }
 
+/// Compiles a full HIR module into one or more classfile outputs.
 pub fn compile_hir(
     hir: &valen_hir::Hir,
     typed_bodies: &indexmap::IndexMap<smol_str::SmolStr, valen_hir::TypedBody>,

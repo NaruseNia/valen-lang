@@ -1,6 +1,9 @@
+//! Generates `equals`, `hashCode`, `toString`, and `copy` methods for data classes.
+
 use crate::jvm_const::*;
 use crate::jvm_ir::{ArithOp, JvmMethod, JvmMethodAccess, JvmMethodBody, JvmOp, JvmType};
 
+/// Generates a structural `equals(Object)` method comparing all fields.
 pub fn generate_equals(class_internal: &str, fields: &[(String, JvmType)]) -> JvmMethod {
     let obj = JvmType::Object(JVM_OBJECT.to_string());
     let cls = JvmType::Object(class_internal.to_string());
@@ -149,6 +152,7 @@ pub fn generate_equals(class_internal: &str, fields: &[(String, JvmType)]) -> Jv
     }
 }
 
+/// Generates a `hashCode()` method using the 31-multiply-accumulate algorithm.
 pub fn generate_hash_code(class_internal: &str, fields: &[(String, JvmType)]) -> JvmMethod {
     let mut ops = Vec::new();
 
@@ -207,6 +211,7 @@ pub fn generate_hash_code(class_internal: &str, fields: &[(String, JvmType)]) ->
     }
 }
 
+/// Generates a `toString()` method producing `ClassName(field=value, ...)` format.
 pub fn generate_to_string(
     class_internal: &str,
     class_simple_name: &str,
@@ -302,6 +307,7 @@ fn sb_append_type(ty: &JvmType) -> JvmType {
     }
 }
 
+/// Generates a `copy(...)` method that constructs a new instance with the given field values.
 pub fn generate_copy(class_internal: &str, fields: &[(String, JvmType)]) -> JvmMethod {
     let mut ops = Vec::new();
 

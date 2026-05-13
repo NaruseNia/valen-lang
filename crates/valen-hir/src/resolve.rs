@@ -1,3 +1,5 @@
+//! Name resolution -- registers top-level definitions and builds method indexes.
+
 use indexmap::IndexMap;
 use smol_str::SmolStr;
 use valen_ast::{self, Item, Visibility};
@@ -10,6 +12,7 @@ use crate::{
     EnumVariantDef, FnDef, Hir, ImplDef, ImplEntry, ParamDef, TraitDef, TyRef, Vis,
 };
 
+/// Name resolver that lowers AST items into HIR definitions and builds scope tables.
 pub struct Resolver {
     hir: Hir,
     scope: Scope,
@@ -32,11 +35,14 @@ impl Scope {
     }
 }
 
+/// Output of the name resolution pass.
 pub struct ResolveResult {
+    /// The populated HIR with all registered definitions.
     pub hir: Hir,
     pub diagnostics: Diagnostics,
 }
 
+/// Run name resolution on a list of AST items, producing an HIR with definitions and method indexes.
 pub fn resolve(items: &[Item]) -> ResolveResult {
     let mut resolver = Resolver {
         hir: Hir::default(),

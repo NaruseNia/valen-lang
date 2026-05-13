@@ -31,6 +31,7 @@ use valen_diagnostics::{DiagCode, Diagnostics};
 
 use crate::lexer::lex;
 
+/// Recursive-descent parser that converts a token stream into AST items.
 pub struct Parser {
     tokens: Vec<(TokenKind, Span)>,
     pos: usize,
@@ -39,6 +40,7 @@ pub struct Parser {
 }
 
 impl Parser {
+    /// Create a parser by lexing `source`, merging any lexer diagnostics.
     pub fn new(source: &str, file_id: FileId) -> Self {
         let (tokens, lex_diagnostics) = lex(source, file_id);
         let mut diagnostics = Diagnostics::new();
@@ -53,6 +55,7 @@ impl Parser {
         }
     }
 
+    /// Parse the entire token stream as a file, returning all top-level items.
     pub fn parse_file(&mut self) -> Vec<Item> {
         let mut items = Vec::new();
         while !self.at_eof() {
@@ -66,6 +69,7 @@ impl Parser {
         items
     }
 
+    /// Consume the parser and return accumulated diagnostics.
     pub fn into_diagnostics(self) -> Diagnostics {
         self.diagnostics
     }
@@ -1547,6 +1551,7 @@ fn combine_binary(op: BinaryOp, lhs: Expr, rhs: Expr) -> Expr {
     })
 }
 
+/// Extract the source span from any expression variant.
 fn expr_span(expr: &Expr) -> Span {
     match expr {
         Expr::Literal(Literal::Int(_, s)) => *s,
@@ -1581,6 +1586,7 @@ fn expr_span(expr: &Expr) -> Span {
     }
 }
 
+/// Extract the source span from any type variant.
 fn type_span(ty: &Type) -> Span {
     match ty {
         Type::Path(p) => p.span,

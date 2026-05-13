@@ -1,3 +1,5 @@
+//! Bidirectional type checker producing typed HIR bodies.
+
 use indexmap::IndexMap;
 use smol_str::SmolStr;
 use valen_ast::{self, BinaryOp, Span, UnaryOp};
@@ -8,15 +10,14 @@ use crate::{
     TypedStmt, TypedStringPart,
 };
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
+/// Output of the type checking pass.
 pub struct TypeCheckResult {
+    /// Typed bodies keyed by function/method name.
     pub bodies: IndexMap<SmolStr, TypedBody>,
     pub diagnostics: Diagnostics,
 }
 
+/// Type-check all items against the resolved HIR, producing typed bodies for each function.
 pub fn type_check(hir: &Hir, items: &[valen_ast::Item]) -> TypeCheckResult {
     let mut tc = TypeChecker::new(hir);
     tc.check_items(items);
