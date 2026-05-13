@@ -17,6 +17,7 @@ impl Span {
         file_id: FileId(0),
     };
 
+    /// Creates a new span from byte offsets within the given file.
     pub fn new(start: u32, end: u32, file_id: FileId) -> Self {
         Self {
             start,
@@ -25,14 +26,17 @@ impl Span {
         }
     }
 
+    /// Returns the length of this span in bytes.
     pub fn len(&self) -> u32 {
         self.end.saturating_sub(self.start)
     }
 
+    /// Returns `true` if this span covers zero bytes.
     pub fn is_empty(&self) -> bool {
         self.start == self.end
     }
 
+    /// Returns the smallest span covering both `self` and `other`. Panics if they belong to different files.
     pub fn merge(self, other: Span) -> Span {
         assert_eq!(
             self.file_id, other.file_id,
@@ -58,6 +62,7 @@ pub struct Spanned<T> {
 }
 
 impl<T> Spanned<T> {
+    /// Wraps a value with its source span.
     pub fn new(node: T, span: Span) -> Self {
         Self { node, span }
     }

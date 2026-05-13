@@ -5,6 +5,7 @@
 
 use smol_str::SmolStr;
 
+/// Classification of a single lexer token.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // Literals
