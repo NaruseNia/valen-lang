@@ -81,7 +81,7 @@ impl LineIndex {
 /// Result of the shared frontend pipeline (parse → resolve → type_check → coherence).
 struct FrontendResult {
     hir: valen_hir::Hir,
-    bodies: indexmap::IndexMap<smol_str::SmolStr, valen_hir::TypedBody>,
+    bodies: indexmap::IndexMap<valen_hir::DefId, valen_hir::TypedBody>,
 }
 
 /// Run parse → resolve → type_check → coherence and report all diagnostics.

@@ -2,7 +2,7 @@
 
 use indexmap::IndexMap;
 use smol_str::SmolStr;
-use valen_hir::{ClassDefKind, Def, DefKind, FnDef, Hir, TypedBody, Vis};
+use valen_hir::{ClassDefKind, Def, DefId, DefKind, FnDef, Hir, TypedBody, Vis};
 
 use crate::data_class_methods;
 use crate::descriptor::{class_internal_name, tyref_to_jvm};
@@ -14,7 +14,7 @@ use crate::jvm_ir::{
 use crate::JvmVersion;
 
 /// Lowers an entire HIR module into a list of JVM class IR nodes.
-pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<SmolStr, TypedBody>) -> Vec<JvmClass> {
+pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<DefId, TypedBody>) -> Vec<JvmClass> {
     let pkg = hir.package.as_deref();
     let mut classes = Vec::new();
 
@@ -48,7 +48,7 @@ fn lower_class(
     hir: &Hir,
     def: &Def,
     class_def: &valen_hir::ClassDef,
-    typed_bodies: &IndexMap<SmolStr, TypedBody>,
+    typed_bodies: &IndexMap<DefId, TypedBody>,
     pkg: Option<&[SmolStr]>,
     source_file: Option<String>,
 ) -> JvmClass {
@@ -85,8 +85,8 @@ fn lower_class(
     for &mid in &class_def.methods {
         if let Some(method_def) = hir.defs.get(&mid) {
             if let DefKind::Fn(fn_def) = &method_def.kind {
-                let body = typed_bodies.get(method_def.name.as_str());
-                methods.push(lower_method(method_def, fn_def, body, &internal, pkg));
+                let body = typed_bodies.get(&mid);
+                methods.push(lower_method(hir, method_def, fn_def, body, &internal, pkg));
             }
         }
     }
@@ -236,6 +236,7 @@ fn generate_getter(class_internal: &str, field_name: &str, field_ty: &JvmType) -
 }
 
 fn lower_method(
+    hir: &Hir,
     def: &Def,
     fn_def: &FnDef,
     typed_body: Option<&TypedBody>,
@@ -273,6 +274,7 @@ fn lower_method(
             &return_type,
             has_self,
             pkg,
+            hir,
         ))
     } else {
         let max_locals =

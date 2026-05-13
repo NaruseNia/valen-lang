@@ -31,7 +31,7 @@ pub struct ClassFileOutput {
 /// Compiles a full HIR module into one or more classfile outputs.
 pub fn compile_hir(
     hir: &valen_hir::Hir,
-    typed_bodies: &indexmap::IndexMap<smol_str::SmolStr, valen_hir::TypedBody>,
+    typed_bodies: &indexmap::IndexMap<valen_hir::DefId, valen_hir::TypedBody>,
 ) -> Result<Vec<ClassFileOutput>, emit::CodegenError> {
     let jvm_classes = lower::lower_hir(hir, typed_bodies);
     jvm_classes.iter().map(emit::emit_class).collect()

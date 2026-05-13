@@ -3,7 +3,9 @@
 use indexmap::IndexMap;
 use smol_str::SmolStr;
 use valen_ast::{BinaryOp, UnaryOp};
-use valen_hir::{PrimTy, Ty, TypedBody, TypedExpr, TypedExprKind, TypedStmt, TypedStringPart};
+use valen_hir::{
+    DefKind, Hir, PrimTy, Ty, TypedBody, TypedExpr, TypedExprKind, TypedStmt, TypedStringPart,
+};
 
 use crate::jvm_const::*;
 use crate::jvm_ir::{ArithOp, BitwiseOp, CmpKind, JvmMethodBody, JvmOp, JvmType, Label};
@@ -14,6 +16,7 @@ struct LoopContext {
 }
 
 struct ExprLowering<'a> {
+    hir: &'a Hir,
     ops: Vec<JvmOp>,
     locals: IndexMap<SmolStr, (u16, JvmType)>,
     next_slot: u16,
@@ -32,8 +35,10 @@ pub fn lower_body(
     return_ty: &JvmType,
     has_self: bool,
     pkg: Option<&[SmolStr]>,
+    hir: &Hir,
 ) -> JvmMethodBody {
     let mut ctx = ExprLowering {
+        hir,
         ops: Vec::new(),
         locals: IndexMap::new(),
         next_slot: 0,
@@ -86,6 +91,36 @@ impl<'a> ExprLowering<'a> {
         self.next_slot += ty.slot_count();
         self.locals.insert(name, (slot, ty));
         slot
+    }
+
+    fn resolve_variant_field_types(&self, path: &valen_ast::Path) -> IndexMap<String, JvmType> {
+        let mut result = IndexMap::new();
+        let segments: Vec<&str> = path.segments.iter().map(|s| s.name.as_str()).collect();
+        let (enum_name, variant_name) = if segments.len() == 2 {
+            (segments[0], segments[1])
+        } else if segments.len() == 1 {
+            ("", segments[0])
+        } else {
+            return result;
+        };
+
+        for def in self.hir.defs.values() {
+            if let DefKind::Enum(enum_def) = &def.kind {
+                if !enum_name.is_empty() && def.name != enum_name {
+                    continue;
+                }
+                for variant in &enum_def.variants {
+                    if variant.name == variant_name {
+                        for (fname, tyref) in &variant.fields {
+                            let jvm_ty = crate::descriptor::tyref_to_jvm(tyref, self.pkg);
+                            result.insert(fname.to_string(), jvm_ty);
+                        }
+                        return result;
+                    }
+                }
+            }
+        }
+        result
     }
 
     fn pop_if_needed(&mut self, ty: &Ty) {
@@ -647,12 +682,13 @@ impl<'a> ExprLowering<'a> {
                 self.next_slot += 1;
                 self.ops.push(JvmOp::StoreLocal(cast_slot, cast_ty.clone()));
 
+                let variant_field_types = self.resolve_variant_field_types(&sp.path);
                 for field in &sp.fields {
                     self.ops.push(JvmOp::LoadLocal(cast_slot, cast_ty.clone()));
-                    // TODO(#021): field type is hardcoded to Object — should resolve actual
-                    // field types from the variant definition (requires passing enum variant
-                    // type information through pattern lowering).
-                    let field_ty = JvmType::Object(JVM_OBJECT.to_string());
+                    let field_ty = variant_field_types
+                        .get(field.name.as_str())
+                        .cloned()
+                        .unwrap_or_else(|| JvmType::Object(JVM_OBJECT.to_string()));
                     self.ops.push(JvmOp::GetField {
                         owner: variant_internal.clone(),
                         name: field.name.to_string(),
