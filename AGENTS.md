@@ -56,6 +56,7 @@ valen-lang/
 ├── examples/               # サンプルコード（未着手）
 ├── .agents/
 │   └── skills/             # 共有スキル（エージェント共通の手順書）
+├── mise.toml               # ツールバージョン + タスクランナー定義
 ├── AGENTS.md               # 共通エージェントガイドライン（本ファイル）
 ├── CLAUDE.md               # Claude Code 固有設定
 └── LICENSE
@@ -73,20 +74,17 @@ valen-lang/
 コードに触れた後は必ず以下を通してからコミット。1つでも失敗したら修正する。skip 禁止。
 
 ```sh
-cargo check --workspace --all-targets
-cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --all -- --check
-cargo test --workspace
-cargo build --workspace  # リリース前は --release でも確認
+mise run precommit        # check + clippy + fmt + test を一括実行
+# または個別:
+mise run check            # 型と借用チェック（最速のゲート）
+mise run clippy           # lint（warning = error）
+mise run fmt              # フォーマットチェック（修正は mise run fmt:fix）
+mise run test             # 全テスト（integration 含む）
+mise run build            # ビルド確認（リリース前は mise run build:release）
 ```
 
-- `cargo check` は型と借用チェック、最速のゲート
-- `cargo clippy -D warnings` で warning も error 扱い
-- `cargo fmt --check` は差分のみ検出、フォーマット崩れたら `cargo fmt --all` で修正
-- `cargo test` は integration テスト含む
+- `mise run ci` で CI と同じフルパイプライン（fmt + clippy + test + build + doc）をローカル実行可能
 - エラーやテスト失敗を握り潰さない。`#[allow(...)]` や `#[ignore]` を貼るのは最終手段、貼るときはコメントで理由を書く
-
-Git hook で自動化したい場合は `.git/hooks/pre-commit` に上記を仕込む（ローカル設定、コミット対象外）。
 
 ## 不明点の扱い
 
