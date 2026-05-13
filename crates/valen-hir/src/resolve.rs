@@ -89,6 +89,8 @@ impl Resolver {
             }
         }
 
+        self.hir.imports = self.scope.imports.clone();
+
         // First pass: register all top-level names
         for item in items {
             self.register_item(item);

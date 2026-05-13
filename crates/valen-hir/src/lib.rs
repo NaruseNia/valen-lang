@@ -26,6 +26,8 @@ pub struct Hir {
     pub type_methods: IndexMap<SmolStr, Vec<DefId>>,
     /// Trait impl entries used for method resolution and coherence checking.
     pub trait_impls: Vec<ImplEntry>,
+    /// Import path mappings: short name (or alias) → full path segments.
+    pub imports: IndexMap<SmolStr, Vec<SmolStr>>,
     next_id: DefId,
 }
 

@@ -170,7 +170,8 @@ impl<'a> ExprLowering<'a> {
                 for variant in &enum_def.variants {
                     if variant.name == variant_name {
                         for (fname, tyref) in &variant.fields {
-                            let jvm_ty = crate::descriptor::tyref_to_jvm(tyref, self.pkg);
+                            let jvm_ty =
+                                crate::descriptor::tyref_to_jvm(tyref, self.pkg, &self.hir.imports);
                             result.insert(fname.to_string(), jvm_ty);
                         }
                         return result;
@@ -214,10 +215,16 @@ impl<'a> ExprLowering<'a> {
                 PrimTy::Unit => JvmType::Void,
                 PrimTy::Nothing => JvmType::Void,
             },
-            Ty::Named(n) => JvmType::Object(crate::descriptor::class_internal_name(n, self.pkg)),
-            Ty::Generic(n, _) => {
-                JvmType::Object(crate::descriptor::class_internal_name(n, self.pkg))
-            }
+            Ty::Named(n) => JvmType::Object(crate::descriptor::resolve_type_internal_name(
+                n,
+                self.pkg,
+                &self.hir.imports,
+            )),
+            Ty::Generic(n, _) => JvmType::Object(crate::descriptor::resolve_type_internal_name(
+                n,
+                self.pkg,
+                &self.hir.imports,
+            )),
             Ty::Nullable(inner) => {
                 let inner_jvm = self.ty_to_jvm(inner);
                 match JvmType::boxed_name(&inner_jvm) {
