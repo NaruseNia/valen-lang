@@ -23,7 +23,7 @@ Phase 0（基盤整備）完了済み。Phase 1（MVP）に向けて、コンパ
 | 3 | ~~TASK-011: Codegen — Java interop（import 解決・safe ブロック）~~ ✅ | TASK-005 | L |
 | 4 | ~~TASK-012: 標準ライブラリ（valen.core）~~ ✅ | TASK-010 | M |
 | 4 | TASK-013: Gradle プラグイン | TASK-010 | M |
-| 4 | TASK-014: LSP サーバー（MVP） | TASK-004, TASK-005 | M |
+| 4 | ~~TASK-014: LSP サーバー（MVP）~~ ✅ | TASK-004, TASK-005 | M |
 | 4 | TASK-015: valenfmt（最小版） | TASK-001 | S |
 | 5 | TASK-016: サンプルプロジェクト（hello/shapes/java-interop） | TASK-013 | M |
 | 5 | TASK-017: E2E テスト・CI 拡充 | TASK-010 | M |
