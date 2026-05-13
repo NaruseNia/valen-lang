@@ -1,3 +1,5 @@
+//! Match exhaustiveness checking for enums, sealed classes, and `Bool`.
+
 use indexmap::{IndexMap, IndexSet};
 use smol_str::SmolStr;
 use valen_ast::{self, Pattern};
@@ -5,10 +7,12 @@ use valen_diagnostics::{DiagCode, Diagnostics};
 
 use crate::{ClassDefKind, DefKind, EnumDef, Hir, TyRef};
 
+/// Output of the exhaustiveness checking pass.
 pub struct ExhaustivenessResult {
     pub diagnostics: Diagnostics,
 }
 
+/// Walk all match expressions in `items` and report non-exhaustive patterns.
 pub fn check_exhaustiveness(hir: &Hir, items: &[valen_ast::Item]) -> ExhaustivenessResult {
     let mut checker = ExhaustivenessChecker {
         hir,
