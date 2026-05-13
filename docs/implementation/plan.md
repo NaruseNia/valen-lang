@@ -28,6 +28,9 @@ Phase 0（基盤整備）完了済み。Phase 1（MVP）に向けて、コンパ
 | 5 | TASK-016: サンプルプロジェクト（hello/shapes/java-interop） | TASK-013 | M |
 | 5 | ~~TASK-017: E2E テスト・CI 拡充~~ ✅ | TASK-010 | M |
 
+**Phase 1.5 計画:** [phase-1.5-plan.md](phase-1.5-plan.md) (TASK-018〜032)
+**VEP プロセス:** [docs/vep/README.md](../vep/README.md)
+
 ## トレーサビリティマトリクス
 
 | 要件ID | タイトル | 関連タスク | カバレッジ |
