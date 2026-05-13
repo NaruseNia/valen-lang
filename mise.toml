@@ -1,0 +1,54 @@
+[tools]
+rust = "1.95"
+
+[settings]
+experimental = true
+
+# ---------------------------------------------------------------------------
+# Tasks — replaces the manual checklist in CLAUDE.md / AGENTS.md
+# ---------------------------------------------------------------------------
+
+[tasks.check]
+description = "Type and borrow check (fastest gate)"
+run = "cargo check --workspace --all-targets"
+
+[tasks.clippy]
+description = "Lint with warnings as errors"
+run = "cargo clippy --workspace --all-targets -- -D warnings"
+
+[tasks.fmt]
+description = "Check formatting"
+run = "cargo fmt --all -- --check"
+
+[tasks."fmt:fix"]
+description = "Auto-fix formatting"
+run = "cargo fmt --all"
+
+[tasks.test]
+description = "Run all tests"
+run = "cargo test --workspace"
+
+[tasks.build]
+description = "Build all targets"
+run = "cargo build --workspace"
+
+[tasks."build:release"]
+description = "Release build"
+run = "cargo build --workspace --release"
+
+[tasks.doc]
+description = "Build rustdoc (warnings = errors)"
+env = { RUSTDOCFLAGS = "-D warnings" }
+run = "cargo doc --workspace --no-deps"
+
+[tasks.ci]
+description = "Run full CI pipeline locally"
+depends = ["fmt", "clippy", "test", "build", "doc"]
+
+[tasks.lint]
+description = "Run fmt + clippy"
+depends = ["fmt", "clippy"]
+
+[tasks.precommit]
+description = "Pre-commit checks (same as CLAUDE.md checklist)"
+depends = ["check", "clippy", "fmt", "test"]
