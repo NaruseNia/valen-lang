@@ -4,6 +4,7 @@ use valen_hir::{ClassDefKind, Def, DefKind, FnDef, Hir, TypedBody, Vis};
 
 use crate::data_class_methods;
 use crate::descriptor::{class_internal_name, tyref_to_jvm};
+use crate::jvm_const::*;
 use crate::jvm_ir::{
     JvmClass, JvmClassAccess, JvmField, JvmFieldAccess, JvmMethod, JvmMethodAccess, JvmMethodBody,
     JvmOp, JvmType,
@@ -55,9 +56,9 @@ fn lower_class(
         .as_ref()
         .map(|s| match &tyref_to_jvm(s, pkg) {
             JvmType::Object(name) => name.clone(),
-            _ => "java/lang/Object".to_string(),
+            _ => JVM_OBJECT.to_string(),
         })
-        .unwrap_or_else(|| "java/lang/Object".to_string());
+        .unwrap_or_else(|| JVM_OBJECT.to_string());
 
     let interfaces: Vec<String> = class_def
         .trait_impls
@@ -111,7 +112,7 @@ fn lower_data_class(
     source_file: Option<String>,
 ) -> JvmClass {
     let internal = class_internal_name(&def.name, pkg);
-    let super_class = "java/lang/Object".to_string();
+    let super_class = JVM_OBJECT.to_string();
 
     let fields: Vec<JvmField> = data_def
         .ctor_params
@@ -173,7 +174,7 @@ fn generate_ctor(class_internal: &str, super_class: &str, fields: &[JvmField]) -
     ops.push(JvmOp::LoadThis);
     ops.push(JvmOp::InvokeSpecial {
         owner: super_class.to_string(),
-        name: "<init>".to_string(),
+        name: INIT.to_string(),
         params: vec![],
         ret: JvmType::Void,
     });
@@ -200,7 +201,7 @@ fn generate_ctor(class_internal: &str, super_class: &str, fields: &[JvmField]) -
             is_public: true,
             ..Default::default()
         },
-        name: "<init>".to_string(),
+        name: INIT.to_string(),
         params: fields.iter().map(|f| f.ty.clone()).collect(),
         return_type: JvmType::Void,
         body: Some(JvmMethodBody { max_locals, ops }),
@@ -361,7 +362,7 @@ fn lower_enum(
             ..Default::default()
         },
         name: enum_internal.clone(),
-        super_class: "java/lang/Object".to_string(),
+        super_class: JVM_OBJECT.to_string(),
         interfaces: vec![],
         fields: vec![],
         methods: vec![],
@@ -411,7 +412,7 @@ fn lower_record_variant(
         })
         .collect();
 
-    let ctor = generate_ctor(variant_internal, "java/lang/Record", &jvm_fields);
+    let ctor = generate_ctor(variant_internal, JVM_RECORD, &jvm_fields);
 
     let mut methods = vec![ctor];
     for field in &jvm_fields {
@@ -427,7 +428,7 @@ fn lower_record_variant(
             ..Default::default()
         },
         name: variant_internal.to_string(),
-        super_class: "java/lang/Record".to_string(),
+        super_class: JVM_RECORD.to_string(),
         interfaces: vec![enum_internal.to_string()],
         fields: jvm_fields,
         methods,
@@ -451,7 +452,7 @@ fn lower_unit_variant(
             is_final: true,
             ..Default::default()
         },
-        name: "INSTANCE".to_string(),
+        name: INSTANCE.to_string(),
         ty: self_ty.clone(),
     };
 
@@ -460,7 +461,7 @@ fn lower_unit_variant(
             is_private: true,
             ..Default::default()
         },
-        name: "<init>".to_string(),
+        name: INIT.to_string(),
         params: vec![],
         return_type: JvmType::Void,
         body: Some(JvmMethodBody {
@@ -468,8 +469,8 @@ fn lower_unit_variant(
             ops: vec![
                 JvmOp::LoadThis,
                 JvmOp::InvokeSpecial {
-                    owner: "java/lang/Object".to_string(),
-                    name: "<init>".to_string(),
+                    owner: JVM_OBJECT.to_string(),
+                    name: INIT.to_string(),
                     params: vec![],
                     ret: JvmType::Void,
                 },
@@ -483,7 +484,7 @@ fn lower_unit_variant(
             is_static: true,
             ..Default::default()
         },
-        name: "<clinit>".to_string(),
+        name: CLINIT.to_string(),
         params: vec![],
         return_type: JvmType::Void,
         body: Some(JvmMethodBody {
@@ -493,13 +494,13 @@ fn lower_unit_variant(
                 JvmOp::Dup,
                 JvmOp::InvokeSpecial {
                     owner: variant_internal.to_string(),
-                    name: "<init>".to_string(),
+                    name: INIT.to_string(),
                     params: vec![],
                     ret: JvmType::Void,
                 },
                 JvmOp::PutStatic {
                     owner: variant_internal.to_string(),
-                    name: "INSTANCE".to_string(),
+                    name: INSTANCE.to_string(),
                     descriptor: self_ty,
                 },
                 JvmOp::Return(JvmType::Void),
@@ -516,7 +517,7 @@ fn lower_unit_variant(
             ..Default::default()
         },
         name: variant_internal.to_string(),
-        super_class: "java/lang/Object".to_string(),
+        super_class: JVM_OBJECT.to_string(),
         interfaces: vec![enum_internal.to_string()],
         fields: vec![instance_field],
         methods: vec![private_ctor, clinit],

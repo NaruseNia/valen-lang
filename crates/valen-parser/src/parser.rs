@@ -906,13 +906,13 @@ impl Parser {
                 if self.at(&TokenKind::LParen) {
                     let args = self.parse_call_args()?;
                     let span = expr_span(&expr).merge(self.prev_span());
-                    expr = Expr::MethodCall(MethodCallExpr {
+                    expr = Expr::MethodCall(Box::new(MethodCallExpr {
                         receiver: Box::new(expr),
                         method: method_name,
                         generics: Vec::new(),
                         args,
                         span,
-                    });
+                    }));
                 } else {
                     let span = expr_span(&expr).merge(self.prev_span());
                     expr = Expr::Field(FieldAccess {
@@ -1072,12 +1072,12 @@ impl Parser {
             .as_ref()
             .map(|e| expr_span(e))
             .unwrap_or(then_branch.span);
-        Some(Expr::If(IfExpr {
+        Some(Expr::If(Box::new(IfExpr {
             cond: Box::new(cond),
             then_branch,
             else_branch,
             span: start.merge(end),
-        }))
+        })))
     }
 
     fn parse_match_expr(&mut self) -> Option<Expr> {
@@ -1335,12 +1335,12 @@ impl Parser {
         let iter = self.parse_expr()?;
         let body = self.parse_block()?;
         let span = start.merge(body.span);
-        Some(Expr::For(ForExpr {
+        Some(Expr::For(Box::new(ForExpr {
             var,
             iter: Box::new(iter),
             body,
             span,
-        }))
+        })))
     }
 
     fn parse_while_expr(&mut self) -> Option<Expr> {
@@ -1348,11 +1348,11 @@ impl Parser {
         let cond = self.parse_expr()?;
         let body = self.parse_block()?;
         let span = start.merge(body.span);
-        Some(Expr::While(WhileExpr {
+        Some(Expr::While(Box::new(WhileExpr {
             cond: Box::new(cond),
             body,
             span,
-        }))
+        })))
     }
 
     fn parse_loop_expr(&mut self) -> Option<Expr> {
@@ -1420,12 +1420,12 @@ impl Parser {
         };
         let body = self.parse_expr()?;
         let span = start.merge(expr_span(&body));
-        Some(Expr::Lambda(LambdaExpr {
+        Some(Expr::Lambda(Box::new(LambdaExpr {
             params,
             return_type,
             body: Box::new(body),
             span,
-        }))
+        })))
     }
 
     fn at_eof(&self) -> bool {

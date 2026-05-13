@@ -3,6 +3,7 @@ pub mod data_class_methods;
 pub mod descriptor;
 pub mod emit;
 pub mod expr;
+pub mod jvm_const;
 pub mod jvm_ir;
 pub mod lower;
 #[cfg(test)]

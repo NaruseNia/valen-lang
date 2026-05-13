@@ -1,7 +1,8 @@
+use crate::jvm_const::*;
 use crate::jvm_ir::{ArithOp, JvmMethod, JvmMethodAccess, JvmMethodBody, JvmOp, JvmType};
 
 pub fn generate_equals(class_internal: &str, fields: &[(String, JvmType)]) -> JvmMethod {
-    let obj = JvmType::Object("java/lang/Object".to_string());
+    let obj = JvmType::Object(JVM_OBJECT.to_string());
     let cls = JvmType::Object(class_internal.to_string());
     let locals_before_cast = vec![cls.clone(), obj.clone()];
     let locals_after_cast = vec![cls.clone(), obj.clone(), cls.clone()];
@@ -19,10 +20,7 @@ pub fn generate_equals(class_internal: &str, fields: &[(String, JvmType)]) -> Jv
 
     // if (this == other) return true
     ops.push(JvmOp::LoadThis);
-    ops.push(JvmOp::LoadLocal(
-        1,
-        JvmType::Object("java/lang/Object".to_string()),
-    ));
+    ops.push(JvmOp::LoadLocal(1, JvmType::Object(JVM_OBJECT.to_string())));
     ops.push(JvmOp::IfACmpNe({
         label += 1;
         label
@@ -36,10 +34,7 @@ pub fn generate_equals(class_internal: &str, fields: &[(String, JvmType)]) -> Jv
     });
 
     // if (!(other instanceof ClassName)) return false
-    ops.push(JvmOp::LoadLocal(
-        1,
-        JvmType::Object("java/lang/Object".to_string()),
-    ));
+    ops.push(JvmOp::LoadLocal(1, JvmType::Object(JVM_OBJECT.to_string())));
     ops.push(JvmOp::Instanceof(class_internal.to_string()));
     ops.push(JvmOp::IfNe({
         label += 1;
@@ -55,10 +50,7 @@ pub fn generate_equals(class_internal: &str, fields: &[(String, JvmType)]) -> Jv
 
     // ClassName that = (ClassName) other
     let that_slot = 2u16;
-    ops.push(JvmOp::LoadLocal(
-        1,
-        JvmType::Object("java/lang/Object".to_string()),
-    ));
+    ops.push(JvmOp::LoadLocal(1, JvmType::Object(JVM_OBJECT.to_string())));
     ops.push(JvmOp::Checkcast(class_internal.to_string()));
     ops.push(JvmOp::StoreLocal(
         that_slot,
@@ -85,8 +77,8 @@ pub fn generate_equals(class_internal: &str, fields: &[(String, JvmType)]) -> Jv
         match fty {
             JvmType::Float => {
                 ops.push(JvmOp::InvokeStatic {
-                    owner: "java/lang/Float".to_string(),
-                    name: "compare".to_string(),
+                    owner: JVM_FLOAT.to_string(),
+                    name: COMPARE.to_string(),
                     params: vec![JvmType::Float, JvmType::Float],
                     ret: JvmType::Int,
                 });
@@ -94,8 +86,8 @@ pub fn generate_equals(class_internal: &str, fields: &[(String, JvmType)]) -> Jv
             }
             JvmType::Double => {
                 ops.push(JvmOp::InvokeStatic {
-                    owner: "java/lang/Double".to_string(),
-                    name: "compare".to_string(),
+                    owner: JVM_DOUBLE.to_string(),
+                    name: COMPARE.to_string(),
                     params: vec![JvmType::Double, JvmType::Double],
                     ret: JvmType::Int,
                 });
@@ -103,8 +95,8 @@ pub fn generate_equals(class_internal: &str, fields: &[(String, JvmType)]) -> Jv
             }
             JvmType::Long => {
                 ops.push(JvmOp::InvokeStatic {
-                    owner: "java/lang/Long".to_string(),
-                    name: "compare".to_string(),
+                    owner: JVM_LONG.to_string(),
+                    name: COMPARE.to_string(),
                     params: vec![JvmType::Long, JvmType::Long],
                     ret: JvmType::Int,
                 });
@@ -115,11 +107,11 @@ pub fn generate_equals(class_internal: &str, fields: &[(String, JvmType)]) -> Jv
             }
             _ => {
                 ops.push(JvmOp::InvokeStatic {
-                    owner: "java/util/Objects".to_string(),
-                    name: "equals".to_string(),
+                    owner: JVM_OBJECTS.to_string(),
+                    name: EQUALS.to_string(),
                     params: vec![
-                        JvmType::Object("java/lang/Object".to_string()),
-                        JvmType::Object("java/lang/Object".to_string()),
+                        JvmType::Object(JVM_OBJECT.to_string()),
+                        JvmType::Object(JVM_OBJECT.to_string()),
                     ],
                     ret: JvmType::Boolean,
                 });
@@ -150,8 +142,8 @@ pub fn generate_equals(class_internal: &str, fields: &[(String, JvmType)]) -> Jv
             is_public: true,
             ..Default::default()
         },
-        name: "equals".to_string(),
-        params: vec![JvmType::Object("java/lang/Object".to_string())],
+        name: EQUALS.to_string(),
+        params: vec![JvmType::Object(JVM_OBJECT.to_string())],
         return_type: JvmType::Boolean,
         body: Some(JvmMethodBody { max_locals: 3, ops }),
     }
@@ -179,23 +171,20 @@ pub fn generate_hash_code(class_internal: &str, fields: &[(String, JvmType)]) ->
         });
 
         let (hash_owner, hash_param) = match fty {
-            JvmType::Int => ("java/lang/Integer", JvmType::Int),
-            JvmType::Long => ("java/lang/Long", JvmType::Long),
-            JvmType::Float => ("java/lang/Float", JvmType::Float),
-            JvmType::Double => ("java/lang/Double", JvmType::Double),
-            JvmType::Boolean => ("java/lang/Boolean", JvmType::Boolean),
-            JvmType::Char => ("java/lang/Character", JvmType::Char),
-            JvmType::Byte => ("java/lang/Byte", JvmType::Byte),
-            JvmType::Short => ("java/lang/Short", JvmType::Short),
-            _ => (
-                "java/util/Objects",
-                JvmType::Object("java/lang/Object".to_string()),
-            ),
+            JvmType::Int => (JVM_INTEGER, JvmType::Int),
+            JvmType::Long => (JVM_LONG, JvmType::Long),
+            JvmType::Float => (JVM_FLOAT, JvmType::Float),
+            JvmType::Double => (JVM_DOUBLE, JvmType::Double),
+            JvmType::Boolean => (JVM_BOOLEAN, JvmType::Boolean),
+            JvmType::Char => (JVM_CHARACTER, JvmType::Char),
+            JvmType::Byte => (JVM_BYTE, JvmType::Byte),
+            JvmType::Short => (JVM_SHORT, JvmType::Short),
+            _ => (JVM_OBJECTS, JvmType::Object(JVM_OBJECT.to_string())),
         };
 
         ops.push(JvmOp::InvokeStatic {
             owner: hash_owner.to_string(),
-            name: "hashCode".to_string(),
+            name: HASH_CODE.to_string(),
             params: vec![hash_param],
             ret: JvmType::Int,
         });
@@ -211,7 +200,7 @@ pub fn generate_hash_code(class_internal: &str, fields: &[(String, JvmType)]) ->
             is_public: true,
             ..Default::default()
         },
-        name: "hashCode".to_string(),
+        name: HASH_CODE.to_string(),
         params: vec![],
         return_type: JvmType::Int,
         body: Some(JvmMethodBody { max_locals: 2, ops }),
@@ -223,17 +212,16 @@ pub fn generate_to_string(
     class_simple_name: &str,
     fields: &[(String, JvmType)],
 ) -> JvmMethod {
-    let sb = "java/lang/StringBuilder";
     let mut ops = Vec::new();
 
     // new StringBuilder("ClassName(")
-    ops.push(JvmOp::New(sb.to_string()));
+    ops.push(JvmOp::New(JVM_STRING_BUILDER.to_string()));
     ops.push(JvmOp::Dup);
     ops.push(JvmOp::PushString(format!("{class_simple_name}(")));
     ops.push(JvmOp::InvokeSpecial {
-        owner: sb.to_string(),
-        name: "<init>".to_string(),
-        params: vec![JvmType::Object("java/lang/String".to_string())],
+        owner: JVM_STRING_BUILDER.to_string(),
+        name: INIT.to_string(),
+        params: vec![JvmType::Object(JVM_STRING.to_string())],
         ret: JvmType::Void,
     });
 
@@ -241,20 +229,20 @@ pub fn generate_to_string(
         if i > 0 {
             ops.push(JvmOp::PushString(", ".to_string()));
             ops.push(JvmOp::InvokeVirtual {
-                owner: sb.to_string(),
-                name: "append".to_string(),
-                params: vec![JvmType::Object("java/lang/String".to_string())],
-                ret: JvmType::Object(sb.to_string()),
+                owner: JVM_STRING_BUILDER.to_string(),
+                name: APPEND.to_string(),
+                params: vec![JvmType::Object(JVM_STRING.to_string())],
+                ret: JvmType::Object(JVM_STRING_BUILDER.to_string()),
             });
         }
 
         // "field="
         ops.push(JvmOp::PushString(format!("{fname}=")));
         ops.push(JvmOp::InvokeVirtual {
-            owner: sb.to_string(),
-            name: "append".to_string(),
-            params: vec![JvmType::Object("java/lang/String".to_string())],
-            ret: JvmType::Object(sb.to_string()),
+            owner: JVM_STRING_BUILDER.to_string(),
+            name: APPEND.to_string(),
+            params: vec![JvmType::Object(JVM_STRING.to_string())],
+            ret: JvmType::Object(JVM_STRING_BUILDER.to_string()),
         });
 
         // this.field
@@ -267,39 +255,37 @@ pub fn generate_to_string(
 
         let append_param = sb_append_type(fty);
         ops.push(JvmOp::InvokeVirtual {
-            owner: sb.to_string(),
-            name: "append".to_string(),
+            owner: JVM_STRING_BUILDER.to_string(),
+            name: APPEND.to_string(),
             params: vec![append_param],
-            ret: JvmType::Object(sb.to_string()),
+            ret: JvmType::Object(JVM_STRING_BUILDER.to_string()),
         });
     }
 
     // .append(")").toString()
     ops.push(JvmOp::PushString(")".to_string()));
     ops.push(JvmOp::InvokeVirtual {
-        owner: sb.to_string(),
-        name: "append".to_string(),
-        params: vec![JvmType::Object("java/lang/String".to_string())],
-        ret: JvmType::Object(sb.to_string()),
+        owner: JVM_STRING_BUILDER.to_string(),
+        name: APPEND.to_string(),
+        params: vec![JvmType::Object(JVM_STRING.to_string())],
+        ret: JvmType::Object(JVM_STRING_BUILDER.to_string()),
     });
     ops.push(JvmOp::InvokeVirtual {
-        owner: sb.to_string(),
-        name: "toString".to_string(),
+        owner: JVM_STRING_BUILDER.to_string(),
+        name: TO_STRING.to_string(),
         params: vec![],
-        ret: JvmType::Object("java/lang/String".to_string()),
+        ret: JvmType::Object(JVM_STRING.to_string()),
     });
-    ops.push(JvmOp::Return(JvmType::Object(
-        "java/lang/String".to_string(),
-    )));
+    ops.push(JvmOp::Return(JvmType::Object(JVM_STRING.to_string())));
 
     JvmMethod {
         access: JvmMethodAccess {
             is_public: true,
             ..Default::default()
         },
-        name: "toString".to_string(),
+        name: TO_STRING.to_string(),
         params: vec![],
-        return_type: JvmType::Object("java/lang/String".to_string()),
+        return_type: JvmType::Object(JVM_STRING.to_string()),
         body: Some(JvmMethodBody { max_locals: 1, ops }),
     }
 }
@@ -312,7 +298,7 @@ fn sb_append_type(ty: &JvmType) -> JvmType {
         JvmType::Double => JvmType::Double,
         JvmType::Char => JvmType::Char,
         JvmType::Boolean => JvmType::Boolean,
-        _ => JvmType::Object("java/lang/Object".to_string()),
+        _ => JvmType::Object(JVM_OBJECT.to_string()),
     }
 }
 
@@ -331,7 +317,7 @@ pub fn generate_copy(class_internal: &str, fields: &[(String, JvmType)]) -> JvmM
 
     ops.push(JvmOp::InvokeSpecial {
         owner: class_internal.to_string(),
-        name: "<init>".to_string(),
+        name: INIT.to_string(),
         params: fields.iter().map(|(_, ty)| ty.clone()).collect(),
         ret: JvmType::Void,
     });
@@ -359,10 +345,7 @@ mod tests {
     fn equals_has_correct_signature() {
         let m = generate_equals("Foo", &[("x".into(), JvmType::Int)]);
         assert_eq!(m.name, "equals");
-        assert_eq!(
-            m.params,
-            vec![JvmType::Object("java/lang/Object".to_string())]
-        );
+        assert_eq!(m.params, vec![JvmType::Object(JVM_OBJECT.to_string())]);
         assert_eq!(m.return_type, JvmType::Boolean);
         assert!(m.body.is_some());
     }
@@ -380,10 +363,7 @@ mod tests {
         let m = generate_to_string("Foo", "Foo", &[("x".into(), JvmType::Int)]);
         assert_eq!(m.name, "toString");
         assert!(m.params.is_empty());
-        assert_eq!(
-            m.return_type,
-            JvmType::Object("java/lang/String".to_string())
-        );
+        assert_eq!(m.return_type, JvmType::Object(JVM_STRING.to_string()));
     }
 
     #[test]
