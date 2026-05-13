@@ -13,6 +13,10 @@ struct LoopContext {
     continue_label: Label,
 }
 
+/// Undo entry for a single variable binding: the variable name and its
+/// previous binding (`None` if it was newly introduced in this scope).
+type ScopeUndo = Vec<(SmolStr, Option<(u16, JvmType)>)>;
+
 struct ExprLowering<'a> {
     ops: Vec<JvmOp>,
     locals: IndexMap<SmolStr, (u16, JvmType)>,
@@ -22,6 +26,8 @@ struct ExprLowering<'a> {
     return_ty: JvmType,
     loop_stack: Vec<LoopContext>,
     pkg: Option<&'a [SmolStr]>,
+    /// Undo log stack for lexical scoping.
+    scope_stack: Vec<ScopeUndo>,
 }
 
 /// Lowers a typed method body into JVM bytecode operations.
@@ -42,6 +48,7 @@ pub fn lower_body(
         return_ty: return_ty.clone(),
         loop_stack: Vec::new(),
         pkg,
+        scope_stack: Vec::new(),
     };
 
     if has_self {
@@ -81,9 +88,33 @@ impl<'a> ExprLowering<'a> {
         l
     }
 
+    fn push_scope(&mut self) {
+        self.scope_stack.push(Vec::new());
+    }
+
+    fn pop_scope(&mut self) {
+        if let Some(undo_log) = self.scope_stack.pop() {
+            for (name, prev) in undo_log.into_iter().rev() {
+                match prev {
+                    Some(binding) => {
+                        self.locals.insert(name, binding);
+                    }
+                    None => {
+                        self.locals.shift_remove(&name);
+                    }
+                }
+            }
+        }
+    }
+
     fn alloc_local(&mut self, name: SmolStr, ty: JvmType) -> u16 {
         let slot = self.next_slot;
         self.next_slot += ty.slot_count();
+        // Record undo entry before inserting the new binding.
+        if let Some(undo_log) = self.scope_stack.last_mut() {
+            let prev = self.locals.get(&name).cloned();
+            undo_log.push((name.clone(), prev));
+        }
         self.locals.insert(name, (slot, ty));
         slot
     }
@@ -132,12 +163,14 @@ impl<'a> ExprLowering<'a> {
     }
 
     fn lower_body(&mut self, body: &TypedBody) {
+        self.push_scope();
         for stmt in &body.stmts {
             self.lower_stmt(stmt);
         }
         if let Some(tail) = &body.tail {
             self.lower_expr(tail);
         }
+        self.pop_scope();
     }
 
     fn lower_stmt(&mut self, stmt: &TypedStmt) {
@@ -514,7 +547,9 @@ impl<'a> ExprLowering<'a> {
 
         self.lower_expr(cond);
         self.ops.push(JvmOp::IfEq(else_label));
+        self.push_scope();
         self.lower_body(then_branch);
+        self.pop_scope();
 
         if else_branch.is_some() {
             self.ops.push(JvmOp::Goto(end_label));
@@ -523,7 +558,9 @@ impl<'a> ExprLowering<'a> {
         self.ops.push(JvmOp::Label(else_label));
 
         if let Some(else_expr) = else_branch {
+            self.push_scope();
             self.lower_expr(else_expr);
+            self.pop_scope();
             self.ops.push(JvmOp::Label(end_label));
         }
     }
@@ -551,6 +588,7 @@ impl<'a> ExprLowering<'a> {
                 self.alloc_label()
             };
 
+            self.push_scope();
             self.lower_pattern_check(&arm.pattern, temp_slot, &scrutinee_ty, next_arm);
 
             if let Some(guard) = &arm.guard {
@@ -559,6 +597,7 @@ impl<'a> ExprLowering<'a> {
             }
 
             self.lower_expr(&arm.body);
+            self.pop_scope();
             if !is_last {
                 self.ops.push(JvmOp::Goto(end_label));
                 self.ops.push(JvmOp::Label(next_arm));
@@ -770,7 +809,9 @@ impl<'a> ExprLowering<'a> {
             break_label,
             continue_label,
         });
+        self.push_scope();
         self.lower_body(body);
+        self.pop_scope();
         self.loop_stack.pop();
 
         self.ops.push(JvmOp::Goto(continue_label));
@@ -787,7 +828,9 @@ impl<'a> ExprLowering<'a> {
             break_label,
             continue_label,
         });
+        self.push_scope();
         self.lower_body(body);
+        self.pop_scope();
         self.loop_stack.pop();
 
         self.ops.push(JvmOp::Goto(continue_label));
