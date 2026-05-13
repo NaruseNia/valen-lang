@@ -99,4 +99,5 @@ safe { list.add("item") };  // Unit
 ### Phase 1.5+ 検討
 
 - 方針 A: `unsafe fn` で生呼び出し
+- 方針 B: Java Exception を型付きで catch し、`Result` / ユーザ定義エラーへ明示変換
 - 方針 C: `@catch` attribute で opt-in

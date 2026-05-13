@@ -15,6 +15,42 @@ match value {
 }
 ```
 
+### 9.1.1 match guard
+
+`match` arm は pattern の後に `if` 条件を置ける。guard は pattern が一致し、束縛変数が導入された後に評価される。
+
+```valen
+match user {
+    User(name, age) if age >= 20 => f"adult: {name}",
+    User(name, _) => f"minor: {name}",
+}
+```
+
+guard 式の型は `Bool` でなければならない。guard 内では、その arm の pattern で束縛された名前を参照できる。
+
+guard 付き arm は exhaustive check 上、**無条件に網羅したとは扱わない**。guard が実行時に `false` になりうるためである。
+
+```valen
+match n {
+    x if x >= 0 => "non-negative",
+    // ERROR: negative value が未網羅
+}
+
+match n {
+    x if x >= 0 => "non-negative",
+    _ => "negative",
+}
+```
+
+or パターンに guard を付ける場合、guard は or パターン全体にかかる。
+
+```valen
+match n {
+    2 | 4 | 6 if n < 10 => "small even",
+    _ => "other",
+}
+```
+
 ## 9.2 exhaustive check
 
 - Valen `enum` / `sealed class` hierarchy：**厳密 exhaustive**（非網羅はコンパイルエラー）
