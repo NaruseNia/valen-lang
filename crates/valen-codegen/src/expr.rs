@@ -666,7 +666,7 @@ impl<'a> ExprLowering<'a> {
                     }
                 }
             }
-            Pattern::Or(pats) => {
+            Pattern::Or(pats, _) => {
                 let success_label = self.alloc_label();
                 for (i, pat) in pats.iter().enumerate() {
                     let is_last = i == pats.len() - 1;
@@ -706,7 +706,7 @@ impl<'a> ExprLowering<'a> {
                 let slot = self.alloc_local(at.name.clone(), ty.clone());
                 self.ops.push(JvmOp::StoreLocal(slot, ty));
             }
-            Pattern::Tuple(_) => {
+            Pattern::Tuple(_, _) => {
                 // Valen doesn't have tuple types in MVP
             }
         }

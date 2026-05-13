@@ -197,14 +197,15 @@ impl Parser {
                 || self.at(&TokenKind::Mut) && self.lookahead(1) == &TokenKind::SelfKw
             {
                 let mutable = self.eat(&TokenKind::Mut).is_some();
+                let self_kw_span = self.peek_span();
                 self.expect(TokenKind::SelfKw)?;
                 let self_type = Type::Path(TypePath {
                     segments: vec![TypePathSegment {
                         name: SmolStr::from("Self"),
                         generics: Vec::new(),
-                        span: param_start,
+                        span: self_kw_span,
                     }],
-                    span: param_start,
+                    span: self_kw_span,
                 });
                 let span = param_start.merge(self.prev_span());
                 params.push(Param {
@@ -248,8 +249,12 @@ impl Parser {
             span: start.merge(end),
         });
 
-        if self.eat(&TokenKind::Question).is_some() {
-            ty = Type::Nullable(Box::new(ty));
+        if let Some(q_span) = self.eat(&TokenKind::Question) {
+            let inner_span = type_span(&ty);
+            ty = Type::Nullable {
+                inner: Box::new(ty),
+                span: inner_span.merge(q_span),
+            };
         }
 
         Some(ty)
@@ -689,19 +694,20 @@ impl Parser {
         {
             let op_tok = self.bump();
             let rhs = self.parse_expr()?;
-            let value = match op_tok.0 {
-                TokenKind::Eq => rhs,
-                TokenKind::PlusEq => combine_binary(BinaryOp::Add, lhs.clone(), rhs),
-                TokenKind::MinusEq => combine_binary(BinaryOp::Sub, lhs.clone(), rhs),
-                TokenKind::StarEq => combine_binary(BinaryOp::Mul, lhs.clone(), rhs),
-                TokenKind::SlashEq => combine_binary(BinaryOp::Div, lhs.clone(), rhs),
-                TokenKind::PercentEq => combine_binary(BinaryOp::Rem, lhs.clone(), rhs),
+            let op = match op_tok.0 {
+                TokenKind::Eq => None,
+                TokenKind::PlusEq => Some(BinaryOp::Add),
+                TokenKind::MinusEq => Some(BinaryOp::Sub),
+                TokenKind::StarEq => Some(BinaryOp::Mul),
+                TokenKind::SlashEq => Some(BinaryOp::Div),
+                TokenKind::PercentEq => Some(BinaryOp::Rem),
                 _ => unreachable!(),
             };
-            let span = expr_span(&lhs).merge(expr_span(&value));
+            let span = expr_span(&lhs).merge(expr_span(&rhs));
             return Some(Expr::Assign(AssignExpr {
                 target: Box::new(lhs),
-                value: Box::new(value),
+                op,
+                value: Box::new(rhs),
                 span,
             }));
         }
@@ -720,11 +726,41 @@ impl Parser {
     }
 
     fn parse_and(&mut self) -> Option<Expr> {
-        let mut lhs = self.parse_eq()?;
+        let mut lhs = self.parse_bitor()?;
         while self.at(&TokenKind::AmpAmp) {
             self.bump();
-            let rhs = self.parse_eq()?;
+            let rhs = self.parse_bitor()?;
             lhs = combine_binary(BinaryOp::And, lhs, rhs);
+        }
+        Some(lhs)
+    }
+
+    fn parse_bitor(&mut self) -> Option<Expr> {
+        let mut lhs = self.parse_bitxor()?;
+        while self.at(&TokenKind::Pipe) && !self.at(&TokenKind::PipePipe) {
+            self.bump();
+            let rhs = self.parse_bitxor()?;
+            lhs = combine_binary(BinaryOp::BitOr, lhs, rhs);
+        }
+        Some(lhs)
+    }
+
+    fn parse_bitxor(&mut self) -> Option<Expr> {
+        let mut lhs = self.parse_bitand()?;
+        while self.at(&TokenKind::Caret) {
+            self.bump();
+            let rhs = self.parse_bitand()?;
+            lhs = combine_binary(BinaryOp::BitXor, lhs, rhs);
+        }
+        Some(lhs)
+    }
+
+    fn parse_bitand(&mut self) -> Option<Expr> {
+        let mut lhs = self.parse_eq()?;
+        while self.at(&TokenKind::Amp) && !self.at(&TokenKind::AmpAmp) {
+            self.bump();
+            let rhs = self.parse_eq()?;
+            lhs = combine_binary(BinaryOp::BitAnd, lhs, rhs);
         }
         Some(lhs)
     }
@@ -762,7 +798,7 @@ impl Parser {
     }
 
     fn parse_range(&mut self) -> Option<Expr> {
-        let lhs = self.parse_add()?;
+        let lhs = self.parse_shift()?;
         if self.at(&TokenKind::DotDot) || self.at(&TokenKind::DotDotEq) {
             let inclusive = self.at(&TokenKind::DotDotEq);
             self.bump();
@@ -772,7 +808,7 @@ impl Parser {
                 && !self.at(&TokenKind::Comma)
                 && !self.at_eof()
             {
-                Some(Box::new(self.parse_add()?))
+                Some(Box::new(self.parse_shift()?))
             } else {
                 None
             };
@@ -784,6 +820,21 @@ impl Parser {
                 inclusive,
                 span: start_span.merge(end_span),
             }));
+        }
+        Some(lhs)
+    }
+
+    fn parse_shift(&mut self) -> Option<Expr> {
+        let mut lhs = self.parse_add()?;
+        loop {
+            let op = match self.peek() {
+                TokenKind::Shl => BinaryOp::Shl,
+                TokenKind::Shr => BinaryOp::Shr,
+                _ => break,
+            };
+            self.bump();
+            let rhs = self.parse_add()?;
+            lhs = combine_binary(op, lhs, rhs);
         }
         Some(lhs)
     }
@@ -938,7 +989,7 @@ impl Parser {
                 Some(Expr::Path(valen_ast::Path {
                     segments: vec![valen_ast::PathSegment {
                         name: SmolStr::from("self"),
-                        turbofish: false,
+                        double_colon: false,
                         generics: Vec::new(),
                         span,
                     }],
@@ -980,7 +1031,7 @@ impl Parser {
         let first_name = self.expect_ident()?;
         let mut segments = vec![PathSegment {
             name: first_name,
-            turbofish: false,
+            double_colon: false,
             generics: Vec::new(),
             span: start,
         }];
@@ -990,7 +1041,7 @@ impl Parser {
             let seg_name = self.expect_ident()?;
             segments.push(PathSegment {
                 name: seg_name,
-                turbofish: true,
+                double_colon: true,
                 generics: Vec::new(),
                 span: seg_span,
             });
@@ -1073,11 +1124,13 @@ impl Parser {
     fn parse_pattern(&mut self) -> Option<Pattern> {
         let mut pat = self.parse_pattern_atom()?;
         if self.at(&TokenKind::Pipe) {
+            let start = pattern_span(&pat);
             let mut alternatives = vec![pat];
             while self.eat(&TokenKind::Pipe).is_some() {
                 alternatives.push(self.parse_pattern_atom()?);
             }
-            pat = Pattern::Or(alternatives);
+            let end = alternatives.last().map(pattern_span).unwrap_or(start);
+            pat = Pattern::Or(alternatives, start.merge(end));
         }
         Some(pat)
     }
@@ -1134,7 +1187,7 @@ impl Parser {
         if self.eat(&TokenKind::DoubleColon).is_some() {
             let mut segments = vec![PathSegment {
                 name,
-                turbofish: false,
+                double_colon: false,
                 generics: Vec::new(),
                 span: start,
             }];
@@ -1143,7 +1196,7 @@ impl Parser {
                 let seg_name = self.expect_ident()?;
                 segments.push(PathSegment {
                     name: seg_name,
-                    turbofish: true,
+                    double_colon: true,
                     generics: Vec::new(),
                     span: seg_span,
                 });
@@ -1166,7 +1219,7 @@ impl Parser {
             let path = Path {
                 segments: vec![PathSegment {
                     name: name.clone(),
-                    turbofish: false,
+                    double_colon: false,
                     generics: Vec::new(),
                     span: start,
                 }],
@@ -1531,7 +1584,7 @@ fn expr_span(expr: &Expr) -> Span {
 fn type_span(ty: &Type) -> Span {
     match ty {
         Type::Path(p) => p.span,
-        Type::Nullable(inner) => type_span(inner),
+        Type::Nullable { span, .. } => *span,
         Type::Fn(f) => f.span,
         Type::Tuple(ts) => {
             if let (Some(first), Some(last)) = (ts.first(), ts.last()) {
@@ -1550,21 +1603,9 @@ fn pattern_span(pat: &Pattern) -> Span {
         Pattern::Binding(b) => b.span,
         Pattern::Path(p) => p.span,
         Pattern::Struct(s) => s.span,
-        Pattern::Tuple(ps) => {
-            if let (Some(first), Some(last)) = (ps.first(), ps.last()) {
-                pattern_span(first).merge(pattern_span(last))
-            } else {
-                Span::DUMMY
-            }
-        }
+        Pattern::Tuple(_, s) => *s,
         Pattern::Range(r) => r.span,
-        Pattern::Or(ps) => {
-            if let (Some(first), Some(last)) = (ps.first(), ps.last()) {
-                pattern_span(first).merge(pattern_span(last))
-            } else {
-                Span::DUMMY
-            }
-        }
+        Pattern::Or(_, s) => *s,
         Pattern::At(a) => a.span,
     }
 }

@@ -10,4 +10,3 @@ description = "Valen language AST types"
 
 [dependencies]
 smol_str = { workspace = true }
-indexmap = { workspace = true }
