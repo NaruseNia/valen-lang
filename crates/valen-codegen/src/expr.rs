@@ -164,12 +164,21 @@ impl<'a> ExprLowering<'a> {
                     self.ops.push(JvmOp::PushInt(*n as i32));
                 }
             }
+            TypedExprKind::LongLit(n) => {
+                self.ops.push(JvmOp::PushLong(*n));
+            }
             TypedExprKind::FloatLit(n) => {
                 if matches!(expr.ty, Ty::Prim(PrimTy::Double)) {
                     self.ops.push(JvmOp::PushDouble(*n));
                 } else {
                     self.ops.push(JvmOp::PushFloat(*n as f32));
                 }
+            }
+            TypedExprKind::Float32Lit(n) => {
+                self.ops.push(JvmOp::PushFloat(*n));
+            }
+            TypedExprKind::CharLit(c) => {
+                self.ops.push(JvmOp::PushInt(*c as i32));
             }
             TypedExprKind::StringLit(s) => {
                 self.ops.push(JvmOp::PushString(s.to_string()));
@@ -383,6 +392,9 @@ impl<'a> ExprLowering<'a> {
                 self.ops.push(JvmOp::Bitwise(bop, operand_ty));
             }
             BinaryOp::And | BinaryOp::Or => unreachable!(),
+            BinaryOp::RefEq | BinaryOp::RefNe => {
+                self.lower_comparison(op, &operand_ty);
+            }
         }
     }
 
@@ -425,8 +437,8 @@ impl<'a> ExprLowering<'a> {
             }
             JvmType::Object(_) | JvmType::Array(_) => {
                 let branch = match op {
-                    BinaryOp::Eq => JvmOp::IfACmpNe(false_label),
-                    BinaryOp::Ne => JvmOp::IfACmpEq(false_label),
+                    BinaryOp::Eq | BinaryOp::RefEq => JvmOp::IfACmpNe(false_label),
+                    BinaryOp::Ne | BinaryOp::RefNe => JvmOp::IfACmpEq(false_label),
                     _ => JvmOp::IfACmpNe(false_label),
                 };
                 self.ops.push(branch);
@@ -695,7 +707,10 @@ impl<'a> ExprLowering<'a> {
     fn lower_literal(&mut self, lit: &valen_ast::Literal) {
         match lit {
             valen_ast::Literal::Int(n, _) => self.ops.push(JvmOp::PushInt(*n as i32)),
-            valen_ast::Literal::Float(n, _) => self.ops.push(JvmOp::PushFloat(*n as f32)),
+            valen_ast::Literal::Long(n, _) => self.ops.push(JvmOp::PushLong(*n)),
+            valen_ast::Literal::Float(n, _) => self.ops.push(JvmOp::PushFloat(*n)),
+            valen_ast::Literal::Double(n, _) => self.ops.push(JvmOp::PushDouble(*n)),
+            valen_ast::Literal::Char(c, _) => self.ops.push(JvmOp::PushInt(*c as i32)),
             valen_ast::Literal::String(s, _) => self.ops.push(JvmOp::PushString(s.to_string())),
             valen_ast::Literal::Bool(b, _) => self.ops.push(JvmOp::PushInt(if *b { 1 } else { 0 })),
             valen_ast::Literal::Unit(_) => {}

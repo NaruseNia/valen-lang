@@ -34,7 +34,7 @@ impl Span {
     }
 
     pub fn merge(self, other: Span) -> Span {
-        debug_assert_eq!(
+        assert_eq!(
             self.file_id, other.file_id,
             "cannot merge spans across files"
         );

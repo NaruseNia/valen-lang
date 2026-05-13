@@ -10,6 +10,6 @@ LBrace @ 10..11
 Let @ 12..15
 Ident("x") @ 16..17
 Eq @ 18..19
-FloatLit(3.14) @ 20..24
+DoubleLit(3.14) @ 20..24
 Semi @ 24..25
 RBrace @ 26..27

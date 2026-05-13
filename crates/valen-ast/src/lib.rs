@@ -310,7 +310,10 @@ pub enum Expr {
 #[derive(Debug, Clone)]
 pub enum Literal {
     Int(i64, Span),
-    Float(f64, Span),
+    Long(i64, Span),
+    Float(f32, Span),
+    Double(f64, Span),
+    Char(char, Span),
     String(SmolStr, Span),
     Bool(bool, Span),
     Unit(Span),
@@ -391,6 +394,8 @@ pub enum BinaryOp {
     BitXor,
     Shl,
     Shr,
+    RefEq,
+    RefNe,
 }
 
 #[derive(Debug, Clone)]

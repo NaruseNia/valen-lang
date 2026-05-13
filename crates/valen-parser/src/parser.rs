@@ -848,9 +848,9 @@ impl Parser {
                 self.bump();
                 Some(Expr::Literal(Literal::Int(n, span)))
             }
-            TokenKind::FloatLit(n) => {
+            TokenKind::DoubleLit(n) => {
                 self.bump();
-                Some(Expr::Literal(Literal::Float(n, span)))
+                Some(Expr::Literal(Literal::Double(n, span)))
             }
             TokenKind::StringLit(s) => {
                 self.bump();
@@ -1421,7 +1421,10 @@ fn combine_binary(op: BinaryOp, lhs: Expr, rhs: Expr) -> Expr {
 fn expr_span(expr: &Expr) -> Span {
     match expr {
         Expr::Literal(Literal::Int(_, s)) => *s,
+        Expr::Literal(Literal::Long(_, s)) => *s,
         Expr::Literal(Literal::Float(_, s)) => *s,
+        Expr::Literal(Literal::Double(_, s)) => *s,
+        Expr::Literal(Literal::Char(_, s)) => *s,
         Expr::Literal(Literal::String(_, s)) => *s,
         Expr::Literal(Literal::Bool(_, s)) => *s,
         Expr::Literal(Literal::Unit(s)) => *s,
@@ -1493,7 +1496,10 @@ fn pattern_span(pat: &Pattern) -> Span {
 fn literal_span(lit: &Literal) -> Span {
     match lit {
         Literal::Int(_, s) => *s,
+        Literal::Long(_, s) => *s,
         Literal::Float(_, s) => *s,
+        Literal::Double(_, s) => *s,
+        Literal::Char(_, s) => *s,
         Literal::String(_, s) => *s,
         Literal::Bool(_, s) => *s,
         Literal::Unit(s) => *s,

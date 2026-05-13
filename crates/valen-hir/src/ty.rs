@@ -376,9 +376,24 @@ impl<'hir> TypeChecker<'hir> {
                 ty: Ty::Prim(PrimTy::Int),
                 span: *span,
             },
+            valen_ast::Literal::Long(v, span) => TypedExpr {
+                kind: TypedExprKind::LongLit(*v),
+                ty: Ty::Prim(PrimTy::Long),
+                span: *span,
+            },
             valen_ast::Literal::Float(v, span) => TypedExpr {
+                kind: TypedExprKind::Float32Lit(*v),
+                ty: Ty::Prim(PrimTy::Float),
+                span: *span,
+            },
+            valen_ast::Literal::Double(v, span) => TypedExpr {
                 kind: TypedExprKind::FloatLit(*v),
                 ty: Ty::Prim(PrimTy::Double),
+                span: *span,
+            },
+            valen_ast::Literal::Char(v, span) => TypedExpr {
+                kind: TypedExprKind::CharLit(*v),
+                ty: Ty::Prim(PrimTy::Char),
                 span: *span,
             },
             valen_ast::Literal::String(v, span) => TypedExpr {
@@ -555,6 +570,7 @@ impl<'hir> TypeChecker<'hir> {
                 );
                 Ty::Error
             }
+            BinaryOp::RefEq | BinaryOp::RefNe => Ty::Prim(PrimTy::Bool),
         }
     }
 

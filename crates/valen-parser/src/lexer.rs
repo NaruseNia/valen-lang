@@ -358,7 +358,7 @@ fn map_token(raw: RawTok) -> TokenKind {
         RawTok::Slash => TokenKind::Slash,
         RawTok::Percent => TokenKind::Percent,
         // Literals
-        RawTok::FloatLit(n) => TokenKind::FloatLit(n),
+        RawTok::FloatLit(n) => TokenKind::DoubleLit(n),
         RawTok::IntLit(n) => TokenKind::IntLit(n),
         RawTok::StringLit(s) => TokenKind::StringLit(s),
         RawTok::Ident(s) => TokenKind::Ident(s),

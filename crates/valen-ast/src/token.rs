@@ -9,7 +9,9 @@ use smol_str::SmolStr;
 pub enum TokenKind {
     // Literals
     IntLit(i64),
-    FloatLit(f64),
+    LongLit(i64),
+    FloatLit(f32),
+    DoubleLit(f64),
     StringLit(SmolStr),
     FStringLit(SmolStr),
     CharLit(char),
@@ -81,7 +83,9 @@ pub enum TokenKind {
     // Operators
     Eq,
     EqEq,
+    EqEqEq,
     NotEq,
+    NotEqEq,
     Lt,
     Le,
     Gt,
