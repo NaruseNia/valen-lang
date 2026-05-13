@@ -96,30 +96,30 @@ fn run_frontend_pipeline(
 
     // --- Parse ---
     let result = valen_parser::parse(source, file_id);
+    emit_diagnostics(&result.diagnostics, path, &line_idx);
     if result.diagnostics.has_errors() {
-        emit_diagnostics(&result.diagnostics, path, &line_idx);
         anyhow::bail!("parse errors in {}", path.display());
     }
 
     // --- Resolve ---
     let resolve_result = valen_hir::resolve::resolve(&result.items);
+    emit_diagnostics(&resolve_result.diagnostics, path, &line_idx);
     if resolve_result.diagnostics.has_errors() {
-        emit_diagnostics(&resolve_result.diagnostics, path, &line_idx);
         anyhow::bail!("resolve errors in {}", path.display());
     }
     let hir = resolve_result.hir;
 
     // --- Type check ---
     let tc = valen_hir::ty::type_check(&hir, &result.items);
+    emit_diagnostics(&tc.diagnostics, path, &line_idx);
     if tc.diagnostics.has_errors() {
-        emit_diagnostics(&tc.diagnostics, path, &line_idx);
         anyhow::bail!("type errors in {}", path.display());
     }
 
     // --- Coherence ---
     let coherence_result = valen_hir::coherence::check_coherence(&hir, &[]);
+    emit_diagnostics(&coherence_result.diagnostics, path, &line_idx);
     if coherence_result.diagnostics.has_errors() {
-        emit_diagnostics(&coherence_result.diagnostics, path, &line_idx);
         anyhow::bail!("coherence errors in {}", path.display());
     }
 

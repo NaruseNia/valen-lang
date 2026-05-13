@@ -63,6 +63,15 @@ pub fn emit_class(jvm_class: &JvmClass) -> Result<ClassFileOutput, CodegenError>
         });
     }
 
+    if let Some(ref sf) = jvm_class.source_file {
+        let sf_name = cp.add_utf8("SourceFile")?;
+        let sf_index = cp.add_utf8(sf)?;
+        attributes.push(Attribute::SourceFile {
+            name_index: sf_name,
+            source_file_index: sf_index,
+        });
+    }
+
     if jvm_class.is_record {
         let record_name = cp.add_utf8("Record")?;
         let mut records = Vec::new();
@@ -548,7 +557,7 @@ fn emit_op(
             vec![Instruction::Ldc2_w(idx)]
         }
         JvmOp::PushFloat(n) => {
-            if *n == 0.0 {
+            if n.to_bits() == 0 {
                 vec![Instruction::Fconst_0]
             } else if *n == 1.0 {
                 vec![Instruction::Fconst_1]
@@ -560,7 +569,7 @@ fn emit_op(
             }
         }
         JvmOp::PushDouble(n) => {
-            if *n == 0.0 {
+            if n.to_bits() == 0 {
                 vec![Instruction::Dconst_0]
             } else if *n == 1.0 {
                 vec![Instruction::Dconst_1]
