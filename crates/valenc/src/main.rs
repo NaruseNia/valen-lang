@@ -84,43 +84,60 @@ struct FrontendResult {
     bodies: indexmap::IndexMap<valen_hir::DefId, valen_hir::TypedBody>,
 }
 
-/// Run parse → resolve → type_check → coherence and report all diagnostics.
-///
-/// Returns `Ok(FrontendResult)` if no errors, `Err` on the first phase that fails.
-fn run_frontend_pipeline(
-    source: &str,
-    file_id: FileId,
-    path: &std::path::Path,
-) -> anyhow::Result<FrontendResult> {
-    let line_idx = LineIndex::new(source);
+/// Parse all input files, merge AST items, then run resolve → type_check → coherence.
+fn run_multi_file_pipeline(inputs: &[PathBuf]) -> anyhow::Result<FrontendResult> {
+    let mut all_items: Vec<valen_ast::Item> = Vec::new();
+    let mut line_indexes: Vec<LineIndex> = Vec::new();
+    let mut had_parse_errors = false;
 
-    // --- Parse ---
-    let result = valen_parser::parse(source, file_id);
-    emit_diagnostics(&result.diagnostics, path, &line_idx);
-    if result.diagnostics.has_errors() {
-        anyhow::bail!("parse errors in {}", path.display());
+    for (idx, input) in inputs.iter().enumerate() {
+        let source = std::fs::read_to_string(input)?;
+        let file_id = FileId(idx as u32);
+        let line_idx = LineIndex::new(&source);
+        let result = valen_parser::parse(&source, file_id);
+        emit_diagnostics(&result.diagnostics, input, &line_idx);
+        if result.diagnostics.has_errors() {
+            had_parse_errors = true;
+        }
+        all_items.extend(result.items);
+        line_indexes.push(line_idx);
+    }
+    if had_parse_errors {
+        anyhow::bail!("parse errors");
     }
 
-    // --- Resolve ---
-    let resolve_result = valen_hir::resolve::resolve(&result.items);
-    emit_diagnostics(&resolve_result.diagnostics, path, &line_idx);
+    let first_path = inputs
+        .first()
+        .map(|p| p.as_path())
+        .unwrap_or(std::path::Path::new("<unknown>"));
+    let first_line_idx = line_indexes.first();
+
+    // --- Resolve (merged) ---
+    let resolve_result = valen_hir::resolve::resolve(&all_items);
+    if let Some(li) = first_line_idx {
+        emit_diagnostics(&resolve_result.diagnostics, first_path, li);
+    }
     if resolve_result.diagnostics.has_errors() {
-        anyhow::bail!("resolve errors in {}", path.display());
+        anyhow::bail!("resolve errors");
     }
     let hir = resolve_result.hir;
 
-    // --- Type check ---
-    let tc = valen_hir::ty::type_check(&hir, &result.items);
-    emit_diagnostics(&tc.diagnostics, path, &line_idx);
+    // --- Type check (merged) ---
+    let tc = valen_hir::ty::type_check(&hir, &all_items);
+    if let Some(li) = first_line_idx {
+        emit_diagnostics(&tc.diagnostics, first_path, li);
+    }
     if tc.diagnostics.has_errors() {
-        anyhow::bail!("type errors in {}", path.display());
+        anyhow::bail!("type errors");
     }
 
     // --- Coherence ---
     let coherence_result = valen_hir::coherence::check_coherence(&hir, &[]);
-    emit_diagnostics(&coherence_result.diagnostics, path, &line_idx);
+    if let Some(li) = first_line_idx {
+        emit_diagnostics(&coherence_result.diagnostics, first_path, li);
+    }
     if coherence_result.diagnostics.has_errors() {
-        anyhow::bail!("coherence errors in {}", path.display());
+        anyhow::bail!("coherence errors");
     }
 
     Ok(FrontendResult {
@@ -174,37 +191,35 @@ fn main() -> anyhow::Result<()> {
 fn compile(inputs: &[PathBuf], out_dir: &PathBuf) -> anyhow::Result<()> {
     std::fs::create_dir_all(out_dir)?;
 
-    for (idx, input) in inputs.iter().enumerate() {
-        let source = std::fs::read_to_string(input)?;
-        let file_id = FileId(idx as u32);
+    let frontend = run_multi_file_pipeline(inputs)?;
 
-        let frontend = run_frontend_pipeline(&source, file_id, input)?;
-
-        let outputs = valen_codegen::compile_hir(&frontend.hir, &frontend.bodies)?;
-        for output in &outputs {
-            let parts: Vec<&str> = output.internal_name.split('/').collect();
-            if parts.len() > 1 {
-                let dir = out_dir.join(parts[..parts.len() - 1].join("/"));
-                std::fs::create_dir_all(&dir)?;
-            }
-            let class_path = out_dir.join(format!("{}.class", output.internal_name));
-            std::fs::write(&class_path, &output.bytes)?;
-            println!("  {} -> {}", input.display(), class_path.display());
+    let outputs = valen_codegen::compile_hir(&frontend.hir, &frontend.bodies)?;
+    for output in &outputs {
+        let parts: Vec<&str> = output.internal_name.split('/').collect();
+        if parts.len() > 1 {
+            let dir = out_dir.join(parts[..parts.len() - 1].join("/"));
+            std::fs::create_dir_all(&dir)?;
         }
+        let class_path = out_dir.join(format!("{}.class", output.internal_name));
+        std::fs::write(&class_path, &output.bytes)?;
+        println!("  {} -> {}", input_display(inputs), class_path.display());
     }
 
     Ok(())
 }
 
 fn check(inputs: &[PathBuf]) -> anyhow::Result<()> {
-    for (idx, input) in inputs.iter().enumerate() {
-        let source = std::fs::read_to_string(input)?;
-        let file_id = FileId(idx as u32);
-
-        run_frontend_pipeline(&source, file_id, input)?;
-
+    run_multi_file_pipeline(inputs)?;
+    for input in inputs {
         println!("  {} OK", input.display());
     }
-
     Ok(())
+}
+
+fn input_display(inputs: &[PathBuf]) -> String {
+    if inputs.len() == 1 {
+        inputs[0].display().to_string()
+    } else {
+        format!("{} files", inputs.len())
+    }
 }

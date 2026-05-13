@@ -39,6 +39,7 @@ pub fn class_with_params(
             }),
             vis,
             span: span(),
+            package: None,
         },
     );
     hir
@@ -57,6 +58,7 @@ pub fn data_class(name: &str, params: Vec<CtorParamDef>) -> Hir {
             }),
             vis: Vis::Pub,
             span: span(),
+            package: None,
         },
     );
     hir
@@ -85,6 +87,7 @@ pub fn class_with_method(
             }),
             vis: Vis::Pub,
             span: span(),
+            package: None,
         },
     );
 
@@ -102,6 +105,7 @@ pub fn class_with_method(
             }),
             vis: Vis::Pub,
             span: span(),
+            package: None,
         },
     );
     hir
@@ -145,6 +149,7 @@ pub fn enum_def(name: &str, variants: Vec<EnumVariantDef>) -> Hir {
             kind: DefKind::Enum(EnumDef { variants }),
             vis: Vis::Pub,
             span: span(),
+            package: None,
         },
     );
     hir

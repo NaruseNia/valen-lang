@@ -1,0 +1,40 @@
+package valen.core;
+
+// --- Option ---
+
+pub enum Option<T> {
+    Some(value: T),
+    None,
+}
+
+// --- Result ---
+
+pub enum Result<T, E> {
+    Ok(value: T),
+    Err(error: E),
+}
+
+// --- Error trait ---
+
+pub trait Error {
+    fn message(self) -> String;
+}
+
+// --- Iterator trait ---
+
+pub trait Iterator<T> {
+    fn next(mut self) -> Option<T>;
+}
+
+// --- JavaException ---
+
+pub data class JavaException(
+    pub message: String,
+    pub class_name: String,
+);
+
+impl Error for JavaException {
+    fn message(self) -> String {
+        self.message
+    }
+}

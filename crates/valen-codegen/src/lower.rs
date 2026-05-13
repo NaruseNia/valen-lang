@@ -15,10 +15,10 @@ use crate::JvmVersion;
 
 /// Lowers an entire HIR module into a list of JVM class IR nodes.
 pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<DefId, TypedBody>) -> Vec<JvmClass> {
-    let pkg = hir.package.as_deref();
     let mut classes = Vec::new();
 
     for (_id, def) in &hir.defs {
+        let pkg = def.package.as_deref().or(hir.package.as_deref());
         let source_file = Some(format!("{}.vln", def.name));
         match &def.kind {
             DefKind::Class(class_def) => {
@@ -579,6 +579,7 @@ mod tests {
                     end: 0,
                     file_id: FileId(0),
                 },
+                package: None,
             },
         );
         hir
@@ -681,6 +682,7 @@ mod tests {
                     end: 0,
                     file_id: FileId(0),
                 },
+                package: None,
             },
         );
 
@@ -736,6 +738,7 @@ mod tests {
                     end: 0,
                     file_id: FileId(0),
                 },
+                package: None,
             },
         );
 
@@ -757,6 +760,7 @@ mod tests {
                     end: 0,
                     file_id: FileId(0),
                 },
+                package: None,
             },
         );
 
@@ -801,6 +805,7 @@ mod tests {
                     end: 0,
                     file_id: FileId(0),
                 },
+                package: None,
             },
         );
 
@@ -871,6 +876,7 @@ mod tests {
                     end: 0,
                     file_id: FileId(0),
                 },
+                package: None,
             },
         );
 

@@ -1244,6 +1244,7 @@ mod tests {
                     end: 0,
                     file_id: FileId(0),
                 },
+                package: None,
             },
         );
 

@@ -17,6 +17,7 @@ pub struct Resolver {
     hir: Hir,
     scope: Scope,
     diagnostics: Diagnostics,
+    current_package: Option<Vec<SmolStr>>,
 }
 
 #[derive(Debug, Default)]
@@ -48,6 +49,7 @@ pub fn resolve(items: &[Item]) -> ResolveResult {
         hir: Hir::default(),
         scope: Scope::default(),
         diagnostics: Diagnostics::new(),
+        current_package: None,
     };
     resolver.resolve_items(items);
     ResolveResult {
@@ -72,12 +74,7 @@ impl Resolver {
     }
 
     fn resolve_items(&mut self, items: &[Item]) {
-        for item in items {
-            if let Item::Package(pkg) = item {
-                self.hir.package = Some(pkg.path.clone());
-            }
-        }
-
+        // Collect imports (from all files)
         for item in items {
             if let Item::Import(imp) = item {
                 let short = imp
@@ -91,8 +88,12 @@ impl Resolver {
 
         self.hir.imports = self.scope.imports.clone();
 
-        // First pass: register all top-level names
+        // First pass: register all top-level names, tracking current package
         for item in items {
+            if let Item::Package(pkg) = item {
+                self.current_package = Some(pkg.path.clone());
+                self.hir.package = Some(pkg.path.clone());
+            }
             self.register_item(item);
         }
 
@@ -141,6 +142,7 @@ impl Resolver {
                     kind: DefKind::Fn(self.lower_fn(f)),
                     vis: lower_vis(f.visibility),
                     span: f.span,
+                    package: self.current_package.clone(),
                 };
                 self.hir.defs.insert(id, def);
                 self.define_name(f.name.clone(), id, f.span);
@@ -157,6 +159,7 @@ impl Resolver {
                             kind: DefKind::Fn(self.lower_fn(m)),
                             vis: lower_vis(m.visibility),
                             span: m.span,
+                            package: self.current_package.clone(),
                         };
                         self.hir.defs.insert(mid, mdef);
                         method_ids.push(mid);
@@ -174,6 +177,7 @@ impl Resolver {
                     }),
                     vis: lower_vis(c.visibility),
                     span: c.span,
+                    package: self.current_package.clone(),
                 };
                 self.hir.defs.insert(id, def);
                 self.define_name(c.name.clone(), id, c.span);
@@ -188,6 +192,7 @@ impl Resolver {
                     }),
                     vis: lower_vis(dc.visibility),
                     span: dc.span,
+                    package: self.current_package.clone(),
                 };
                 self.hir.defs.insert(id, def);
                 self.define_name(dc.name.clone(), id, dc.span);
@@ -217,6 +222,7 @@ impl Resolver {
                     kind: DefKind::Enum(EnumDef { variants }),
                     vis: lower_vis(e.visibility),
                     span: e.span,
+                    package: self.current_package.clone(),
                 };
                 self.hir.defs.insert(id, def);
                 self.define_name(e.name.clone(), id, e.span);
@@ -233,6 +239,7 @@ impl Resolver {
                             kind: DefKind::Fn(self.lower_fn(m)),
                             vis: Vis::Pub,
                             span: m.span,
+                            package: self.current_package.clone(),
                         };
                         self.hir.defs.insert(mid, mdef);
                         method_ids.push(mid);
@@ -246,6 +253,7 @@ impl Resolver {
                     }),
                     vis: lower_vis(t.visibility),
                     span: t.span,
+                    package: self.current_package.clone(),
                 };
                 self.hir.defs.insert(id, def);
                 self.define_name(t.name.clone(), id, t.span);
@@ -262,6 +270,7 @@ impl Resolver {
                             kind: DefKind::Fn(self.lower_fn(m)),
                             vis: Vis::Pub,
                             span: m.span,
+                            package: self.current_package.clone(),
                         };
                         self.hir.defs.insert(mid, mdef);
                         method_ids.push(mid);
@@ -284,6 +293,7 @@ impl Resolver {
                     }),
                     vis: Vis::Internal,
                     span: imp.span,
+                    package: self.current_package.clone(),
                 };
                 self.hir.defs.insert(id, def);
             }
@@ -295,6 +305,7 @@ impl Resolver {
                     kind: DefKind::TypeAlias,
                     vis: lower_vis(ta.visibility),
                     span: ta.span,
+                    package: self.current_package.clone(),
                 };
                 self.hir.defs.insert(id, def);
                 self.define_name(ta.name.clone(), id, ta.span);
