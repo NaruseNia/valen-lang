@@ -165,3 +165,19 @@ impl Diagnostics {
         self.entries.is_empty()
     }
 }
+
+impl<'a> IntoIterator for &'a Diagnostics {
+    type Item = &'a Diagnostic;
+    type IntoIter = std::slice::Iter<'a, Diagnostic>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.entries.iter()
+    }
+}
+
+impl IntoIterator for Diagnostics {
+    type Item = Diagnostic;
+    type IntoIter = std::vec::IntoIter<Diagnostic>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.entries.into_iter()
+    }
+}

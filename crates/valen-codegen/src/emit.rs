@@ -287,7 +287,7 @@ fn emit_body(
             }
             JvmOp::StubBody => {
                 pending_label = false;
-                let exc_class = cp.add_class("java/lang/UnsupportedOperationException")?;
+                let exc_class = cp.add_class(crate::jvm_const::JVM_UNSUPPORTED_OP)?;
                 let exc_init = cp.add_method_ref(exc_class, "<init>", "(Ljava/lang/String;)V")?;
                 let msg = cp.add_string("not yet implemented")?;
                 instructions.push(Instruction::New(exc_class));

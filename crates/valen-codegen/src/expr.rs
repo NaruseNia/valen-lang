@@ -3,6 +3,7 @@ use smol_str::SmolStr;
 use valen_ast::{BinaryOp, UnaryOp};
 use valen_hir::{PrimTy, Ty, TypedBody, TypedExpr, TypedExprKind, TypedStmt, TypedStringPart};
 
+use crate::jvm_const::*;
 use crate::jvm_ir::{ArithOp, BitwiseOp, CmpKind, JvmMethodBody, JvmOp, JvmType, Label};
 
 struct LoopContext {
@@ -107,7 +108,7 @@ impl<'a> ExprLowering<'a> {
                 PrimTy::Char => JvmType::Char,
                 PrimTy::Byte => JvmType::Byte,
                 PrimTy::Short => JvmType::Short,
-                PrimTy::String => JvmType::Object("java/lang/String".to_string()),
+                PrimTy::String => JvmType::Object(JVM_STRING.to_string()),
                 PrimTy::Unit => JvmType::Void,
                 PrimTy::Nothing => JvmType::Void,
             },
@@ -122,8 +123,8 @@ impl<'a> ExprLowering<'a> {
                     None => inner_jvm,
                 }
             }
-            Ty::Fn(_, _) => JvmType::Object("java/lang/Object".to_string()),
-            Ty::Error => JvmType::Object("java/lang/Object".to_string()),
+            Ty::Fn(_, _) => JvmType::Object(JVM_OBJECT.to_string()),
+            Ty::Error => JvmType::Object(JVM_OBJECT.to_string()),
         }
     }
 
@@ -588,9 +589,9 @@ impl<'a> ExprLowering<'a> {
                     }
                     JvmType::Object(_) => {
                         self.ops.push(JvmOp::InvokeVirtual {
-                            owner: "java/lang/Object".to_string(),
-                            name: "equals".to_string(),
-                            params: vec![JvmType::Object("java/lang/Object".to_string())],
+                            owner: JVM_OBJECT.to_string(),
+                            name: EQUALS.to_string(),
+                            params: vec![JvmType::Object(JVM_OBJECT.to_string())],
                             ret: JvmType::Boolean,
                         });
                         self.ops.push(JvmOp::IfEq(fail_label));
@@ -648,7 +649,7 @@ impl<'a> ExprLowering<'a> {
                     // TODO(#021): field type is hardcoded to Object — should resolve actual
                     // field types from the variant definition (requires passing enum variant
                     // type information through pattern lowering).
-                    let field_ty = JvmType::Object("java/lang/Object".to_string());
+                    let field_ty = JvmType::Object(JVM_OBJECT.to_string());
                     self.ops.push(JvmOp::GetField {
                         owner: variant_internal.clone(),
                         name: field.name.to_string(),
@@ -791,12 +792,11 @@ impl<'a> ExprLowering<'a> {
     }
 
     fn lower_string_interp(&mut self, parts: &[TypedStringPart]) {
-        let sb = "java/lang/StringBuilder";
-        self.ops.push(JvmOp::New(sb.to_string()));
+        self.ops.push(JvmOp::New(JVM_STRING_BUILDER.to_string()));
         self.ops.push(JvmOp::Dup);
         self.ops.push(JvmOp::InvokeSpecial {
-            owner: sb.to_string(),
-            name: "<init>".to_string(),
+            owner: JVM_STRING_BUILDER.to_string(),
+            name: INIT.to_string(),
             params: vec![],
             ret: JvmType::Void,
         });
@@ -806,30 +806,30 @@ impl<'a> ExprLowering<'a> {
                 TypedStringPart::Text(s) => {
                     self.ops.push(JvmOp::PushString(s.to_string()));
                     self.ops.push(JvmOp::InvokeVirtual {
-                        owner: sb.to_string(),
-                        name: "append".to_string(),
-                        params: vec![JvmType::Object("java/lang/String".to_string())],
-                        ret: JvmType::Object(sb.to_string()),
+                        owner: JVM_STRING_BUILDER.to_string(),
+                        name: APPEND.to_string(),
+                        params: vec![JvmType::Object(JVM_STRING.to_string())],
+                        ret: JvmType::Object(JVM_STRING_BUILDER.to_string()),
                     });
                 }
                 TypedStringPart::Expr(expr) => {
                     self.lower_expr(expr);
                     let append_ty = self.sb_append_type(&expr.ty);
                     self.ops.push(JvmOp::InvokeVirtual {
-                        owner: sb.to_string(),
-                        name: "append".to_string(),
+                        owner: JVM_STRING_BUILDER.to_string(),
+                        name: APPEND.to_string(),
                         params: vec![append_ty],
-                        ret: JvmType::Object(sb.to_string()),
+                        ret: JvmType::Object(JVM_STRING_BUILDER.to_string()),
                     });
                 }
             }
         }
 
         self.ops.push(JvmOp::InvokeVirtual {
-            owner: sb.to_string(),
-            name: "toString".to_string(),
+            owner: JVM_STRING_BUILDER.to_string(),
+            name: TO_STRING.to_string(),
             params: vec![],
-            ret: JvmType::Object("java/lang/String".to_string()),
+            ret: JvmType::Object(JVM_STRING.to_string()),
         });
     }
 
@@ -841,7 +841,7 @@ impl<'a> ExprLowering<'a> {
             Ty::Prim(PrimTy::Double) => JvmType::Double,
             Ty::Prim(PrimTy::Char) => JvmType::Char,
             Ty::Prim(PrimTy::Bool) => JvmType::Boolean,
-            _ => JvmType::Object("java/lang/Object".to_string()),
+            _ => JvmType::Object(JVM_OBJECT.to_string()),
         }
     }
 }
