@@ -53,6 +53,7 @@ pub enum TokenKind {
     True,
     False,
     As,
+    Safe,
     // Reserved for future
     Suspend,
     Async,

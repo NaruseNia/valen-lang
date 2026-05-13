@@ -295,6 +295,7 @@ fn emit_body(cp: &mut ConstantPool, body: &JvmMethodBody) -> Result<EmitBodyResu
                     });
                     pending_label = false;
                 }
+                stack = frame_stack.iter().map(|t| t.slot_count() as i32).sum();
             }
             JvmOp::StubBody => {
                 pending_label = false;
