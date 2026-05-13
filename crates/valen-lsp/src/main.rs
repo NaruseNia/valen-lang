@@ -3,12 +3,9 @@
 //! MVP: diagnostics (parse + type errors) and goto-definition.
 //! Uses async-lsp with the omnitrait `LanguageServer` API.
 
-mod convert;
-mod server;
-
 use async_lsp::MainLoop;
-use server::ServerState;
 use tower::ServiceBuilder;
+use valen_lsp::server::ServerState;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

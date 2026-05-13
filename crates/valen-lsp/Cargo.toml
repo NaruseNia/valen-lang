@@ -8,6 +8,10 @@ license.workspace = true
 repository.workspace = true
 description = "Valen language server (LSP)"
 
+[lib]
+name = "valen_lsp"
+path = "src/lib.rs"
+
 [[bin]]
 name = "valen-lsp"
 path = "src/main.rs"

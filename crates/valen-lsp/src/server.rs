@@ -43,36 +43,8 @@ impl ServerState {
     }
 
     fn analyze_and_publish(&mut self, uri: Url, text: String, version: i32) {
-        let line_index = convert::LineIndex::new(&text);
-        let file_id = valen_ast::FileId(0);
-
-        let parse_result = valen_parser::parse(&text, file_id);
-        let mut diags = convert::to_lsp_diagnostics(&parse_result.diagnostics, &line_index);
-
-        let resolve_result = valen_hir::resolve::resolve(&parse_result.items);
-        diags.extend(convert::to_lsp_diagnostics(
-            &resolve_result.diagnostics,
-            &line_index,
-        ));
-
-        let hir = if !resolve_result.diagnostics.has_errors() {
-            let tc = valen_hir::ty::type_check(&resolve_result.hir, &parse_result.items);
-            diags.extend(convert::to_lsp_diagnostics(&tc.diagnostics, &line_index));
-            Some(resolve_result.hir)
-        } else {
-            Some(resolve_result.hir)
-        };
-
-        self.documents.insert(
-            uri.clone(),
-            DocumentState {
-                text,
-                line_index,
-                items: parse_result.items,
-                hir,
-            },
-        );
-
+        let (doc_state, diags) = analyze_document(&text);
+        self.documents.insert(uri.clone(), doc_state);
         self.client
             .publish_diagnostics(PublishDiagnosticsParams {
                 uri,
@@ -101,7 +73,40 @@ impl ServerState {
     }
 }
 
-fn extract_word_at(text: &str, offset: u32) -> Option<&str> {
+/// Run the full analysis pipeline on a source text, returning document state and LSP diagnostics.
+pub fn analyze_document(text: &str) -> (DocumentState, Vec<async_lsp::lsp_types::Diagnostic>) {
+    let line_index = convert::LineIndex::new(text);
+    let file_id = valen_ast::FileId(0);
+
+    let parse_result = valen_parser::parse(text, file_id);
+    let mut diags = convert::to_lsp_diagnostics(&parse_result.diagnostics, &line_index);
+
+    let resolve_result = valen_hir::resolve::resolve(&parse_result.items);
+    diags.extend(convert::to_lsp_diagnostics(
+        &resolve_result.diagnostics,
+        &line_index,
+    ));
+
+    let hir = if !resolve_result.diagnostics.has_errors() {
+        let tc = valen_hir::ty::type_check(&resolve_result.hir, &parse_result.items);
+        diags.extend(convert::to_lsp_diagnostics(&tc.diagnostics, &line_index));
+        Some(resolve_result.hir)
+    } else {
+        Some(resolve_result.hir)
+    };
+
+    let doc = DocumentState {
+        text: text.to_string(),
+        line_index,
+        items: parse_result.items,
+        hir,
+    };
+
+    (doc, diags)
+}
+
+/// Extract the identifier word at the given byte offset.
+pub fn extract_word_at(text: &str, offset: u32) -> Option<&str> {
     let bytes = text.as_bytes();
     let pos = offset as usize;
     if pos >= bytes.len() || (!bytes[pos].is_ascii_alphanumeric() && bytes[pos] != b'_') {
