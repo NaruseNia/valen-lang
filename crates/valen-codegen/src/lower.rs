@@ -211,7 +211,11 @@ fn generate_ctor(class_internal: &str, super_class: &str, fields: &[JvmField]) -
         name: INIT.to_string(),
         params: fields.iter().map(|f| f.ty.clone()).collect(),
         return_type: JvmType::Void,
-        body: Some(JvmMethodBody { max_locals, ops }),
+        body: Some(JvmMethodBody {
+            max_locals,
+            ops,
+            exception_handlers: vec![],
+        }),
     }
 }
 
@@ -235,6 +239,7 @@ fn generate_getter(class_internal: &str, field_name: &str, field_ty: &JvmType) -
                 },
                 JvmOp::Return(field_ty.clone()),
             ],
+            exception_handlers: vec![],
         }),
     }
 }
@@ -286,6 +291,7 @@ fn lower_method(
         Some(JvmMethodBody {
             max_locals,
             ops: vec![JvmOp::StubBody],
+            exception_handlers: vec![],
         })
     };
 
@@ -488,6 +494,7 @@ fn lower_unit_variant(
                 },
                 JvmOp::Return(JvmType::Void),
             ],
+            exception_handlers: vec![],
         }),
     };
 
@@ -517,6 +524,7 @@ fn lower_unit_variant(
                 },
                 JvmOp::Return(JvmType::Void),
             ],
+            exception_handlers: vec![],
         }),
     };
 

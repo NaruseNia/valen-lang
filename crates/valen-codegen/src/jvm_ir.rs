@@ -140,6 +140,21 @@ pub struct JvmMethodAccess {
 pub struct JvmMethodBody {
     pub max_locals: u16,
     pub ops: Vec<JvmOp>,
+    /// Exception handlers for try-catch blocks (maps to the Code attribute's exception_table).
+    pub exception_handlers: Vec<ExceptionHandler>,
+}
+
+/// JVM exception handler entry (metadata in the Code attribute's exception_table).
+#[derive(Debug, Clone)]
+pub struct ExceptionHandler {
+    /// Label marking the start of the try region (inclusive).
+    pub start: Label,
+    /// Label marking the end of the try region (exclusive).
+    pub end: Label,
+    /// Label marking the catch handler entry point.
+    pub handler: Label,
+    /// Internal name of the caught exception class, or `None` for catch-all (finally).
+    pub catch_type: Option<String>,
 }
 
 /// A single JVM bytecode-level operation in the IR.

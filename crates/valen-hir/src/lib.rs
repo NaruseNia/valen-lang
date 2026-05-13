@@ -574,6 +574,9 @@ pub enum TypedExprKind {
         inclusive: bool,
     },
     StringInterp(Vec<TypedStringPart>),
+    /// A `safe {}` block that catches JVM exceptions at runtime.
+    /// The body is lowered into a try-catch in codegen.
+    Safe(TypedBody),
     Error,
 }
 

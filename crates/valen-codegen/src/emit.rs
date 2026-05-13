@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use ristretto_classfile::attributes::{
-    Attribute, Instruction, Record, StackFrame, VerificationType,
+    Attribute, ExceptionTableEntry, Instruction, Record, StackFrame, VerificationType,
 };
 use ristretto_classfile::{
     BaseType, ClassAccessFlags, ClassFile, ConstantPool, Field, FieldAccessFlags, FieldType,
@@ -225,7 +225,7 @@ fn emit_method(
 
     let attributes = match &method.body {
         Some(body) => {
-            let (instructions, max_stack, stack_frames) = emit_body(cp, body)?;
+            let (instructions, max_stack, stack_frames, exception_table) = emit_body(cp, body)?;
             let mut code_attrs = Vec::new();
             if !stack_frames.is_empty() {
                 let smt_name = cp.add_utf8("StackMapTable")?;
@@ -239,7 +239,7 @@ fn emit_method(
                 max_stack,
                 max_locals: body.max_locals,
                 code: instructions,
-                exception_table: vec![],
+                exception_table,
                 attributes: code_attrs,
             }]
         }
@@ -260,10 +260,15 @@ struct FrameInfo {
     stack: Vec<JvmType>,
 }
 
-fn emit_body(
-    cp: &mut ConstantPool,
-    body: &JvmMethodBody,
-) -> Result<(Vec<Instruction>, u16, Vec<StackFrame>), CodegenError> {
+/// Result tuple from `emit_body`: (instructions, max_stack, stack_frames, exception_table).
+type EmitBodyResult = (
+    Vec<Instruction>,
+    u16,
+    Vec<StackFrame>,
+    Vec<ExceptionTableEntry>,
+);
+
+fn emit_body(cp: &mut ConstantPool, body: &JvmMethodBody) -> Result<EmitBodyResult, CodegenError> {
     let mut instructions = Vec::new();
     let mut label_positions: HashMap<Label, usize> = HashMap::new();
     let mut fixups: Vec<(usize, Label)> = Vec::new();
@@ -369,7 +374,36 @@ fn emit_body(
 
     let stack_frames = build_stack_frames(cp, &frames, instructions.len())?;
 
-    Ok((instructions, max_stack.max(1) as u16, stack_frames))
+    // Build exception table from IR-level exception handlers
+    let mut exception_table = Vec::new();
+    for handler in &body.exception_handlers {
+        let start_pc = *label_positions
+            .get(&handler.start)
+            .ok_or(CodegenError::UnresolvedLabel(handler.start))? as u16;
+        let end_pc = *label_positions
+            .get(&handler.end)
+            .ok_or(CodegenError::UnresolvedLabel(handler.end))? as u16;
+        let handler_pc = *label_positions
+            .get(&handler.handler)
+            .ok_or(CodegenError::UnresolvedLabel(handler.handler))? as u16;
+        let catch_type = if let Some(ref class_name) = handler.catch_type {
+            cp.add_class(class_name)?
+        } else {
+            0 // catch-all (finally)
+        };
+        exception_table.push(ExceptionTableEntry {
+            range_pc: start_pc..end_pc,
+            handler_pc,
+            catch_type,
+        });
+    }
+
+    Ok((
+        instructions,
+        max_stack.max(1) as u16,
+        stack_frames,
+        exception_table,
+    ))
 }
 
 fn build_stack_frames(
@@ -979,6 +1013,7 @@ mod tests {
                     },
                     JvmOp::Return(JvmType::Void),
                 ],
+                exception_handlers: vec![],
             }),
         };
 
@@ -1033,6 +1068,7 @@ mod tests {
                     },
                     JvmOp::Return(JvmType::Void),
                 ],
+                exception_handlers: vec![],
             }),
         };
 
@@ -1094,6 +1130,7 @@ mod tests {
                     },
                     JvmOp::Return(JvmType::Void),
                 ],
+                exception_handlers: vec![],
             }),
         };
 
@@ -1108,6 +1145,7 @@ mod tests {
             body: Some(JvmMethodBody {
                 max_locals: 1,
                 ops: vec![JvmOp::StubBody],
+                exception_handlers: vec![],
             }),
         };
 
@@ -1139,6 +1177,7 @@ mod tests {
                     },
                     JvmOp::Return(JvmType::Void),
                 ],
+                exception_handlers: vec![],
             }),
         };
 

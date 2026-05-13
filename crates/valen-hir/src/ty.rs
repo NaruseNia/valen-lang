@@ -1435,7 +1435,7 @@ impl<'hir> TypeChecker<'hir> {
         let body = self.check_block(&s.block, None);
         let ty = body.ty.clone();
         TypedExpr {
-            kind: TypedExprKind::Block(body),
+            kind: TypedExprKind::Safe(body),
             ty,
             span: s.span,
         }
