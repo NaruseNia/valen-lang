@@ -6,14 +6,14 @@ use valen_ast::{self, BinaryOp, Span, UnaryOp};
 use valen_diagnostics::{DiagCode, Diagnostics};
 
 use crate::{
-    tyref_to_ty, DefKind, Hir, PrimTy, Ty, TypedBody, TypedExpr, TypedExprKind, TypedMatchArm,
-    TypedStmt, TypedStringPart,
+    tyref_to_ty, DefId, DefKind, Hir, PrimTy, Ty, TypedBody, TypedExpr, TypedExprKind,
+    TypedMatchArm, TypedStmt, TypedStringPart,
 };
 
 /// Output of the type checking pass.
 pub struct TypeCheckResult {
-    /// Typed bodies keyed by function/method name.
-    pub bodies: IndexMap<SmolStr, TypedBody>,
+    /// Typed bodies keyed by [`DefId`] to avoid name collisions across classes.
+    pub bodies: IndexMap<DefId, TypedBody>,
     pub diagnostics: Diagnostics,
 }
 
@@ -90,7 +90,7 @@ struct TypeChecker<'hir> {
     hir: &'hir Hir,
     env: TypeEnv,
     diags: Diagnostics,
-    bodies: IndexMap<SmolStr, TypedBody>,
+    bodies: IndexMap<DefId, TypedBody>,
     return_ty: Option<Ty>,
     in_loop: bool,
 }
@@ -114,13 +114,60 @@ impl<'hir> TypeChecker<'hir> {
 
         for item in items {
             match item {
-                valen_ast::Item::Fn(f) => self.check_fn_decl(f, None),
+                valen_ast::Item::Fn(f) => {
+                    let def_id = self.lookup_def_id(&f.name);
+                    self.check_fn_decl(f, None, def_id);
+                }
                 valen_ast::Item::Class(c) => self.check_class(c),
                 valen_ast::Item::Impl(imp) => self.check_impl(imp),
                 valen_ast::Item::Trait(t) => self.check_trait(t),
                 _ => {}
             }
         }
+    }
+
+    fn lookup_def_id(&self, name: &str) -> Option<DefId> {
+        self.hir
+            .defs
+            .values()
+            .find(|d| d.name == name)
+            .map(|d| d.id)
+    }
+
+    fn lookup_method_def_id(&self, class_name: &str, method_name: &str) -> Option<DefId> {
+        for def in self.hir.defs.values() {
+            match &def.kind {
+                DefKind::Class(c) if def.name == class_name => {
+                    for &mid in &c.methods {
+                        if let Some(mdef) = self.hir.defs.get(&mid) {
+                            if mdef.name == method_name {
+                                return Some(mid);
+                            }
+                        }
+                    }
+                }
+                DefKind::Impl(imp) => {
+                    for &mid in &imp.methods {
+                        if let Some(mdef) = self.hir.defs.get(&mid) {
+                            if mdef.name == method_name {
+                                return Some(mid);
+                            }
+                        }
+                    }
+                }
+                DefKind::Trait(t) if def.name == class_name => {
+                    for &mid in &t.methods {
+                        if let Some(mdef) = self.hir.defs.get(&mid) {
+                            if mdef.name == method_name {
+                                return Some(mid);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
     }
 
     fn register_top_level_types(&mut self, items: &[valen_ast::Item]) {
@@ -206,7 +253,12 @@ impl<'hir> TypeChecker<'hir> {
 
     // -- function / class / impl --------------------------------------------
 
-    fn check_fn_decl(&mut self, f: &valen_ast::FnDecl, self_ty: Option<&Ty>) {
+    fn check_fn_decl(
+        &mut self,
+        f: &valen_ast::FnDecl,
+        self_ty: Option<&Ty>,
+        def_id: Option<DefId>,
+    ) {
         let Some(body) = &f.body else { return };
 
         let ret_ty = f
@@ -253,14 +305,17 @@ impl<'hir> TypeChecker<'hir> {
         self.env.pop_scope();
         self.return_ty = prev_return;
 
-        self.bodies.insert(f.name.clone(), typed_body);
+        if let Some(id) = def_id {
+            self.bodies.insert(id, typed_body);
+        }
     }
 
     fn check_class(&mut self, c: &valen_ast::ClassDecl) {
         let self_ty = Ty::Named(c.name.clone());
         for member in &c.body {
             if let valen_ast::ClassMember::Method(m) = member {
-                self.check_fn_decl(m, Some(&self_ty));
+                let def_id = self.lookup_method_def_id(&c.name, &m.name);
+                self.check_fn_decl(m, Some(&self_ty), def_id);
             }
         }
     }
@@ -269,7 +324,8 @@ impl<'hir> TypeChecker<'hir> {
         let self_ty = self.resolve_ast_type(&imp.target);
         for item in &imp.items {
             if let valen_ast::ImplItem::Fn(m) = item {
-                self.check_fn_decl(m, Some(&self_ty));
+                let def_id = self.lookup_method_def_id("", &m.name);
+                self.check_fn_decl(m, Some(&self_ty), def_id);
             }
         }
     }
@@ -279,7 +335,8 @@ impl<'hir> TypeChecker<'hir> {
         for item in &t.items {
             if let valen_ast::TraitItem::Fn(f) = item {
                 if f.body.is_some() {
-                    self.check_fn_decl(f, Some(&self_ty));
+                    let def_id = self.lookup_method_def_id(&t.name, &f.name);
+                    self.check_fn_decl(f, Some(&self_ty), def_id);
                 }
             }
         }
@@ -1437,6 +1494,15 @@ mod tests {
         );
     }
 
+    fn get_body_by_name<'a>(r: &'a TypeCheckResult, name: &str) -> &'a TypedBody {
+        r.bodies.values().next().unwrap_or_else(|| {
+            panic!(
+                "no body found for `{name}` — bodies: {:?}",
+                r.bodies.keys().collect::<Vec<_>>()
+            )
+        })
+    }
+
     fn assert_has_error(r: &TypeCheckResult, code: DiagCode) {
         assert!(
             r.diagnostics.iter().any(|d| d.code == code),
@@ -1452,7 +1518,7 @@ mod tests {
     fn int_literal() {
         let r = check_source("fn main() -> Int { 42 }");
         assert_no_errors(&r);
-        let body = r.bodies.get("main").unwrap();
+        let body = get_body_by_name(&r, "main");
         assert_eq!(body.ty, Ty::Prim(PrimTy::Int));
     }
 
