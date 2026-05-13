@@ -1128,7 +1128,6 @@ impl<'hir> TypeChecker<'hir> {
     fn synth_assign(&mut self, asgn: &valen_ast::AssignExpr) -> TypedExpr {
         let target = self.infer_expr(&asgn.target);
 
-        // Check mutability: if target is a local variable, it must be declared `mut`
         if let TypedExprKind::LocalVar(ref name) = target.kind {
             if let Some(false) = self.env.is_mutable(name) {
                 self.diags.error(
@@ -1139,7 +1138,23 @@ impl<'hir> TypeChecker<'hir> {
             }
         }
 
-        let value = self.check_expr(&asgn.value, Some(&target.ty));
+        let rhs = self.check_expr(&asgn.value, Some(&target.ty));
+
+        let value = if let Some(op) = asgn.op {
+            let result_ty = self.binary_result_ty(op, &target.ty, &rhs.ty, asgn.span);
+            TypedExpr {
+                kind: TypedExprKind::Binary {
+                    op,
+                    lhs: Box::new(target.clone()),
+                    rhs: Box::new(rhs),
+                },
+                ty: result_ty,
+                span: asgn.span,
+            }
+        } else {
+            rhs
+        };
+
         TypedExpr {
             kind: TypedExprKind::Assign {
                 target: Box::new(target),
