@@ -139,7 +139,7 @@ impl Resolver {
                 let def = Def {
                     id,
                     name: f.name.clone(),
-                    kind: DefKind::Fn(self.lower_fn(f)),
+                    kind: DefKind::Fn(self.lower_fn_with_params(f, &[])),
                     vis: lower_vis(f.visibility),
                     span: f.span,
                     package: self.current_package.clone(),
@@ -149,6 +149,7 @@ impl Resolver {
             }
             Item::Class(c) => {
                 let id = self.hir.alloc_id();
+                let type_params: Vec<SmolStr> = c.generics.iter().map(|g| g.name.clone()).collect();
                 let mut method_ids = Vec::new();
                 for member in &c.body {
                     if let valen_ast::ClassMember::Method(m) = member {
@@ -156,7 +157,7 @@ impl Resolver {
                         let mdef = Def {
                             id: mid,
                             name: m.name.clone(),
-                            kind: DefKind::Fn(self.lower_fn(m)),
+                            kind: DefKind::Fn(self.lower_fn_with_params(m, &type_params)),
                             vis: lower_vis(m.visibility),
                             span: m.span,
                             package: self.current_package.clone(),
@@ -170,9 +171,21 @@ impl Resolver {
                     name: c.name.clone(),
                     kind: DefKind::Class(ClassDef {
                         kind: lower_class_kind(c.kind),
-                        ctor_params: c.ctor_params.iter().map(lower_ctor_param).collect(),
-                        superclass: c.supertypes.first().map(lower_type_ref),
-                        trait_impls: c.supertypes.iter().skip(1).map(lower_type_ref).collect(),
+                        ctor_params: c
+                            .ctor_params
+                            .iter()
+                            .map(|p| lower_ctor_param_with_params(p, &type_params))
+                            .collect(),
+                        superclass: c
+                            .supertypes
+                            .first()
+                            .map(|t| lower_type_ref_with_params(t, &type_params)),
+                        trait_impls: c
+                            .supertypes
+                            .iter()
+                            .skip(1)
+                            .map(|t| lower_type_ref_with_params(t, &type_params))
+                            .collect(),
                         methods: method_ids,
                     }),
                     vis: lower_vis(c.visibility),
@@ -184,11 +197,16 @@ impl Resolver {
             }
             Item::DataClass(dc) => {
                 let id = self.hir.alloc_id();
+                let dc_params: Vec<SmolStr> = dc.generics.iter().map(|g| g.name.clone()).collect();
                 let def = Def {
                     id,
                     name: dc.name.clone(),
                     kind: DefKind::DataClass(DataClassDef {
-                        ctor_params: dc.ctor_params.iter().map(lower_ctor_param).collect(),
+                        ctor_params: dc
+                            .ctor_params
+                            .iter()
+                            .map(|p| lower_ctor_param_with_params(p, &dc_params))
+                            .collect(),
                     }),
                     vis: lower_vis(dc.visibility),
                     span: dc.span,
@@ -199,6 +217,7 @@ impl Resolver {
             }
             Item::Enum(e) => {
                 let id = self.hir.alloc_id();
+                let type_params: Vec<SmolStr> = e.generics.iter().map(|g| g.name.clone()).collect();
                 let variants = e
                     .variants
                     .iter()
@@ -207,7 +226,12 @@ impl Resolver {
                             valen_ast::EnumVariantFields::Unit => Vec::new(),
                             valen_ast::EnumVariantFields::Named(fs) => fs
                                 .iter()
-                                .map(|f| (f.name.clone(), lower_type_ref(&f.ty)))
+                                .map(|f| {
+                                    (
+                                        f.name.clone(),
+                                        lower_type_ref_with_params(&f.ty, &type_params),
+                                    )
+                                })
                                 .collect(),
                         };
                         EnumVariantDef {
@@ -229,6 +253,8 @@ impl Resolver {
             }
             Item::Trait(t) => {
                 let id = self.hir.alloc_id();
+                let trait_params: Vec<SmolStr> =
+                    t.generics.iter().map(|g| g.name.clone()).collect();
                 let mut method_ids = Vec::new();
                 for ti in &t.items {
                     if let valen_ast::TraitItem::Fn(m) = ti {
@@ -236,7 +262,7 @@ impl Resolver {
                         let mdef = Def {
                             id: mid,
                             name: m.name.clone(),
-                            kind: DefKind::Fn(self.lower_fn(m)),
+                            kind: DefKind::Fn(self.lower_fn_with_params(m, &trait_params)),
                             vis: Vis::Pub,
                             span: m.span,
                             package: self.current_package.clone(),
@@ -260,6 +286,8 @@ impl Resolver {
             }
             Item::Impl(imp) => {
                 let id = self.hir.alloc_id();
+                let impl_params: Vec<SmolStr> =
+                    imp.generics.iter().map(|g| g.name.clone()).collect();
                 let mut method_ids = Vec::new();
                 for ii in &imp.items {
                     if let valen_ast::ImplItem::Fn(m) = ii {
@@ -267,7 +295,7 @@ impl Resolver {
                         let mdef = Def {
                             id: mid,
                             name: m.name.clone(),
-                            kind: DefKind::Fn(self.lower_fn(m)),
+                            kind: DefKind::Fn(self.lower_fn_with_params(m, &impl_params)),
                             vis: Vis::Pub,
                             span: m.span,
                             package: self.current_package.clone(),
@@ -279,7 +307,7 @@ impl Resolver {
                 let trait_ref = imp
                     .trait_ref
                     .as_ref()
-                    .map(lower_type_ref)
+                    .map(|t| lower_type_ref_with_params(t, &impl_params))
                     .unwrap_or(TyRef::Error);
                 let generics = imp.generics.iter().map(|g| g.name.clone()).collect();
                 let def = Def {
@@ -287,7 +315,7 @@ impl Resolver {
                     name: SmolStr::from(""),
                     kind: DefKind::Impl(ImplDef {
                         trait_ref,
-                        target: lower_type_ref(&imp.target),
+                        target: lower_type_ref_with_params(&imp.target, &impl_params),
                         methods: method_ids,
                         generics,
                     }),
@@ -313,20 +341,25 @@ impl Resolver {
         }
     }
 
-    fn lower_fn(&self, f: &valen_ast::FnDecl) -> FnDef {
+    fn lower_fn_with_params(&self, f: &valen_ast::FnDecl, outer_params: &[SmolStr]) -> FnDef {
+        let mut all_params: Vec<SmolStr> = outer_params.to_vec();
+        all_params.extend(f.generics.iter().map(|g| g.name.clone()));
         let params = f
             .params
             .iter()
             .map(|p| ParamDef {
                 name: p.name.clone(),
-                ty: lower_type_ref(&p.ty),
+                ty: lower_type_ref_with_params(&p.ty, &all_params),
                 mutable: p.mutable,
                 is_self: p.name == "self",
             })
             .collect();
         FnDef {
             params,
-            return_ty: f.return_type.as_ref().map(lower_type_ref),
+            return_ty: f
+                .return_type
+                .as_ref()
+                .map(|t| lower_type_ref_with_params(t, &all_params)),
             has_body: f.body.is_some(),
         }
     }
@@ -357,16 +390,16 @@ fn lower_class_kind(k: valen_ast::ClassKind) -> ClassDefKind {
     }
 }
 
-fn lower_ctor_param(p: &valen_ast::CtorParam) -> CtorParamDef {
+fn lower_ctor_param_with_params(p: &valen_ast::CtorParam, type_params: &[SmolStr]) -> CtorParamDef {
     CtorParamDef {
         vis: lower_vis(p.visibility),
         name: p.name.clone(),
-        ty: lower_type_ref(&p.ty),
+        ty: lower_type_ref_with_params(&p.ty, type_params),
         mutable: p.mutable,
     }
 }
 
-fn lower_type_ref(ty: &valen_ast::Type) -> TyRef {
+fn lower_type_ref_with_params(ty: &valen_ast::Type, type_params: &[SmolStr]) -> TyRef {
     match ty {
         valen_ast::Type::Path(tp) => {
             if tp.segments.len() == 1 {
@@ -379,9 +412,16 @@ fn lower_type_ref(ty: &valen_ast::Type) -> TyRef {
                     if name == "Self" {
                         return TyRef::SelfTy;
                     }
+                    if type_params.iter().any(|p| p == name) {
+                        return TyRef::Unresolved(name.clone());
+                    }
                     return TyRef::Named(name.clone());
                 }
-                let args = seg.generics.iter().map(lower_type_ref).collect();
+                let args = seg
+                    .generics
+                    .iter()
+                    .map(|g| lower_type_ref_with_params(g, type_params))
+                    .collect();
                 return TyRef::Generic(name.clone(), args);
             }
             let full: String = tp
@@ -392,10 +432,16 @@ fn lower_type_ref(ty: &valen_ast::Type) -> TyRef {
                 .join(".");
             TyRef::Named(SmolStr::from(full))
         }
-        valen_ast::Type::Nullable { inner, .. } => TyRef::Nullable(Box::new(lower_type_ref(inner))),
+        valen_ast::Type::Nullable { inner, .. } => {
+            TyRef::Nullable(Box::new(lower_type_ref_with_params(inner, type_params)))
+        }
         valen_ast::Type::Fn(ft) => {
-            let params = ft.params.iter().map(lower_type_ref).collect();
-            let ret = Box::new(lower_type_ref(&ft.return_type));
+            let params = ft
+                .params
+                .iter()
+                .map(|p| lower_type_ref_with_params(p, type_params))
+                .collect();
+            let ret = Box::new(lower_type_ref_with_params(&ft.return_type, type_params));
             TyRef::Fn(params, ret)
         }
         valen_ast::Type::Tuple(_) => TyRef::Error,
