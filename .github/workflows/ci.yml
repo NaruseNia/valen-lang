@@ -53,6 +53,8 @@ jobs:
       - run: mise run check
       - run: mise run test
       - run: mise run build
+      - name: Check stdlib compiles
+        run: mise run stdlib:check
 
   docs:
     name: rustdoc
