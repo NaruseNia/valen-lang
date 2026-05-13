@@ -232,6 +232,7 @@ fn parse_string(lex: &mut logos::Lexer<'_, RawTok>) -> Option<SmolStr> {
     Some(SmolStr::from(out))
 }
 
+/// Stateful token iterator that wraps a logos lexer and tracks diagnostics.
 pub struct Lexer<'src> {
     inner: logos::Lexer<'src, RawTok>,
     file_id: FileId,
@@ -240,6 +241,7 @@ pub struct Lexer<'src> {
 }
 
 impl<'src> Lexer<'src> {
+    /// Create a new lexer for the given source text and file identifier.
     pub fn new(source: &'src str, file_id: FileId) -> Self {
         Self {
             inner: RawTok::lexer(source),
@@ -249,6 +251,7 @@ impl<'src> Lexer<'src> {
         }
     }
 
+    /// Advance to the next token, returning its kind and span. Returns `None` after EOF.
     pub fn next_token(&mut self) -> Option<(TokenKind, Span)> {
         let Some(raw) = self.inner.next() else {
             if self.eof_emitted {
@@ -277,11 +280,13 @@ impl<'src> Lexer<'src> {
         Some((kind, span))
     }
 
+    /// Consume the lexer and return accumulated diagnostics.
     pub fn into_diagnostics(self) -> Diagnostics {
         self.diagnostics
     }
 }
 
+/// Convenience function: lex the entire source into a token vector and diagnostics.
 pub fn lex(source: &str, file_id: FileId) -> (Vec<(TokenKind, Span)>, Diagnostics) {
     let mut lex = Lexer::new(source, file_id);
     let mut out = Vec::new();
