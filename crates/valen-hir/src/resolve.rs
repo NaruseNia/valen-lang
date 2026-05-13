@@ -53,12 +53,7 @@ pub fn resolve(items: &[Item]) -> ResolveResult {
 impl Resolver {
     fn define_name(&mut self, name: SmolStr, id: DefId, span: valen_ast::Span) {
         if let Some(prev_id) = self.scope.define(name.clone(), id) {
-            let prev_span = self
-                .hir
-                .defs
-                .get(&prev_id)
-                .map(|d| d.span)
-                .unwrap_or(span);
+            let prev_span = self.hir.defs.get(&prev_id).map(|d| d.span).unwrap_or(span);
             self.diagnostics.error(
                 DiagCode::NAME_NOT_FOUND,
                 span,
@@ -126,7 +121,6 @@ impl Resolver {
             }
         }
     }
-
 
     fn register_item(&mut self, item: &Item) {
         match item {

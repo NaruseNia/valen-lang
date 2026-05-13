@@ -764,7 +764,10 @@ fn emit_bitwise(op: BitwiseOp, ty: &JvmType) -> Instruction {
 }
 
 fn load_instruction(slot: u16, ty: &JvmType) -> Instruction {
-    assert!(slot <= 255, "local slot {slot} exceeds u8 range; wide prefix not yet supported");
+    assert!(
+        slot <= 255,
+        "local slot {slot} exceeds u8 range; wide prefix not yet supported"
+    );
     match ty {
         JvmType::Int | JvmType::Byte | JvmType::Short | JvmType::Char | JvmType::Boolean => {
             match slot {
@@ -807,7 +810,10 @@ fn load_instruction(slot: u16, ty: &JvmType) -> Instruction {
 }
 
 fn store_instruction(slot: u16, ty: &JvmType) -> Instruction {
-    assert!(slot <= 255, "local slot {slot} exceeds u8 range; wide prefix not yet supported");
+    assert!(
+        slot <= 255,
+        "local slot {slot} exceeds u8 range; wide prefix not yet supported"
+    );
     match ty {
         JvmType::Int | JvmType::Byte | JvmType::Short | JvmType::Char | JvmType::Boolean => {
             match slot {
