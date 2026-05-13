@@ -20,7 +20,7 @@ Phase 0（基盤整備）完了済み。Phase 1（MVP）に向けて、コンパ
 | 3 | ~~TASK-008: Codegen — class/data class emit~~ ✅ | TASK-005 | L |
 | 3 | ~~TASK-009: Codegen — enum ADT フル emit~~ ✅ | TASK-005, TASK-007 | L |
 | 3 | ~~TASK-010: Codegen — fn/method/expression bytecode~~ ✅ | TASK-005 | L |
-| 3 | TASK-011: Codegen — Java interop（import 解決・safe ブロック） | TASK-005 | L |
+| 3 | ~~TASK-011: Codegen — Java interop（import 解決・safe ブロック）~~ ✅ | TASK-005 | L |
 | 4 | TASK-012: 標準ライブラリ（valen.core） | TASK-010 | M |
 | 4 | TASK-013: Gradle プラグイン | TASK-010 | M |
 | 4 | TASK-014: LSP サーバー（MVP） | TASK-004, TASK-005 | M |
