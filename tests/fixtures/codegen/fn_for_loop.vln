@@ -1,0 +1,11 @@
+package com.example;
+
+pub class Loops {
+    fn count(self) -> Int {
+        let mut sum = 0;
+        for i in 0..10 {
+            sum = sum + i;
+        }
+        sum
+    }
+}
