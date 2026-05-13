@@ -84,8 +84,7 @@ expression: "check(\"class User(pub name: String, mut age: Int) {}\")"
                     },
                 },
             ],
-            superclass: None,
-            traits: [],
+            supertypes: [],
             body: [],
             span: Span {
                 start: 0,

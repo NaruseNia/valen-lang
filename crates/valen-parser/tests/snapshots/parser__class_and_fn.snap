@@ -11,8 +11,7 @@ expression: "check(\"class Foo {}\\nfn main() {}\")"
             name: "Foo",
             generics: [],
             ctor_params: [],
-            superclass: None,
-            traits: [],
+            supertypes: [],
             body: [],
             span: Span {
                 start: 0,

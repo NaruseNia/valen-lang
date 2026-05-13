@@ -63,7 +63,8 @@ impl<'h> CoherenceChecker<'h> {
             let Some(tgt) = &target_name else { continue };
 
             // Blanket impl detection: target is a generic type parameter
-            if is_type_param(&imp.target, self.hir) {
+            let generic_names: IndexSet<SmolStr> = imp.generics.iter().cloned().collect();
+            if is_type_param(&imp.target, &generic_names, self.hir, &self.foreign) {
                 self.diags.error(
                     DiagCode::BLANKET_IMPL_NOT_ALLOWED,
                     *span,
@@ -213,7 +214,7 @@ impl<'h> CoherenceChecker<'h> {
                     DiagCode::TRAIT_METHOD_SIG_MISMATCH,
                     impl_span,
                     SmolStr::from(format!(
-                        "method `{method_name}`: parameter `{}` type mismatch — trait requires `{:?}`, found `{:?}`",
+                        "method `{method_name}`: parameter `{}` type mismatch — trait requires `{}`, found `{}`",
                         req_p.name, req_p.ty, act_p.ty
                     )),
                 );
@@ -227,11 +228,18 @@ impl<'h> CoherenceChecker<'h> {
                 DiagCode::TRAIT_METHOD_SIG_MISMATCH,
                 impl_span,
                 SmolStr::from(format!(
-                    "method `{method_name}`: return type mismatch — trait requires `{:?}`, found `{:?}`",
-                    req_ret, act_ret
+                    "method `{method_name}`: return type mismatch — trait requires `{}`, found `{}`",
+                    format_opt_tyref(req_ret), format_opt_tyref(act_ret)
                 )),
             );
         }
+    }
+}
+
+fn format_opt_tyref(ty: &Option<TyRef>) -> String {
+    match ty {
+        Some(t) => format!("{t}"),
+        None => "Unit".to_string(),
     }
 }
 
@@ -244,16 +252,27 @@ fn tyref_name(ty: &TyRef) -> Option<SmolStr> {
     }
 }
 
-fn is_type_param(ty: &TyRef, hir: &Hir) -> bool {
+fn is_type_param(
+    ty: &TyRef,
+    generic_names: &IndexSet<SmolStr>,
+    hir: &Hir,
+    foreign: &IndexSet<SmolStr>,
+) -> bool {
     match ty {
         TyRef::Named(n) => {
-            // A name is a type parameter if it's a single uppercase letter
-            // AND not defined as an actual type in the current compilation
-            let first = n.chars().next().unwrap_or('a');
-            if !(n.len() == 1 && first.is_uppercase()) {
-                return false;
+            // Explicitly listed in the impl's generic parameters
+            if generic_names.contains(n) {
+                return true;
             }
-            !hir.defs.values().any(|d| d.name == *n)
+            // Fallback heuristic for impls without explicit generics:
+            // a single-uppercase-letter name that is neither a locally defined type
+            // nor a known import is treated as a type parameter.
+            if n.len() == 1 && n.chars().next().unwrap_or('a').is_uppercase() {
+                let locally_defined = hir.defs.values().any(|d| d.name == *n);
+                let is_import = foreign.contains(n.as_str());
+                return !locally_defined && !is_import;
+            }
+            false
         }
         _ => false,
     }

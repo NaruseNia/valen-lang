@@ -88,6 +88,8 @@ impl DiagCode {
     pub const INVALID_OPERATOR: DiagCode = DiagCode(312);
     pub const BREAK_OUTSIDE_LOOP: DiagCode = DiagCode(313);
     pub const CONTINUE_OUTSIDE_LOOP: DiagCode = DiagCode(314);
+    pub const IMMUTABLE_ASSIGN: DiagCode = DiagCode(315);
+    pub const PRIVATE_FIELD: DiagCode = DiagCode(316);
     pub const ORPHAN_RULE_VIOLATION: DiagCode = DiagCode(400);
     pub const BLANKET_IMPL_NOT_ALLOWED: DiagCode = DiagCode(401);
     pub const IMPL_CONFLICT: DiagCode = DiagCode(402);

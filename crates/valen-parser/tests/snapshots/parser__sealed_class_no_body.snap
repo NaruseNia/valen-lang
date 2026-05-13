@@ -11,8 +11,7 @@ expression: "check(\"sealed class Payment;\")"
             name: "Payment",
             generics: [],
             ctor_params: [],
-            superclass: None,
-            traits: [],
+            supertypes: [],
             body: [],
             span: Span {
                 start: 0,

@@ -264,6 +264,7 @@ impl Resolver {
                     .as_ref()
                     .map(lower_type_ref)
                     .unwrap_or(TyRef::Error);
+                let generics = imp.generics.iter().map(|g| g.name.clone()).collect();
                 let def = Def {
                     id,
                     name: SmolStr::from(""),
@@ -271,6 +272,7 @@ impl Resolver {
                         trait_ref,
                         target: lower_type_ref(&imp.target),
                         methods: method_ids,
+                        generics,
                     }),
                     vis: Vis::Internal,
                     span: imp.span,

@@ -5,4 +5,4 @@ expression: "check(\"class Foo\")"
 === AST ===
 []
 === diagnostics ===
-Error V0101 9..9: expected `;`
+Error V0102 9..9: expected `;`

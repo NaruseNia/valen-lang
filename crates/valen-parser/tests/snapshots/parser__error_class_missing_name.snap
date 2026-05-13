@@ -5,4 +5,4 @@ expression: "check(\"class {}\")"
 === AST ===
 []
 === diagnostics ===
-Error V0101 6..7: expected identifier
+Error V0103 6..7: expected identifier
