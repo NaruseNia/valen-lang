@@ -66,8 +66,7 @@ pub struct ClassDecl {
     pub name: SmolStr,
     pub generics: Vec<GenericParam>,
     pub ctor_params: Vec<CtorParam>,
-    pub superclass: Option<Type>,
-    pub traits: Vec<Type>,
+    pub supertypes: Vec<Type>,
     pub body: Vec<ClassMember>,
     pub span: Span,
 }
@@ -310,7 +309,10 @@ pub enum Expr {
 #[derive(Debug, Clone)]
 pub enum Literal {
     Int(i64, Span),
-    Float(f64, Span),
+    Long(i64, Span),
+    Float(f32, Span),
+    Double(f64, Span),
+    Char(char, Span),
     String(SmolStr, Span),
     Bool(bool, Span),
     Unit(Span),
@@ -391,6 +393,8 @@ pub enum BinaryOp {
     BitXor,
     Shl,
     Shr,
+    RefEq,
+    RefNe,
 }
 
 #[derive(Debug, Clone)]

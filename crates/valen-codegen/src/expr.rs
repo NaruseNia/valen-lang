@@ -161,8 +161,13 @@ impl<'a> ExprLowering<'a> {
                 if matches!(expr.ty, Ty::Prim(PrimTy::Long)) {
                     self.ops.push(JvmOp::PushLong(*n));
                 } else {
-                    self.ops.push(JvmOp::PushInt(*n as i32));
+                    let i = i32::try_from(*n)
+                        .unwrap_or_else(|_| panic!("integer literal {} out of i32 range", n));
+                    self.ops.push(JvmOp::PushInt(i));
                 }
+            }
+            TypedExprKind::LongLit(n) => {
+                self.ops.push(JvmOp::PushLong(*n));
             }
             TypedExprKind::FloatLit(n) => {
                 if matches!(expr.ty, Ty::Prim(PrimTy::Double)) {
@@ -170,6 +175,12 @@ impl<'a> ExprLowering<'a> {
                 } else {
                     self.ops.push(JvmOp::PushFloat(*n as f32));
                 }
+            }
+            TypedExprKind::Float32Lit(n) => {
+                self.ops.push(JvmOp::PushFloat(*n));
+            }
+            TypedExprKind::CharLit(c) => {
+                self.ops.push(JvmOp::PushInt(*c as i32));
             }
             TypedExprKind::StringLit(s) => {
                 self.ops.push(JvmOp::PushString(s.to_string()));
@@ -383,6 +394,9 @@ impl<'a> ExprLowering<'a> {
                 self.ops.push(JvmOp::Bitwise(bop, operand_ty));
             }
             BinaryOp::And | BinaryOp::Or => unreachable!(),
+            BinaryOp::RefEq | BinaryOp::RefNe => {
+                self.lower_comparison(op, &operand_ty);
+            }
         }
     }
 
@@ -425,9 +439,12 @@ impl<'a> ExprLowering<'a> {
             }
             JvmType::Object(_) | JvmType::Array(_) => {
                 let branch = match op {
-                    BinaryOp::Eq => JvmOp::IfACmpNe(false_label),
-                    BinaryOp::Ne => JvmOp::IfACmpEq(false_label),
-                    _ => JvmOp::IfACmpNe(false_label),
+                    BinaryOp::Eq | BinaryOp::RefEq => JvmOp::IfACmpNe(false_label),
+                    BinaryOp::Ne | BinaryOp::RefNe => JvmOp::IfACmpEq(false_label),
+                    BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
+                        unreachable!("ordering comparison on Object/Array types not supported")
+                    }
+                    _ => unreachable!(),
                 };
                 self.ops.push(branch);
             }
@@ -628,6 +645,9 @@ impl<'a> ExprLowering<'a> {
 
                 for field in &sp.fields {
                     self.ops.push(JvmOp::LoadLocal(cast_slot, cast_ty.clone()));
+                    // TODO(#021): field type is hardcoded to Object — should resolve actual
+                    // field types from the variant definition (requires passing enum variant
+                    // type information through pattern lowering).
                     let field_ty = JvmType::Object("java/lang/Object".to_string());
                     self.ops.push(JvmOp::GetField {
                         owner: variant_internal.clone(),
@@ -694,8 +714,15 @@ impl<'a> ExprLowering<'a> {
 
     fn lower_literal(&mut self, lit: &valen_ast::Literal) {
         match lit {
-            valen_ast::Literal::Int(n, _) => self.ops.push(JvmOp::PushInt(*n as i32)),
-            valen_ast::Literal::Float(n, _) => self.ops.push(JvmOp::PushFloat(*n as f32)),
+            valen_ast::Literal::Int(n, _) => {
+                let i = i32::try_from(*n)
+                    .unwrap_or_else(|_| panic!("integer literal {} out of i32 range", n));
+                self.ops.push(JvmOp::PushInt(i));
+            }
+            valen_ast::Literal::Long(n, _) => self.ops.push(JvmOp::PushLong(*n)),
+            valen_ast::Literal::Float(n, _) => self.ops.push(JvmOp::PushFloat(*n)),
+            valen_ast::Literal::Double(n, _) => self.ops.push(JvmOp::PushDouble(*n)),
+            valen_ast::Literal::Char(c, _) => self.ops.push(JvmOp::PushInt(*c as i32)),
             valen_ast::Literal::String(s, _) => self.ops.push(JvmOp::PushString(s.to_string())),
             valen_ast::Literal::Bool(b, _) => self.ops.push(JvmOp::PushInt(if *b { 1 } else { 0 })),
             valen_ast::Literal::Unit(_) => {}

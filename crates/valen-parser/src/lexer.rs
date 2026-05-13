@@ -13,10 +13,12 @@ use logos::Logos;
 use smol_str::SmolStr;
 use valen_ast::token::TokenKind;
 use valen_ast::{FileId, Span};
+use valen_diagnostics::{DiagCode, Diagnostics};
 
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \t\r\n\f]+")]
 #[logos(skip r"//[^\n]*")]
+#[logos(skip r"/\*([^*]|\*[^/])*\*/")]
 enum RawTok {
     // Keywords
     #[token("fn")]
@@ -234,6 +236,7 @@ pub struct Lexer<'src> {
     inner: logos::Lexer<'src, RawTok>,
     file_id: FileId,
     eof_emitted: bool,
+    diagnostics: Diagnostics,
 }
 
 impl<'src> Lexer<'src> {
@@ -242,6 +245,7 @@ impl<'src> Lexer<'src> {
             inner: RawTok::lexer(source),
             file_id,
             eof_emitted: false,
+            diagnostics: Diagnostics::new(),
         }
     }
 
@@ -258,19 +262,33 @@ impl<'src> Lexer<'src> {
         let span = Span::new(range.start as u32, range.end as u32, self.file_id);
         let kind = match raw {
             Ok(tok) => map_token(tok),
-            Err(()) => TokenKind::Error(SmolStr::from(self.inner.slice())),
+            Err(()) => {
+                let slice = self.inner.slice();
+                if slice.bytes().all(|b| b.is_ascii_digit() || b == b'_') && !slice.is_empty() {
+                    self.diagnostics.error(
+                        DiagCode::LEX_INT_OVERFLOW,
+                        span,
+                        SmolStr::from(format!("integer literal `{slice}` overflows i64")),
+                    );
+                }
+                TokenKind::Error(SmolStr::from(slice))
+            }
         };
         Some((kind, span))
     }
+
+    pub fn into_diagnostics(self) -> Diagnostics {
+        self.diagnostics
+    }
 }
 
-pub fn lex(source: &str, file_id: FileId) -> Vec<(TokenKind, Span)> {
+pub fn lex(source: &str, file_id: FileId) -> (Vec<(TokenKind, Span)>, Diagnostics) {
     let mut lex = Lexer::new(source, file_id);
     let mut out = Vec::new();
     while let Some(tok) = lex.next_token() {
         out.push(tok);
     }
-    out
+    (out, lex.into_diagnostics())
 }
 
 fn map_token(raw: RawTok) -> TokenKind {
@@ -358,7 +376,7 @@ fn map_token(raw: RawTok) -> TokenKind {
         RawTok::Slash => TokenKind::Slash,
         RawTok::Percent => TokenKind::Percent,
         // Literals
-        RawTok::FloatLit(n) => TokenKind::FloatLit(n),
+        RawTok::FloatLit(n) => TokenKind::DoubleLit(n),
         RawTok::IntLit(n) => TokenKind::IntLit(n),
         RawTok::StringLit(s) => TokenKind::StringLit(s),
         RawTok::Ident(s) => TokenKind::Ident(s),

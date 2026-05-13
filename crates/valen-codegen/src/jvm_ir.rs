@@ -302,7 +302,7 @@ impl JvmOp {
                 if matches!(ty, JvmType::Void) {
                     0
                 } else {
-                    -1
+                    -(ty.slot_count() as i32)
                 }
             }
             JvmOp::Label(_) => 0,

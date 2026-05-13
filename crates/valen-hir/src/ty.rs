@@ -31,8 +31,14 @@ pub fn type_check(hir: &Hir, items: &[valen_ast::Item]) -> TypeCheckResult {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
+struct VarBinding {
+    ty: Ty,
+    mutable: bool,
+}
+
+#[derive(Debug, Clone)]
 struct TypeEnv {
-    scopes: Vec<IndexMap<SmolStr, Ty>>,
+    scopes: Vec<IndexMap<SmolStr, VarBinding>>,
 }
 
 impl TypeEnv {
@@ -50,16 +56,25 @@ impl TypeEnv {
         self.scopes.pop();
     }
 
-    fn define(&mut self, name: SmolStr, ty: Ty) {
+    fn define(&mut self, name: SmolStr, ty: Ty, mutable: bool) {
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name, ty);
+            scope.insert(name, VarBinding { ty, mutable });
         }
     }
 
     fn lookup(&self, name: &str) -> Option<&Ty> {
         for scope in self.scopes.iter().rev() {
-            if let Some(ty) = scope.get(name) {
-                return Some(ty);
+            if let Some(binding) = scope.get(name) {
+                return Some(&binding.ty);
+            }
+        }
+        None
+    }
+
+    fn is_mutable(&self, name: &str) -> Option<bool> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(binding) = scope.get(name) {
+                return Some(binding.mutable);
             }
         }
         None
@@ -111,19 +126,23 @@ impl<'hir> TypeChecker<'hir> {
             match item {
                 valen_ast::Item::Fn(f) => {
                     let ty = self.fn_decl_ty(f);
-                    self.env.define(f.name.clone(), ty);
+                    self.env.define(f.name.clone(), ty, false);
                 }
                 valen_ast::Item::Class(c) => {
-                    self.env.define(c.name.clone(), Ty::Named(c.name.clone()));
+                    self.env
+                        .define(c.name.clone(), Ty::Named(c.name.clone()), false);
                 }
                 valen_ast::Item::DataClass(dc) => {
-                    self.env.define(dc.name.clone(), Ty::Named(dc.name.clone()));
+                    self.env
+                        .define(dc.name.clone(), Ty::Named(dc.name.clone()), false);
                 }
                 valen_ast::Item::Enum(e) => {
-                    self.env.define(e.name.clone(), Ty::Named(e.name.clone()));
+                    self.env
+                        .define(e.name.clone(), Ty::Named(e.name.clone()), false);
                 }
                 valen_ast::Item::Trait(t) => {
-                    self.env.define(t.name.clone(), Ty::Named(t.name.clone()));
+                    self.env
+                        .define(t.name.clone(), Ty::Named(t.name.clone()), false);
                 }
                 _ => {}
             }
@@ -200,7 +219,7 @@ impl<'hir> TypeChecker<'hir> {
         self.env.push_scope();
 
         if let Some(sty) = self_ty {
-            self.env.define(SmolStr::from("self"), sty.clone());
+            self.env.define(SmolStr::from("self"), sty.clone(), false);
         }
 
         for p in &f.params {
@@ -208,7 +227,7 @@ impl<'hir> TypeChecker<'hir> {
                 continue;
             }
             let pty = self.resolve_ast_type(&p.ty);
-            self.env.define(p.name.clone(), pty);
+            self.env.define(p.name.clone(), pty, p.mutable);
         }
 
         let typed_body = self.check_block(body, Some(&ret_ty));
@@ -291,7 +310,7 @@ impl<'hir> TypeChecker<'hir> {
                     self.infer_expr(&ls.init)
                 };
                 let ty = expected.unwrap_or_else(|| init.ty.clone());
-                self.env.define(ls.name.clone(), ty.clone());
+                self.env.define(ls.name.clone(), ty.clone(), ls.mutable);
                 TypedStmt::Let {
                     name: ls.name.clone(),
                     ty,
@@ -376,9 +395,24 @@ impl<'hir> TypeChecker<'hir> {
                 ty: Ty::Prim(PrimTy::Int),
                 span: *span,
             },
+            valen_ast::Literal::Long(v, span) => TypedExpr {
+                kind: TypedExprKind::LongLit(*v),
+                ty: Ty::Prim(PrimTy::Long),
+                span: *span,
+            },
             valen_ast::Literal::Float(v, span) => TypedExpr {
+                kind: TypedExprKind::Float32Lit(*v),
+                ty: Ty::Prim(PrimTy::Float),
+                span: *span,
+            },
+            valen_ast::Literal::Double(v, span) => TypedExpr {
                 kind: TypedExprKind::FloatLit(*v),
                 ty: Ty::Prim(PrimTy::Double),
+                span: *span,
+            },
+            valen_ast::Literal::Char(v, span) => TypedExpr {
+                kind: TypedExprKind::CharLit(*v),
+                ty: Ty::Prim(PrimTy::Char),
                 span: *span,
             },
             valen_ast::Literal::String(v, span) => TypedExpr {
@@ -555,6 +589,7 @@ impl<'hir> TypeChecker<'hir> {
                 );
                 Ty::Error
             }
+            BinaryOp::RefEq | BinaryOp::RefNe => Ty::Prim(PrimTy::Bool),
         }
     }
 
@@ -922,6 +957,13 @@ impl<'hir> TypeChecker<'hir> {
             }
         };
 
+        // Determine the accessor context: if `self` is in scope and has a Named type,
+        // that is the "current class" for visibility purposes.
+        let accessor_type = self.env.lookup("self").and_then(|t| match t {
+            Ty::Named(n) => Some(n.clone()),
+            _ => None,
+        });
+
         for def in self.hir.defs.values() {
             if def.name != *type_name {
                 continue;
@@ -930,6 +972,22 @@ impl<'hir> TypeChecker<'hir> {
                 DefKind::Class(c) => {
                     for p in &c.ctor_params {
                         if p.name == field {
+                            // Check visibility: Private fields are only accessible
+                            // from within the defining class
+                            if matches!(p.vis, crate::Vis::Private) {
+                                let same_class =
+                                    accessor_type.as_ref().is_some_and(|a| a == type_name);
+                                if !same_class {
+                                    self.diags.error(
+                                        DiagCode::PRIVATE_FIELD,
+                                        span,
+                                        SmolStr::from(format!(
+                                            "field `{field}` of `{type_name}` is private"
+                                        )),
+                                    );
+                                    return Ty::Error;
+                                }
+                            }
                             return tyref_to_ty(&p.ty);
                         }
                     }
@@ -937,6 +995,20 @@ impl<'hir> TypeChecker<'hir> {
                 DefKind::DataClass(dc) => {
                     for p in &dc.ctor_params {
                         if p.name == field {
+                            if matches!(p.vis, crate::Vis::Private) {
+                                let same_class =
+                                    accessor_type.as_ref().is_some_and(|a| a == type_name);
+                                if !same_class {
+                                    self.diags.error(
+                                        DiagCode::PRIVATE_FIELD,
+                                        span,
+                                        SmolStr::from(format!(
+                                            "field `{field}` of `{type_name}` is private"
+                                        )),
+                                    );
+                                    return Ty::Error;
+                                }
+                            }
                             return tyref_to_ty(&p.ty);
                         }
                     }
@@ -1040,6 +1112,18 @@ impl<'hir> TypeChecker<'hir> {
 
     fn synth_assign(&mut self, asgn: &valen_ast::AssignExpr) -> TypedExpr {
         let target = self.infer_expr(&asgn.target);
+
+        // Check mutability: if target is a local variable, it must be declared `mut`
+        if let TypedExprKind::LocalVar(ref name) = target.kind {
+            if let Some(false) = self.env.is_mutable(name) {
+                self.diags.error(
+                    DiagCode::IMMUTABLE_ASSIGN,
+                    asgn.span,
+                    SmolStr::from(format!("cannot assign to immutable variable `{name}`")),
+                );
+            }
+        }
+
         let value = self.check_expr(&asgn.value, Some(&target.ty));
         TypedExpr {
             kind: TypedExprKind::Assign {
@@ -1108,7 +1192,7 @@ impl<'hir> TypeChecker<'hir> {
             Ty::Generic(name, args) if name == "Range" && !args.is_empty() => args[0].clone(),
             _ => Ty::Prim(PrimTy::Int),
         };
-        self.env.define(f.var.clone(), var_ty);
+        self.env.define(f.var.clone(), var_ty, false);
         let prev_loop = self.in_loop;
         self.in_loop = true;
         let body = self.check_block(&f.body, Some(&Ty::unit()));
@@ -1171,7 +1255,7 @@ impl<'hir> TypeChecker<'hir> {
             } else {
                 Ty::Error
             };
-            self.env.define(p.name.clone(), ty.clone());
+            self.env.define(p.name.clone(), ty.clone(), false);
             params.push((p.name.clone(), ty));
         }
 

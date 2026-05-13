@@ -1,5 +1,7 @@
 //! Diagnostics (errors, warnings, hints) shared across the compiler.
 
+use std::fmt;
+
 use smol_str::SmolStr;
 use valen_ast::Span;
 
@@ -8,6 +10,16 @@ pub enum Severity {
     Error,
     Warning,
     Hint,
+}
+
+impl fmt::Display for Severity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Severity::Error => f.write_str("error"),
+            Severity::Warning => f.write_str("warning"),
+            Severity::Hint => f.write_str("hint"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -39,10 +51,27 @@ pub struct Label {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DiagCode(pub u16);
 
+impl fmt::Display for DiagCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "V{:04}", self.0)
+    }
+}
+
+impl fmt::Display for Diagnostic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}[{}]: {}", self.severity, self.code, self.message)
+    }
+}
+
 impl DiagCode {
     pub const LEX_UNKNOWN_CHAR: DiagCode = DiagCode(1);
+    pub const LEX_INT_OVERFLOW: DiagCode = DiagCode(2);
     pub const PARSE_EXPECTED_SEMI: DiagCode = DiagCode(100);
     pub const PARSE_EXPECTED_EXPR: DiagCode = DiagCode(101);
+    pub const PARSE_EXPECTED_TOKEN: DiagCode = DiagCode(102);
+    pub const PARSE_EXPECTED_IDENT: DiagCode = DiagCode(103);
+    pub const PARSE_EXPECTED_TYPE: DiagCode = DiagCode(104);
+    pub const PARSE_UNEXPECTED_TOKEN: DiagCode = DiagCode(105);
     pub const NAME_NOT_FOUND: DiagCode = DiagCode(200);
     pub const TYPE_MISMATCH: DiagCode = DiagCode(300);
     pub const UNDECLARED_VAR: DiagCode = DiagCode(301);
@@ -59,6 +88,8 @@ impl DiagCode {
     pub const INVALID_OPERATOR: DiagCode = DiagCode(312);
     pub const BREAK_OUTSIDE_LOOP: DiagCode = DiagCode(313);
     pub const CONTINUE_OUTSIDE_LOOP: DiagCode = DiagCode(314);
+    pub const IMMUTABLE_ASSIGN: DiagCode = DiagCode(315);
+    pub const PRIVATE_FIELD: DiagCode = DiagCode(316);
     pub const ORPHAN_RULE_VIOLATION: DiagCode = DiagCode(400);
     pub const BLANKET_IMPL_NOT_ALLOWED: DiagCode = DiagCode(401);
     pub const IMPL_CONFLICT: DiagCode = DiagCode(402);

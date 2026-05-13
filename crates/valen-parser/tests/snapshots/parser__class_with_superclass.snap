@@ -48,7 +48,7 @@ expression: "check(\"class Dog(pub name: String) : Animal {}\")"
                     },
                 },
             ],
-            superclass: Some(
+            supertypes: [
                 Path(
                     TypePath {
                         segments: [
@@ -73,8 +73,7 @@ expression: "check(\"class Dog(pub name: String) : Animal {}\")"
                         },
                     },
                 ),
-            ),
-            traits: [],
+            ],
             body: [],
             span: Span {
                 start: 0,

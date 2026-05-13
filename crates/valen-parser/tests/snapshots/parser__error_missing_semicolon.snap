@@ -5,4 +5,4 @@ expression: "check(\"fn main() { let x = 1 x }\")"
 === AST ===
 []
 === diagnostics ===
-Error V0101 22..23: expected `;`
+Error V0102 22..23: expected `;`

@@ -160,8 +160,8 @@ impl Resolver {
                     kind: DefKind::Class(ClassDef {
                         kind: lower_class_kind(c.kind),
                         ctor_params: c.ctor_params.iter().map(lower_ctor_param).collect(),
-                        superclass: c.superclass.as_ref().map(lower_type_ref),
-                        trait_impls: c.traits.iter().map(lower_type_ref).collect(),
+                        superclass: c.supertypes.first().map(lower_type_ref),
+                        trait_impls: c.supertypes.iter().skip(1).map(lower_type_ref).collect(),
                         methods: method_ids,
                     }),
                     vis: lower_vis(c.visibility),
@@ -264,6 +264,7 @@ impl Resolver {
                     .as_ref()
                     .map(lower_type_ref)
                     .unwrap_or(TyRef::Error);
+                let generics = imp.generics.iter().map(|g| g.name.clone()).collect();
                 let def = Def {
                     id,
                     name: SmolStr::from(""),
@@ -271,6 +272,7 @@ impl Resolver {
                         trait_ref,
                         target: lower_type_ref(&imp.target),
                         methods: method_ids,
+                        generics,
                     }),
                     vis: Vis::Internal,
                     span: imp.span,

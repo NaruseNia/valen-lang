@@ -68,7 +68,13 @@ impl Hir {
             return false;
         };
         match def.vis {
-            Vis::Pub | Vis::Internal => true,
+            Vis::Pub => true,
+            // TODO: Internal should be restricted to the same module scope.
+            // Currently treated identically to Pub because the module system
+            // (module DefId / package boundaries) is not yet implemented.
+            // Once modules are materialized, check that the accessor is in the
+            // same module as the definition.
+            Vis::Internal => true,
             Vis::Private => {
                 if let Some(accessor) = accessor_type {
                     self.is_member_of(def_id, accessor)
@@ -187,6 +193,7 @@ pub struct ImplDef {
     pub trait_ref: TyRef,
     pub target: TyRef,
     pub methods: Vec<DefId>,
+    pub generics: Vec<SmolStr>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -313,6 +320,39 @@ impl std::fmt::Display for PrimTy {
     }
 }
 
+impl std::fmt::Display for TyRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TyRef::Prim(p) => write!(f, "{p}"),
+            TyRef::Named(n) => write!(f, "{n}"),
+            TyRef::Generic(n, args) => {
+                write!(f, "{n}<")?;
+                for (i, a) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{a}")?;
+                }
+                write!(f, ">")
+            }
+            TyRef::Nullable(inner) => write!(f, "{inner}?"),
+            TyRef::Fn(params, ret) => {
+                write!(f, "fn(")?;
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{p}")?;
+                }
+                write!(f, ") -> {ret}")
+            }
+            TyRef::SelfTy => write!(f, "Self"),
+            TyRef::Unresolved(n) => write!(f, "{n}"),
+            TyRef::Error => write!(f, "<error>"),
+        }
+    }
+}
+
 pub fn tyref_to_ty(tyref: &TyRef) -> Ty {
     match tyref {
         TyRef::Prim(p) => Ty::Prim(*p),
@@ -361,7 +401,10 @@ pub struct TypedExpr {
 #[derive(Debug, Clone)]
 pub enum TypedExprKind {
     IntLit(i64),
+    LongLit(i64),
     FloatLit(f64),
+    Float32Lit(f32),
+    CharLit(char),
     StringLit(SmolStr),
     BoolLit(bool),
     UnitLit,

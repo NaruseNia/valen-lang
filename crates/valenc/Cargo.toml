@@ -22,3 +22,9 @@ clap = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+indexmap = { workspace = true }
+smol_str = { workspace = true }
+
+[dev-dependencies]
+assert_cmd = { workspace = true }
+predicates = "3"

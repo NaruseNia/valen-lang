@@ -48,8 +48,7 @@ expression: "check(\"class Dog(pub name: String) { fn greet(self) -> String { se
                     },
                 },
             ],
-            superclass: None,
-            traits: [],
+            supertypes: [],
             body: [
                 Method(
                     FnDecl {

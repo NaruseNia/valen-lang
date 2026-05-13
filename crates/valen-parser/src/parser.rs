@@ -18,13 +18,14 @@
 use smol_str::SmolStr;
 use valen_ast::token::TokenKind;
 use valen_ast::{
-    AtPattern, BinaryExpr, BinaryOp, BindingPattern, Block, BreakExpr, CallArg, CallExpr,
-    ClassDecl, ClassKind, ClassMember, ContinueExpr, CtorParam, DataClassDecl, EnumDecl, EnumField,
-    EnumVariant, EnumVariantFields, Expr, FieldAccess, FileId, FnDecl, ForExpr, IfExpr, ImplBlock,
-    ImplItem, ImportDecl, Item, LambdaExpr, LambdaParam, LetStmt, Literal, LoopExpr, MatchArm,
-    MatchExpr, MethodCallExpr, PackageDecl, Param, Path, PathSegment, Pattern, RangeExpr,
-    RangePattern, ReturnExpr, Span, Stmt, StructPattern, StructPatternField, TraitDecl, TraitItem,
-    TryExpr, Type, TypePath, TypePathSegment, UnaryExpr, UnaryOp, Visibility, WhileExpr,
+    AssignExpr, AtPattern, BinaryExpr, BinaryOp, BindingPattern, Block, BreakExpr, CallArg,
+    CallExpr, ClassDecl, ClassKind, ClassMember, ContinueExpr, CtorParam, DataClassDecl, EnumDecl,
+    EnumField, EnumVariant, EnumVariantFields, Expr, FieldAccess, FileId, FnDecl, ForExpr,
+    GenericParam, IfExpr, ImplBlock, ImplItem, ImportDecl, Item, LambdaExpr, LambdaParam, LetStmt,
+    Literal, LoopExpr, MatchArm, MatchExpr, MethodCallExpr, PackageDecl, Param, Path, PathSegment,
+    Pattern, RangeExpr, RangePattern, ReturnExpr, Span, Stmt, StructPattern, StructPatternField,
+    TraitDecl, TraitItem, TryExpr, Type, TypePath, TypePathSegment, UnaryExpr, UnaryOp, Variance,
+    Visibility, WhileExpr,
 };
 use valen_diagnostics::{DiagCode, Diagnostics};
 
@@ -39,11 +40,16 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(source: &str, file_id: FileId) -> Self {
+        let (tokens, lex_diagnostics) = lex(source, file_id);
+        let mut diagnostics = Diagnostics::new();
+        for diag in lex_diagnostics.iter() {
+            diagnostics.push(diag.clone());
+        }
         Self {
-            tokens: lex(source, file_id),
+            tokens,
             pos: 0,
             file_id,
-            diagnostics: Diagnostics::new(),
+            diagnostics,
         }
     }
 
@@ -92,7 +98,7 @@ impl Parser {
             _ => {
                 let span = self.peek_span();
                 self.diagnostics.error(
-                    DiagCode::PARSE_EXPECTED_EXPR,
+                    DiagCode::PARSE_UNEXPECTED_TOKEN,
                     span,
                     SmolStr::from(
                         "expected top-level item (e.g. `fn`, `class`, `enum`, `trait`, `impl`)",
@@ -149,6 +155,7 @@ impl Parser {
     ) -> Option<FnDecl> {
         self.expect(TokenKind::Fn)?;
         let name = self.expect_ident()?;
+        let generics = self.parse_generic_params()?;
         self.expect(TokenKind::LParen)?;
         let params = self.parse_param_list()?;
         self.expect(TokenKind::RParen)?;
@@ -164,7 +171,7 @@ impl Parser {
         Some(FnDecl {
             visibility,
             name,
-            generics: Vec::new(),
+            generics,
             params,
             return_type,
             body: Some(body),
@@ -282,6 +289,7 @@ impl Parser {
     ) -> Option<ClassDecl> {
         self.expect(TokenKind::Class)?;
         let name = self.expect_ident()?;
+        let generics = self.parse_generic_params()?;
 
         let ctor_params = if self.at(&TokenKind::LParen) {
             self.parse_ctor_params()?
@@ -289,7 +297,7 @@ impl Parser {
             Vec::new()
         };
 
-        let (superclass, traits) = self.parse_superclass_and_traits()?;
+        let supertypes = self.parse_supertypes()?;
 
         let (body, end) = if self.at(&TokenKind::LBrace) {
             self.expect(TokenKind::LBrace)?;
@@ -305,10 +313,9 @@ impl Parser {
             visibility,
             kind,
             name,
-            generics: Vec::new(),
+            generics,
             ctor_params,
-            superclass,
-            traits,
+            supertypes,
             body,
             span: start.merge(end),
         })
@@ -343,16 +350,48 @@ impl Parser {
         Some(params)
     }
 
-    fn parse_superclass_and_traits(&mut self) -> Option<(Option<Type>, Vec<Type>)> {
+    fn parse_supertypes(&mut self) -> Option<Vec<Type>> {
         if self.eat(&TokenKind::Colon).is_none() {
-            return Some((None, Vec::new()));
+            return Some(Vec::new());
         }
-        let first = self.parse_type()?;
-        let mut traits = Vec::new();
+        let mut types = vec![self.parse_type()?];
         while self.eat(&TokenKind::Comma).is_some() {
-            traits.push(self.parse_type()?);
+            types.push(self.parse_type()?);
         }
-        Some((Some(first), traits))
+        Some(types)
+    }
+
+    fn parse_generic_params(&mut self) -> Option<Vec<GenericParam>> {
+        if self.eat(&TokenKind::Lt).is_none() {
+            return Some(Vec::new());
+        }
+        let mut params = Vec::new();
+        while !self.at(&TokenKind::Gt) && !self.at_eof() {
+            if !params.is_empty() {
+                self.expect(TokenKind::Comma)?;
+                if self.at(&TokenKind::Gt) {
+                    break;
+                }
+            }
+            let start = self.peek_span();
+            let name = self.expect_ident()?;
+            let mut bounds = Vec::new();
+            if self.eat(&TokenKind::Colon).is_some() {
+                bounds.push(self.parse_type()?);
+                while self.eat(&TokenKind::Plus).is_some() {
+                    bounds.push(self.parse_type()?);
+                }
+            }
+            let end = bounds.last().map(type_span).unwrap_or(start);
+            params.push(GenericParam {
+                name,
+                variance: Variance::Invariant,
+                bounds,
+                span: start.merge(end),
+            });
+        }
+        self.expect(TokenKind::Gt)?;
+        Some(params)
     }
 
     fn parse_class_body(&mut self) -> Option<Vec<ClassMember>> {
@@ -372,7 +411,7 @@ impl Parser {
                 _ => {
                     let span = self.peek_span();
                     self.diagnostics.error(
-                        DiagCode::PARSE_EXPECTED_EXPR,
+                        DiagCode::PARSE_UNEXPECTED_TOKEN,
                         span,
                         SmolStr::from("expected method declaration in class body"),
                     );
@@ -387,12 +426,13 @@ impl Parser {
         self.expect(TokenKind::Data)?;
         self.expect(TokenKind::Class)?;
         let name = self.expect_ident()?;
+        let generics = self.parse_generic_params()?;
         let ctor_params = self.parse_ctor_params()?;
         let end = self.expect(TokenKind::Semi)?;
         Some(DataClassDecl {
             visibility,
             name,
-            generics: Vec::new(),
+            generics,
             ctor_params,
             span: start.merge(end),
         })
@@ -401,6 +441,7 @@ impl Parser {
     fn parse_enum(&mut self, visibility: Visibility, start: Span) -> Option<EnumDecl> {
         self.expect(TokenKind::Enum)?;
         let name = self.expect_ident()?;
+        let generics = self.parse_generic_params()?;
         self.expect(TokenKind::LBrace)?;
         let mut variants = Vec::new();
         while !self.at(&TokenKind::RBrace) && !self.at_eof() {
@@ -416,7 +457,7 @@ impl Parser {
         Some(EnumDecl {
             visibility,
             name,
-            generics: Vec::new(),
+            generics,
             variants,
             span: start.merge(end),
         })
@@ -462,12 +503,14 @@ impl Parser {
     fn parse_trait(&mut self, visibility: Visibility, start: Span) -> Option<TraitDecl> {
         self.expect(TokenKind::Trait)?;
         let name = self.expect_ident()?;
+        let generics = self.parse_generic_params()?;
         self.expect(TokenKind::LBrace)?;
         let mut items = Vec::new();
         while !self.at(&TokenKind::RBrace) && !self.at_eof() {
             let item_start = self.peek_span();
             self.expect(TokenKind::Fn)?;
             let fn_name = self.expect_ident()?;
+            let fn_generics = self.parse_generic_params()?;
             self.expect(TokenKind::LParen)?;
             let params = self.parse_param_list()?;
             self.expect(TokenKind::RParen)?;
@@ -487,7 +530,7 @@ impl Parser {
             items.push(TraitItem::Fn(FnDecl {
                 visibility: Visibility::Pub,
                 name: fn_name,
-                generics: Vec::new(),
+                generics: fn_generics,
                 params,
                 return_type,
                 body,
@@ -501,7 +544,7 @@ impl Parser {
         Some(TraitDecl {
             visibility,
             name,
-            generics: Vec::new(),
+            generics,
             items,
             span: start.merge(end),
         })
@@ -509,6 +552,7 @@ impl Parser {
 
     fn parse_impl(&mut self, start: Span) -> Option<ImplBlock> {
         self.expect(TokenKind::Impl)?;
+        let impl_generics = self.parse_generic_params()?;
         let trait_type = self.parse_type()?;
         self.expect(TokenKind::For)?;
         let target = self.parse_type()?;
@@ -521,7 +565,7 @@ impl Parser {
         }
         let end = self.expect(TokenKind::RBrace)?;
         Some(ImplBlock {
-            generics: Vec::new(),
+            generics: impl_generics,
             trait_ref: Some(trait_type),
             target,
             items,
@@ -634,7 +678,35 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Option<Expr> {
-        self.parse_or()
+        let lhs = self.parse_or()?;
+
+        if self.at(&TokenKind::Eq)
+            || self.at(&TokenKind::PlusEq)
+            || self.at(&TokenKind::MinusEq)
+            || self.at(&TokenKind::StarEq)
+            || self.at(&TokenKind::SlashEq)
+            || self.at(&TokenKind::PercentEq)
+        {
+            let op_tok = self.bump();
+            let rhs = self.parse_expr()?;
+            let value = match op_tok.0 {
+                TokenKind::Eq => rhs,
+                TokenKind::PlusEq => combine_binary(BinaryOp::Add, lhs.clone(), rhs),
+                TokenKind::MinusEq => combine_binary(BinaryOp::Sub, lhs.clone(), rhs),
+                TokenKind::StarEq => combine_binary(BinaryOp::Mul, lhs.clone(), rhs),
+                TokenKind::SlashEq => combine_binary(BinaryOp::Div, lhs.clone(), rhs),
+                TokenKind::PercentEq => combine_binary(BinaryOp::Rem, lhs.clone(), rhs),
+                _ => unreachable!(),
+            };
+            let span = expr_span(&lhs).merge(expr_span(&value));
+            return Some(Expr::Assign(AssignExpr {
+                target: Box::new(lhs),
+                value: Box::new(value),
+                span,
+            }));
+        }
+
+        Some(lhs)
     }
 
     fn parse_or(&mut self) -> Option<Expr> {
@@ -848,9 +920,9 @@ impl Parser {
                 self.bump();
                 Some(Expr::Literal(Literal::Int(n, span)))
             }
-            TokenKind::FloatLit(n) => {
+            TokenKind::DoubleLit(n) => {
                 self.bump();
-                Some(Expr::Literal(Literal::Float(n, span)))
+                Some(Expr::Literal(Literal::Double(n, span)))
             }
             TokenKind::StringLit(s) => {
                 self.bump();
@@ -1336,7 +1408,11 @@ impl Parser {
     }
 
     fn bump(&mut self) -> (TokenKind, Span) {
-        let tok = self.tokens[self.pos].clone();
+        let tok = self
+            .tokens
+            .get(self.pos)
+            .cloned()
+            .unwrap_or((TokenKind::Eof, Span::DUMMY));
         self.pos += 1;
         tok
     }
@@ -1361,7 +1437,7 @@ impl Parser {
         }
         let span = self.peek_span();
         self.diagnostics.error(
-            DiagCode::PARSE_EXPECTED_EXPR,
+            DiagCode::PARSE_EXPECTED_TOKEN,
             span,
             SmolStr::from(format!("expected {}", describe_token(&kind))),
         );
@@ -1375,7 +1451,7 @@ impl Parser {
         }
         let span = self.peek_span();
         self.diagnostics.error(
-            DiagCode::PARSE_EXPECTED_EXPR,
+            DiagCode::PARSE_EXPECTED_IDENT,
             span,
             SmolStr::from("expected identifier"),
         );
@@ -1421,7 +1497,10 @@ fn combine_binary(op: BinaryOp, lhs: Expr, rhs: Expr) -> Expr {
 fn expr_span(expr: &Expr) -> Span {
     match expr {
         Expr::Literal(Literal::Int(_, s)) => *s,
+        Expr::Literal(Literal::Long(_, s)) => *s,
         Expr::Literal(Literal::Float(_, s)) => *s,
+        Expr::Literal(Literal::Double(_, s)) => *s,
+        Expr::Literal(Literal::Char(_, s)) => *s,
         Expr::Literal(Literal::String(_, s)) => *s,
         Expr::Literal(Literal::Bool(_, s)) => *s,
         Expr::Literal(Literal::Unit(s)) => *s,
@@ -1493,7 +1572,10 @@ fn pattern_span(pat: &Pattern) -> Span {
 fn literal_span(lit: &Literal) -> Span {
     match lit {
         Literal::Int(_, s) => *s,
+        Literal::Long(_, s) => *s,
         Literal::Float(_, s) => *s,
+        Literal::Double(_, s) => *s,
+        Literal::Char(_, s) => *s,
         Literal::String(_, s) => *s,
         Literal::Bool(_, s) => *s,
         Literal::Unit(s) => *s,

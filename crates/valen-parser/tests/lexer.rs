@@ -6,7 +6,8 @@ use valen_ast::FileId;
 use valen_parser::lex;
 
 fn fmt(src: &str) -> String {
-    lex(src, FileId(0))
+    let (tokens, _diagnostics) = lex(src, FileId(0));
+    tokens
         .iter()
         .filter(|(k, _)| !matches!(k, TokenKind::Eof))
         .map(|(k, s)| format!("{:?} @ {}..{}", k, s.start, s.end))
