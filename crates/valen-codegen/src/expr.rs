@@ -119,6 +119,46 @@ impl<'a> ExprLowering<'a> {
         slot
     }
 
+    /// Returns a snapshot of the current locals array for StackMapTable frame generation.
+    ///
+    /// The result lists one `JvmType` per logical local-variable entry (wide types
+    /// like `Long`/`Double` appear once; their implicit second slot is skipped).
+    /// Gaps (unoccupied slots) are represented as `JvmType::Void` which maps to
+    /// `VerificationType::Top` during emission.
+    fn locals_snapshot(&self) -> Vec<JvmType> {
+        // Build a slot → JvmType map from the named locals.
+        let mut slot_map: Vec<Option<JvmType>> = vec![None; self.next_slot as usize];
+        for (_name, (slot, ty)) in &self.locals {
+            let s = *slot as usize;
+            if s < slot_map.len() {
+                slot_map[s] = Some(ty.clone());
+            }
+        }
+
+        let mut result = Vec::new();
+        let mut slot = 0usize;
+        while slot < slot_map.len() {
+            match &slot_map[slot] {
+                Some(ty) => {
+                    result.push(ty.clone());
+                    slot += ty.slot_count() as usize;
+                }
+                None => {
+                    // Gap slot — emit Top (represented as Void in our IR).
+                    result.push(JvmType::Void);
+                    slot += 1;
+                }
+            }
+        }
+        result
+    }
+
+    /// Emits a `JvmOp::Frame` hint with the current locals snapshot and the given stack.
+    fn emit_frame(&mut self, stack: Vec<JvmType>) {
+        let locals = self.locals_snapshot();
+        self.ops.push(JvmOp::Frame { locals, stack });
+    }
+
     fn pop_if_needed(&mut self, ty: &Ty) {
         if matches!(ty, Ty::Prim(PrimTy::Unit) | Ty::Error) {
             return;
@@ -292,7 +332,7 @@ impl<'a> ExprLowering<'a> {
                 then_branch,
                 else_branch,
             } => {
-                self.lower_if(cond, then_branch, else_branch.as_deref());
+                self.lower_if(cond, then_branch, else_branch.as_deref(), &expr.ty);
             }
             TypedExprKind::Match { scrutinee, arms } => {
                 self.lower_match(scrutinee, arms, &expr.ty);
@@ -493,8 +533,10 @@ impl<'a> ExprLowering<'a> {
         self.ops.push(JvmOp::PushInt(1));
         self.ops.push(JvmOp::Goto(end_label));
         self.ops.push(JvmOp::Label(false_label));
+        self.emit_frame(vec![]);
         self.ops.push(JvmOp::PushInt(0));
         self.ops.push(JvmOp::Label(end_label));
+        self.emit_frame(vec![JvmType::Int]);
     }
 
     fn push_cmp_branch(&mut self, op: BinaryOp, false_label: Label) {
@@ -519,8 +561,10 @@ impl<'a> ExprLowering<'a> {
         self.lower_expr(rhs);
         self.ops.push(JvmOp::Goto(end_label));
         self.ops.push(JvmOp::Label(false_label));
+        self.emit_frame(vec![]);
         self.ops.push(JvmOp::PushInt(0));
         self.ops.push(JvmOp::Label(end_label));
+        self.emit_frame(vec![JvmType::Int]);
     }
 
     fn lower_short_circuit_or(&mut self, lhs: &TypedExpr, rhs: &TypedExpr) {
@@ -532,8 +576,10 @@ impl<'a> ExprLowering<'a> {
         self.lower_expr(rhs);
         self.ops.push(JvmOp::Goto(end_label));
         self.ops.push(JvmOp::Label(true_label));
+        self.emit_frame(vec![]);
         self.ops.push(JvmOp::PushInt(1));
         self.ops.push(JvmOp::Label(end_label));
+        self.emit_frame(vec![JvmType::Int]);
     }
 
     fn lower_if(
@@ -541,6 +587,7 @@ impl<'a> ExprLowering<'a> {
         cond: &TypedExpr,
         then_branch: &TypedBody,
         else_branch: Option<&TypedExpr>,
+        result_ty: &Ty,
     ) {
         let else_label = self.alloc_label();
         let end_label = self.alloc_label();
@@ -556,12 +603,20 @@ impl<'a> ExprLowering<'a> {
         }
 
         self.ops.push(JvmOp::Label(else_label));
+        self.emit_frame(vec![]);
 
         if let Some(else_expr) = else_branch {
             self.push_scope();
             self.lower_expr(else_expr);
             self.pop_scope();
             self.ops.push(JvmOp::Label(end_label));
+            let jvm_result = self.ty_to_jvm(result_ty);
+            let end_stack = if matches!(jvm_result, JvmType::Void) {
+                vec![]
+            } else {
+                vec![jvm_result]
+            };
+            self.emit_frame(end_stack);
         }
     }
 
@@ -569,7 +624,7 @@ impl<'a> ExprLowering<'a> {
         &mut self,
         scrutinee: &TypedExpr,
         arms: &[valen_hir::TypedMatchArm],
-        _result_ty: &Ty,
+        result_ty: &Ty,
     ) {
         self.lower_expr(scrutinee);
         let scrutinee_ty = self.ty_to_jvm(&scrutinee.ty);
@@ -601,10 +656,18 @@ impl<'a> ExprLowering<'a> {
             if !is_last {
                 self.ops.push(JvmOp::Goto(end_label));
                 self.ops.push(JvmOp::Label(next_arm));
+                self.emit_frame(vec![]);
             }
         }
 
         self.ops.push(JvmOp::Label(end_label));
+        let jvm_result = self.ty_to_jvm(result_ty);
+        let end_stack = if matches!(jvm_result, JvmType::Void) {
+            vec![]
+        } else {
+            vec![jvm_result]
+        };
+        self.emit_frame(end_stack);
     }
 
     fn lower_pattern_check(
@@ -720,9 +783,11 @@ impl<'a> ExprLowering<'a> {
                         self.lower_pattern_check(pat, temp_slot, scrutinee_ty, next_try);
                         self.ops.push(JvmOp::Goto(success_label));
                         self.ops.push(JvmOp::Label(next_try));
+                        self.emit_frame(vec![]);
                     }
                 }
                 self.ops.push(JvmOp::Label(success_label));
+                self.emit_frame(vec![]);
             }
             Pattern::Range(range) => {
                 if let Some(start) = &range.start {
@@ -802,6 +867,7 @@ impl<'a> ExprLowering<'a> {
         let break_label = self.alloc_label();
 
         self.ops.push(JvmOp::Label(continue_label));
+        self.emit_frame(vec![]);
         self.lower_expr(cond);
         self.ops.push(JvmOp::IfEq(break_label));
 
@@ -816,6 +882,7 @@ impl<'a> ExprLowering<'a> {
 
         self.ops.push(JvmOp::Goto(continue_label));
         self.ops.push(JvmOp::Label(break_label));
+        self.emit_frame(vec![]);
     }
 
     fn lower_loop(&mut self, body: &TypedBody) {
@@ -823,6 +890,7 @@ impl<'a> ExprLowering<'a> {
         let break_label = self.alloc_label();
 
         self.ops.push(JvmOp::Label(continue_label));
+        self.emit_frame(vec![]);
 
         self.loop_stack.push(LoopContext {
             break_label,
@@ -835,6 +903,7 @@ impl<'a> ExprLowering<'a> {
 
         self.ops.push(JvmOp::Goto(continue_label));
         self.ops.push(JvmOp::Label(break_label));
+        self.emit_frame(vec![]);
     }
 
     fn lower_string_interp(&mut self, parts: &[TypedStringPart]) {
