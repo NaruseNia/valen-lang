@@ -1,3 +1,5 @@
+//! Lowers `valen_hir::Hir` definitions into `JvmClass` IR.
+
 use indexmap::IndexMap;
 use smol_str::SmolStr;
 use valen_hir::{ClassDefKind, Def, DefKind, FnDef, Hir, TypedBody, Vis};
@@ -11,6 +13,7 @@ use crate::jvm_ir::{
 };
 use crate::JvmVersion;
 
+/// Lowers an entire HIR module into a list of JVM class IR nodes.
 pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<SmolStr, TypedBody>) -> Vec<JvmClass> {
     let pkg = hir.package.as_deref();
     let mut classes = Vec::new();

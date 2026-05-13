@@ -1,3 +1,5 @@
+//! Minimal class emitter for early prototyping (single empty class with default `<init>`).
+
 use ristretto_classfile::attributes::{Attribute, Instruction};
 use ristretto_classfile::{
     ClassAccessFlags, ClassFile, ConstantPool, Method, MethodAccessFlags, JAVA_21,
@@ -5,6 +7,7 @@ use ristretto_classfile::{
 
 use crate::ClassFileOutput;
 
+/// Emit a minimal JVM class with only a default no-arg constructor.
 pub fn emit_class(name: &str) -> Result<ClassFileOutput, ristretto_classfile::Error> {
     let mut cp = ConstantPool::default();
 

@@ -1,3 +1,5 @@
+//! Emits `JvmClass` IR to JVM `.class` file bytes using `ristretto_classfile`.
+
 use std::collections::HashMap;
 
 use ristretto_classfile::attributes::{
@@ -14,14 +16,18 @@ use crate::jvm_ir::{
 };
 use crate::ClassFileOutput;
 
+/// Errors that can occur during classfile emission.
 #[derive(Debug, thiserror::Error)]
 pub enum CodegenError {
+    /// Error from the underlying `ristretto_classfile` library.
     #[error("classfile error: {0}")]
     ClassFile(#[from] ristretto_classfile::Error),
+    /// A branch references a label that was never defined.
     #[error("unresolved label: {0}")]
     UnresolvedLabel(Label),
 }
 
+/// Emits a single `JvmClass` IR node to classfile bytes.
 pub fn emit_class(jvm_class: &JvmClass) -> Result<ClassFileOutput, CodegenError> {
     let mut cp = ConstantPool::default();
 

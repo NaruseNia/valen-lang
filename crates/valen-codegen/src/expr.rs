@@ -1,3 +1,5 @@
+//! Lowers typed HIR expressions and statements into JVM bytecode operations.
+
 use indexmap::IndexMap;
 use smol_str::SmolStr;
 use valen_ast::{BinaryOp, UnaryOp};
@@ -22,6 +24,7 @@ struct ExprLowering<'a> {
     pkg: Option<&'a [SmolStr]>,
 }
 
+/// Lowers a typed method body into JVM bytecode operations.
 pub fn lower_body(
     body: &TypedBody,
     class_internal: &str,

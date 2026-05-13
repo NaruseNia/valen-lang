@@ -1,8 +1,11 @@
+//! JVM type descriptor and internal name generation.
+
 use smol_str::SmolStr;
 use valen_hir::{PrimTy, TyRef};
 
 use crate::jvm_ir::JvmType;
 
+/// Converts a HIR type reference to its JVM type representation.
 pub fn tyref_to_jvm(tyref: &TyRef, package: Option<&[SmolStr]>) -> JvmType {
     match tyref {
         TyRef::Prim(p) => prim_to_jvm(p),
@@ -38,6 +41,7 @@ fn prim_to_jvm(prim: &PrimTy) -> JvmType {
     }
 }
 
+/// Returns the JVM type descriptor string (e.g. `I`, `Ljava/lang/String;`).
 pub fn jvm_type_descriptor(ty: &JvmType) -> String {
     match ty {
         JvmType::Byte => "B".to_string(),
@@ -54,6 +58,7 @@ pub fn jvm_type_descriptor(ty: &JvmType) -> String {
     }
 }
 
+/// Returns the JVM method descriptor string (e.g. `(IJ)Z`).
 pub fn jvm_method_descriptor(params: &[JvmType], ret: &JvmType) -> String {
     let mut desc = String::from("(");
     for p in params {
@@ -64,6 +69,7 @@ pub fn jvm_method_descriptor(params: &[JvmType], ret: &JvmType) -> String {
     desc
 }
 
+/// Builds a JVM internal class name by prepending the package path (e.g. `com/example/Foo`).
 pub fn class_internal_name(name: &str, package: Option<&[SmolStr]>) -> String {
     match package {
         Some(parts) if !parts.is_empty() => {
