@@ -228,7 +228,7 @@ pub enum Type {
     /// 単純な名前: `Int`, `User`
     Path(TypePath),
     /// `T?` → `Option<T>` の糖衣（parser で展開される）
-    Nullable(Box<Type>),
+    Nullable { inner: Box<Type>, span: Span },
     /// `fn(Int, Int) -> String`
     Fn(FnType),
     /// `(A, B, C)` は MVP では採用しない（予約）
@@ -329,7 +329,7 @@ pub struct PathSegment {
     pub name: SmolStr,
     /// `::` の後なら true（Shape::Circle のような variant アクセス）、
     /// `.` の後なら false（java.util.List のような path）
-    pub turbofish: bool,
+    pub double_colon: bool,
     pub generics: Vec<Type>,
     pub span: Span,
 }
@@ -413,6 +413,8 @@ pub enum UnaryOp {
 #[derive(Debug, Clone)]
 pub struct AssignExpr {
     pub target: Box<Expr>,
+    /// `None` = plain `=`, `Some(Add)` = `+=`, etc.
+    pub op: Option<BinaryOp>,
     pub value: Box<Expr>,
     pub span: Span,
 }
@@ -447,9 +449,9 @@ pub enum Pattern {
     Binding(BindingPattern),
     Path(Path),
     Struct(StructPattern),
-    Tuple(Vec<Pattern>),
+    Tuple(Vec<Pattern>, Span),
     Range(RangePattern),
-    Or(Vec<Pattern>),
+    Or(Vec<Pattern>, Span),
     /// `name @ pattern`
     At(AtPattern),
 }

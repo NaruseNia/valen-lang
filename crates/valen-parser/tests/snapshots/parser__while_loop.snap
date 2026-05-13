@@ -22,7 +22,7 @@ expression: "check(\"fn f() { while running { tick(); } }\")"
                                         segments: [
                                             PathSegment {
                                                 name: "running",
-                                                turbofish: false,
+                                                double_colon: false,
                                                 generics: [],
                                                 span: Span {
                                                     start: 15,
@@ -52,7 +52,7 @@ expression: "check(\"fn f() { while running { tick(); } }\")"
                                                             segments: [
                                                                 PathSegment {
                                                                     name: "tick",
-                                                                    turbofish: false,
+                                                                    double_colon: false,
                                                                     generics: [],
                                                                     span: Span {
                                                                         start: 25,

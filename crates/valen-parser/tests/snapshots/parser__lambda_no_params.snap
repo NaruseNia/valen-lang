@@ -28,7 +28,7 @@ expression: "check(\"fn f() { let greet = || hello; }\")"
                                                 segments: [
                                                     PathSegment {
                                                         name: "hello",
-                                                        turbofish: false,
+                                                        double_colon: false,
                                                         generics: [],
                                                         span: Span {
                                                             start: 24,

@@ -138,6 +138,17 @@ impl Diagnostics {
         });
     }
 
+    pub fn hint(&mut self, code: DiagCode, span: Span, message: impl Into<SmolStr>) {
+        self.entries.push(Diagnostic {
+            severity: Severity::Hint,
+            code,
+            message: message.into(),
+            primary: span,
+            labels: Vec::new(),
+            notes: Vec::new(),
+        });
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &Diagnostic> {
         self.entries.iter()
     }

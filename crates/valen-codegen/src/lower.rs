@@ -15,15 +15,23 @@ pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<SmolStr, TypedBody>) -> Vec<
     let mut classes = Vec::new();
 
     for (_id, def) in &hir.defs {
+        let source_file = Some(format!("{}.vln", def.name));
         match &def.kind {
             DefKind::Class(class_def) => {
-                classes.push(lower_class(hir, def, class_def, typed_bodies, pkg));
+                classes.push(lower_class(
+                    hir,
+                    def,
+                    class_def,
+                    typed_bodies,
+                    pkg,
+                    source_file,
+                ));
             }
             DefKind::DataClass(data_def) => {
-                classes.push(lower_data_class(hir, def, data_def, pkg));
+                classes.push(lower_data_class(hir, def, data_def, pkg, source_file));
             }
             DefKind::Enum(enum_def) => {
-                classes.extend(lower_enum(def, enum_def, pkg));
+                classes.extend(lower_enum(def, enum_def, pkg, source_file));
             }
             _ => {}
         }
@@ -38,6 +46,7 @@ fn lower_class(
     class_def: &valen_hir::ClassDef,
     typed_bodies: &IndexMap<SmolStr, TypedBody>,
     pkg: Option<&[SmolStr]>,
+    source_file: Option<String>,
 ) -> JvmClass {
     let internal = class_internal_name(&def.name, pkg);
 
@@ -88,7 +97,7 @@ fn lower_class(
         interfaces,
         fields,
         methods,
-        source_file: None,
+        source_file,
         permitted_subclasses: permitted,
         is_record: false,
     }
@@ -99,6 +108,7 @@ fn lower_data_class(
     def: &Def,
     data_def: &valen_hir::DataClassDef,
     pkg: Option<&[SmolStr]>,
+    source_file: Option<String>,
 ) -> JvmClass {
     let internal = class_internal_name(&def.name, pkg);
     let super_class = "java/lang/Object".to_string();
@@ -135,7 +145,7 @@ fn lower_data_class(
         interfaces: vec![],
         fields,
         methods,
-        source_file: None,
+        source_file,
         permitted_subclasses: vec![],
         is_record: false,
     }
@@ -327,7 +337,12 @@ fn superclass_matches(tyref: &valen_hir::TyRef, name: &str) -> bool {
     }
 }
 
-fn lower_enum(def: &Def, enum_def: &valen_hir::EnumDef, pkg: Option<&[SmolStr]>) -> Vec<JvmClass> {
+fn lower_enum(
+    def: &Def,
+    enum_def: &valen_hir::EnumDef,
+    pkg: Option<&[SmolStr]>,
+    source_file: Option<String>,
+) -> Vec<JvmClass> {
     let enum_internal = class_internal_name(&def.name, pkg);
     let mut classes = Vec::new();
 
@@ -350,20 +365,25 @@ fn lower_enum(def: &Def, enum_def: &valen_hir::EnumDef, pkg: Option<&[SmolStr]>)
         interfaces: vec![],
         fields: vec![],
         methods: vec![],
-        source_file: None,
+        source_file: source_file.clone(),
         permitted_subclasses: variant_internals.clone(),
         is_record: false,
     });
 
     for (variant, variant_internal) in enum_def.variants.iter().zip(variant_internals.iter()) {
         if variant.fields.is_empty() {
-            classes.push(lower_unit_variant(variant_internal, &enum_internal));
+            classes.push(lower_unit_variant(
+                variant_internal,
+                &enum_internal,
+                source_file.clone(),
+            ));
         } else {
             classes.push(lower_record_variant(
                 variant_internal,
                 &enum_internal,
                 &variant.fields,
                 pkg,
+                source_file.clone(),
             ));
         }
     }
@@ -376,6 +396,7 @@ fn lower_record_variant(
     enum_internal: &str,
     fields: &[(SmolStr, valen_hir::TyRef)],
     pkg: Option<&[SmolStr]>,
+    source_file: Option<String>,
 ) -> JvmClass {
     let jvm_fields: Vec<JvmField> = fields
         .iter()
@@ -410,13 +431,17 @@ fn lower_record_variant(
         interfaces: vec![enum_internal.to_string()],
         fields: jvm_fields,
         methods,
-        source_file: None,
+        source_file,
         permitted_subclasses: vec![],
         is_record: true,
     }
 }
 
-fn lower_unit_variant(variant_internal: &str, enum_internal: &str) -> JvmClass {
+fn lower_unit_variant(
+    variant_internal: &str,
+    enum_internal: &str,
+    source_file: Option<String>,
+) -> JvmClass {
     let self_ty = JvmType::Object(variant_internal.to_string());
 
     let instance_field = JvmField {
@@ -495,7 +520,7 @@ fn lower_unit_variant(variant_internal: &str, enum_internal: &str) -> JvmClass {
         interfaces: vec![enum_internal.to_string()],
         fields: vec![instance_field],
         methods: vec![private_ctor, clinit],
-        source_file: None,
+        source_file,
         permitted_subclasses: vec![],
         is_record: false,
     }

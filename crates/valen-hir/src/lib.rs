@@ -367,6 +367,24 @@ pub fn tyref_to_ty(tyref: &TyRef) -> Ty {
     }
 }
 
+/// Map a primitive type name to `PrimTy`. Shared by resolve and type-check.
+pub fn resolve_prim(name: &str) -> Option<PrimTy> {
+    match name {
+        "Int" => Some(PrimTy::Int),
+        "Long" => Some(PrimTy::Long),
+        "Float" => Some(PrimTy::Float),
+        "Double" => Some(PrimTy::Double),
+        "Bool" => Some(PrimTy::Bool),
+        "Char" => Some(PrimTy::Char),
+        "Byte" => Some(PrimTy::Byte),
+        "Short" => Some(PrimTy::Short),
+        "String" => Some(PrimTy::String),
+        "Unit" => Some(PrimTy::Unit),
+        "Nothing" => Some(PrimTy::Nothing),
+        _ => None,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Typed HIR — expression/statement trees with Ty annotations
 // ---------------------------------------------------------------------------

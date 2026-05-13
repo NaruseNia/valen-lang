@@ -22,7 +22,7 @@ expression: "check(\"fn f() { if cond { do_thing(); } }\")"
                                         segments: [
                                             PathSegment {
                                                 name: "cond",
-                                                turbofish: false,
+                                                double_colon: false,
                                                 generics: [],
                                                 span: Span {
                                                     start: 12,
@@ -52,7 +52,7 @@ expression: "check(\"fn f() { if cond { do_thing(); } }\")"
                                                             segments: [
                                                                 PathSegment {
                                                                     name: "do_thing",
-                                                                    turbofish: false,
+                                                                    double_colon: false,
                                                                     generics: [],
                                                                     span: Span {
                                                                         start: 19,

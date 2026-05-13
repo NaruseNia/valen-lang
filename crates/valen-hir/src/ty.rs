@@ -116,6 +116,7 @@ impl<'hir> TypeChecker<'hir> {
                 valen_ast::Item::Fn(f) => self.check_fn_decl(f, None),
                 valen_ast::Item::Class(c) => self.check_class(c),
                 valen_ast::Item::Impl(imp) => self.check_impl(imp),
+                valen_ast::Item::Trait(t) => self.check_trait(t),
                 _ => {}
             }
         }
@@ -169,7 +170,7 @@ impl<'hir> TypeChecker<'hir> {
             valen_ast::Type::Path(tp) => {
                 if tp.segments.len() == 1 {
                     let seg = &tp.segments[0];
-                    if let Some(prim) = resolve_prim(&seg.name) {
+                    if let Some(prim) = crate::resolve_prim(&seg.name) {
                         return Ty::Prim(prim);
                     }
                     if seg.generics.is_empty() {
@@ -190,7 +191,7 @@ impl<'hir> TypeChecker<'hir> {
                     .join(".");
                 Ty::Named(SmolStr::from(full))
             }
-            valen_ast::Type::Nullable(inner) => {
+            valen_ast::Type::Nullable { inner, .. } => {
                 Ty::Nullable(Box::new(self.resolve_ast_type(inner)))
             }
             valen_ast::Type::Fn(ft) => {
@@ -268,6 +269,17 @@ impl<'hir> TypeChecker<'hir> {
         for item in &imp.items {
             if let valen_ast::ImplItem::Fn(m) = item {
                 self.check_fn_decl(m, Some(&self_ty));
+            }
+        }
+    }
+
+    fn check_trait(&mut self, t: &valen_ast::TraitDecl) {
+        let self_ty = Ty::Named(t.name.clone());
+        for item in &t.items {
+            if let valen_ast::TraitItem::Fn(f) = item {
+                if f.body.is_some() {
+                    self.check_fn_decl(f, Some(&self_ty));
+                }
             }
         }
     }
@@ -524,7 +536,10 @@ impl<'hir> TypeChecker<'hir> {
                 if lhs.is_numeric() && lhs == rhs {
                     return lhs.clone();
                 }
-                if op == BinaryOp::Add && *lhs == Ty::Prim(PrimTy::String) {
+                if op == BinaryOp::Add
+                    && *lhs == Ty::Prim(PrimTy::String)
+                    && *rhs == Ty::Prim(PrimTy::String)
+                {
                     return Ty::Prim(PrimTy::String);
                 }
                 self.diags.error(
@@ -1113,7 +1128,6 @@ impl<'hir> TypeChecker<'hir> {
     fn synth_assign(&mut self, asgn: &valen_ast::AssignExpr) -> TypedExpr {
         let target = self.infer_expr(&asgn.target);
 
-        // Check mutability: if target is a local variable, it must be declared `mut`
         if let TypedExprKind::LocalVar(ref name) = target.kind {
             if let Some(false) = self.env.is_mutable(name) {
                 self.diags.error(
@@ -1124,7 +1138,23 @@ impl<'hir> TypeChecker<'hir> {
             }
         }
 
-        let value = self.check_expr(&asgn.value, Some(&target.ty));
+        let rhs = self.check_expr(&asgn.value, Some(&target.ty));
+
+        let value = if let Some(op) = asgn.op {
+            let result_ty = self.binary_result_ty(op, &target.ty, &rhs.ty, asgn.span);
+            TypedExpr {
+                kind: TypedExprKind::Binary {
+                    op,
+                    lhs: Box::new(target.clone()),
+                    rhs: Box::new(rhs),
+                },
+                ty: result_ty,
+                span: asgn.span,
+            }
+        } else {
+            rhs
+        };
+
         TypedExpr {
             kind: TypedExprKind::Assign {
                 target: Box::new(target),
@@ -1373,23 +1403,6 @@ fn is_subtype(sub: &Ty, sup: &Ty) -> bool {
         return true;
     }
     false
-}
-
-fn resolve_prim(name: &str) -> Option<PrimTy> {
-    match name {
-        "Int" => Some(PrimTy::Int),
-        "Long" => Some(PrimTy::Long),
-        "Float" => Some(PrimTy::Float),
-        "Double" => Some(PrimTy::Double),
-        "Bool" => Some(PrimTy::Bool),
-        "Char" => Some(PrimTy::Char),
-        "Byte" => Some(PrimTy::Byte),
-        "Short" => Some(PrimTy::Short),
-        "String" => Some(PrimTy::String),
-        "Unit" => Some(PrimTy::Unit),
-        "Nothing" => Some(PrimTy::Nothing),
-        _ => None,
-    }
 }
 
 #[cfg(test)]

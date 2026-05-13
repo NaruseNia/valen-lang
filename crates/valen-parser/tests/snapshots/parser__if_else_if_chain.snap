@@ -83,7 +83,7 @@ expression: "check(\"fn f(x: Int) -> Int { if x { 1 } else if y { 2 } else { 3 }
                                         segments: [
                                             PathSegment {
                                                 name: "x",
-                                                turbofish: false,
+                                                double_colon: false,
                                                 generics: [],
                                                 span: Span {
                                                     start: 25,
@@ -135,7 +135,7 @@ expression: "check(\"fn f(x: Int) -> Int { if x { 1 } else if y { 2 } else { 3 }
                                                     segments: [
                                                         PathSegment {
                                                             name: "y",
-                                                            turbofish: false,
+                                                            double_colon: false,
                                                             generics: [],
                                                             span: Span {
                                                                 start: 41,

@@ -89,7 +89,7 @@ expression: "check(\"trait Display { fn display(self) -> String { self.name } }\
                                                     segments: [
                                                         PathSegment {
                                                             name: "self",
-                                                            turbofish: false,
+                                                            double_colon: false,
                                                             generics: [],
                                                             span: Span {
                                                                 start: 45,

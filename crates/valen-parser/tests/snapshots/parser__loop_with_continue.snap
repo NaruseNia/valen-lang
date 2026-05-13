@@ -27,7 +27,7 @@ expression: "check(\"fn f() { loop { if skip { continue; } process(); } }\")"
                                                             segments: [
                                                                 PathSegment {
                                                                     name: "skip",
-                                                                    turbofish: false,
+                                                                    double_colon: false,
                                                                     generics: [],
                                                                     span: Span {
                                                                         start: 19,
@@ -91,7 +91,7 @@ expression: "check(\"fn f() { loop { if skip { continue; } process(); } }\")"
                                                             segments: [
                                                                 PathSegment {
                                                                     name: "process",
-                                                                    turbofish: false,
+                                                                    double_colon: false,
                                                                     generics: [],
                                                                     span: Span {
                                                                         start: 38,

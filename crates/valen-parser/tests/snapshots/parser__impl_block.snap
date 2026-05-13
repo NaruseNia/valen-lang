@@ -137,7 +137,7 @@ expression: "check(\"impl Area for Circle { fn area(self) -> Float { self.r } }\
                                                     segments: [
                                                         PathSegment {
                                                             name: "self",
-                                                            turbofish: false,
+                                                            double_colon: false,
                                                             generics: [],
                                                             span: Span {
                                                                 start: 48,

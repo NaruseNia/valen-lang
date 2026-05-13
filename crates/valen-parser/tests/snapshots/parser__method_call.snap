@@ -22,7 +22,7 @@ expression: "check(\"fn main() { xs.map(f) }\")"
                                         segments: [
                                             PathSegment {
                                                 name: "xs",
-                                                turbofish: false,
+                                                double_colon: false,
                                                 generics: [],
                                                 span: Span {
                                                     start: 12,
@@ -52,7 +52,7 @@ expression: "check(\"fn main() { xs.map(f) }\")"
                                                 segments: [
                                                     PathSegment {
                                                         name: "f",
-                                                        turbofish: false,
+                                                        double_colon: false,
                                                         generics: [],
                                                         span: Span {
                                                             start: 19,

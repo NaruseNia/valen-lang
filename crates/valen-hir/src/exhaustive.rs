@@ -382,7 +382,7 @@ fn pattern_is_catch_all(pat: &Pattern) -> bool {
         Pattern::Wildcard(_) => true,
         Pattern::Binding(_) => true,
         Pattern::At(at) => pattern_is_catch_all(&at.pattern),
-        Pattern::Or(pats) => pats.iter().any(pattern_is_catch_all),
+        Pattern::Or(pats, _) => pats.iter().any(pattern_is_catch_all),
         _ => false,
     }
 }
@@ -392,7 +392,7 @@ fn pattern_is_catch_all_excluding(pat: &Pattern, known_types: &IndexSet<SmolStr>
         Pattern::Wildcard(_) => true,
         Pattern::Binding(b) => !known_types.contains(&b.name),
         Pattern::At(at) => pattern_is_catch_all_excluding(&at.pattern, known_types),
-        Pattern::Or(pats) => pats
+        Pattern::Or(pats, _) => pats
             .iter()
             .any(|p| pattern_is_catch_all_excluding(p, known_types)),
         _ => false,
@@ -408,7 +408,7 @@ fn collect_binding_as_type(
         Pattern::Binding(b) if known_types.contains(&b.name) => {
             covered.insert(b.name.clone());
         }
-        Pattern::Or(pats) => {
+        Pattern::Or(pats, _) => {
             for p in pats {
                 collect_binding_as_type(p, known_types, covered);
             }
@@ -432,7 +432,7 @@ fn collect_covered_variants(pat: &Pattern, enum_name: &SmolStr, covered: &mut In
                 covered.insert(variant);
             }
         }
-        Pattern::Or(pats) => {
+        Pattern::Or(pats, _) => {
             for p in pats {
                 collect_covered_variants(p, enum_name, covered);
             }
@@ -466,7 +466,7 @@ fn collect_covered_type_names(pat: &Pattern, covered: &mut IndexSet<SmolStr>) {
                 covered.insert(seg.name.clone());
             }
         }
-        Pattern::Or(pats) => {
+        Pattern::Or(pats, _) => {
             for p in pats {
                 collect_covered_type_names(p, covered);
             }
@@ -482,7 +482,7 @@ fn check_bool_pattern(pat: &Pattern, has_true: &mut bool, has_false: &mut bool) 
     match pat {
         Pattern::Literal(valen_ast::Literal::Bool(true, _)) => *has_true = true,
         Pattern::Literal(valen_ast::Literal::Bool(false, _)) => *has_false = true,
-        Pattern::Or(pats) => {
+        Pattern::Or(pats, _) => {
             for p in pats {
                 check_bool_pattern(p, has_true, has_false);
             }

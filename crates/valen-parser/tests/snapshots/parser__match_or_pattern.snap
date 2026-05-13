@@ -83,7 +83,7 @@ expression: "check(\"fn f(x: Int) -> Bool { match x { 1 | 2 | 3 => true, _ => fa
                                         segments: [
                                             PathSegment {
                                                 name: "x",
-                                                turbofish: false,
+                                                double_colon: false,
                                                 generics: [],
                                                 span: Span {
                                                     start: 29,
@@ -144,6 +144,13 @@ expression: "check(\"fn f(x: Int) -> Bool { match x { 1 | 2 | 3 => true, _ => fa
                                                     ),
                                                 ),
                                             ],
+                                            Span {
+                                                start: 33,
+                                                end: 42,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
                                         ),
                                         guard: None,
                                         body: Literal(

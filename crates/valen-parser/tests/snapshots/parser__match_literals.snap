@@ -83,7 +83,7 @@ expression: "check(\"fn f(x: Int) -> String { match x { 0 => zero, 1 => one, _ =
                                         segments: [
                                             PathSegment {
                                                 name: "x",
-                                                turbofish: false,
+                                                double_colon: false,
                                                 generics: [],
                                                 span: Span {
                                                     start: 31,
@@ -123,7 +123,7 @@ expression: "check(\"fn f(x: Int) -> String { match x { 0 => zero, 1 => one, _ =
                                                 segments: [
                                                     PathSegment {
                                                         name: "zero",
-                                                        turbofish: false,
+                                                        double_colon: false,
                                                         generics: [],
                                                         span: Span {
                                                             start: 40,
@@ -170,7 +170,7 @@ expression: "check(\"fn f(x: Int) -> String { match x { 0 => zero, 1 => one, _ =
                                                 segments: [
                                                     PathSegment {
                                                         name: "one",
-                                                        turbofish: false,
+                                                        double_colon: false,
                                                         generics: [],
                                                         span: Span {
                                                             start: 51,
@@ -214,7 +214,7 @@ expression: "check(\"fn f(x: Int) -> String { match x { 0 => zero, 1 => one, _ =
                                                 segments: [
                                                     PathSegment {
                                                         name: "other",
-                                                        turbofish: false,
+                                                        double_colon: false,
                                                         generics: [],
                                                         span: Span {
                                                             start: 61,

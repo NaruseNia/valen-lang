@@ -116,7 +116,7 @@ expression: "check(\"fn add(a: Int, b: Int) -> Int { a }\")"
                                 segments: [
                                     PathSegment {
                                         name: "a",
-                                        turbofish: false,
+                                        double_colon: false,
                                         generics: [],
                                         span: Span {
                                             start: 32,

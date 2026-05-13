@@ -104,7 +104,7 @@ expression: "check(\"package com.example;\\nimport java.util.List;\\n\\npub fn m
                                 segments: [
                                     PathSegment {
                                         name: "x",
-                                        turbofish: false,
+                                        double_colon: false,
                                         generics: [],
                                         span: Span {
                                             start: 78,

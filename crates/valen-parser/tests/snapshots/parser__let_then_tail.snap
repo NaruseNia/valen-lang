@@ -71,7 +71,7 @@ expression: "check(\"fn main() { let x = 1 + 2; x }\")"
                                 segments: [
                                     PathSegment {
                                         name: "x",
-                                        turbofish: false,
+                                        double_colon: false,
                                         generics: [],
                                         span: Span {
                                             start: 27,
