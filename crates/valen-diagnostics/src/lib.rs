@@ -1,5 +1,7 @@
 //! Diagnostics (errors, warnings, hints) shared across the compiler.
 
+use std::fmt;
+
 use smol_str::SmolStr;
 use valen_ast::Span;
 
@@ -8,6 +10,16 @@ pub enum Severity {
     Error,
     Warning,
     Hint,
+}
+
+impl fmt::Display for Severity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Severity::Error => f.write_str("error"),
+            Severity::Warning => f.write_str("warning"),
+            Severity::Hint => f.write_str("hint"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -38,6 +50,18 @@ pub struct Label {
 /// - `V0600`-`V0699`: Java interop
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DiagCode(pub u16);
+
+impl fmt::Display for DiagCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "V{:04}", self.0)
+    }
+}
+
+impl fmt::Display for Diagnostic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}[{}]: {}", self.severity, self.code, self.message)
+    }
+}
 
 impl DiagCode {
     pub const LEX_UNKNOWN_CHAR: DiagCode = DiagCode(1);
