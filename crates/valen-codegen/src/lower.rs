@@ -238,7 +238,7 @@ fn lower_method(
         ))
     } else {
         let max_locals =
-            if has_self { 1 } else { 0 } + params.iter().map(|t| t.slot_count()).sum::<u16>();
+            (if has_self { 1u16 } else { 0 }) + params.iter().map(|t| t.slot_count()).sum::<u16>();
         Some(JvmMethodBody {
             max_locals,
             ops: vec![JvmOp::StubBody],

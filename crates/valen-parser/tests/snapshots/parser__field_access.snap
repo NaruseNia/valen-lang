@@ -62,6 +62,9 @@ expression: "check(\"fn main() { user.name }\")"
                     },
                 },
             ),
+            is_open: false,
+            is_override: false,
+            is_abstract: false,
             span: Span {
                 start: 0,
                 end: 23,

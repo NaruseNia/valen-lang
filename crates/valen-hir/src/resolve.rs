@@ -23,8 +23,8 @@ struct Scope {
 }
 
 impl Scope {
-    fn define(&mut self, name: SmolStr, id: DefId) {
-        self.names.insert(name, id);
+    fn define(&mut self, name: SmolStr, id: DefId) -> Option<DefId> {
+        self.names.insert(name, id)
     }
 
     fn lookup(&self, name: &str) -> Option<DefId> {
@@ -51,6 +51,20 @@ pub fn resolve(items: &[Item]) -> ResolveResult {
 }
 
 impl Resolver {
+    fn define_name(&mut self, name: SmolStr, id: DefId, span: valen_ast::Span) {
+        if let Some(prev_id) = self.scope.define(name.clone(), id) {
+            let prev_span = self.hir.defs.get(&prev_id).map(|d| d.span).unwrap_or(span);
+            self.diagnostics.error(
+                DiagCode::NAME_NOT_FOUND,
+                span,
+                SmolStr::from(format!(
+                    "duplicate definition `{}` (previously defined at {:?})",
+                    name, prev_span
+                )),
+            );
+        }
+    }
+
     fn resolve_items(&mut self, items: &[Item]) {
         for item in items {
             if let Item::Package(pkg) = item {
@@ -76,7 +90,6 @@ impl Resolver {
 
         // Second pass: build method indexes and validate
         self.build_method_index();
-        self.check_duplicate_names();
     }
 
     fn build_method_index(&mut self) {
@@ -109,24 +122,6 @@ impl Resolver {
         }
     }
 
-    fn check_duplicate_names(&mut self) {
-        let mut seen: IndexMap<SmolStr, (DefId, valen_ast::Span)> = IndexMap::new();
-        for (name_ref, &id) in &self.scope.names {
-            let Some(def) = self.hir.defs.get(&id) else {
-                continue;
-            };
-            if let Some(&(_, _prev_span)) = seen.get(name_ref.as_str()) {
-                self.diagnostics.error(
-                    DiagCode::NAME_NOT_FOUND,
-                    def.span,
-                    SmolStr::from(format!("duplicate definition `{}`", def.name)),
-                );
-            } else {
-                seen.insert(name_ref.clone(), (id, def.span));
-            }
-        }
-    }
-
     fn register_item(&mut self, item: &Item) {
         match item {
             Item::Package(_) | Item::Import(_) => {}
@@ -140,7 +135,7 @@ impl Resolver {
                     span: f.span,
                 };
                 self.hir.defs.insert(id, def);
-                self.scope.define(f.name.clone(), id);
+                self.define_name(f.name.clone(), id, f.span);
             }
             Item::Class(c) => {
                 let id = self.hir.alloc_id();
@@ -173,7 +168,7 @@ impl Resolver {
                     span: c.span,
                 };
                 self.hir.defs.insert(id, def);
-                self.scope.define(c.name.clone(), id);
+                self.define_name(c.name.clone(), id, c.span);
             }
             Item::DataClass(dc) => {
                 let id = self.hir.alloc_id();
@@ -187,7 +182,7 @@ impl Resolver {
                     span: dc.span,
                 };
                 self.hir.defs.insert(id, def);
-                self.scope.define(dc.name.clone(), id);
+                self.define_name(dc.name.clone(), id, dc.span);
             }
             Item::Enum(e) => {
                 let id = self.hir.alloc_id();
@@ -216,7 +211,7 @@ impl Resolver {
                     span: e.span,
                 };
                 self.hir.defs.insert(id, def);
-                self.scope.define(e.name.clone(), id);
+                self.define_name(e.name.clone(), id, e.span);
             }
             Item::Trait(t) => {
                 let id = self.hir.alloc_id();
@@ -245,7 +240,7 @@ impl Resolver {
                     span: t.span,
                 };
                 self.hir.defs.insert(id, def);
-                self.scope.define(t.name.clone(), id);
+                self.define_name(t.name.clone(), id, t.span);
             }
             Item::Impl(imp) => {
                 let id = self.hir.alloc_id();
@@ -292,7 +287,7 @@ impl Resolver {
                     span: ta.span,
                 };
                 self.hir.defs.insert(id, def);
-                self.scope.define(ta.name.clone(), id);
+                self.define_name(ta.name.clone(), id, ta.span);
             }
         }
     }

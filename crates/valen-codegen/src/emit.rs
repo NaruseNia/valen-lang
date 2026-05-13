@@ -699,7 +699,7 @@ fn emit_arith(op: ArithOp, ty: &JvmType) -> Instruction {
         (Mul, JvmType::Double) => Instruction::Dmul,
         (Div, JvmType::Double) => Instruction::Ddiv,
         (Rem, JvmType::Double) => Instruction::Drem,
-        _ => Instruction::Iadd, // fallback
+        (op, ty) => unreachable!("emit_arith: unsupported {op:?} for {ty:?}"),
     }
 }
 
@@ -709,7 +709,7 @@ fn emit_neg(ty: &JvmType) -> Instruction {
         JvmType::Long => Instruction::Lneg,
         JvmType::Float => Instruction::Fneg,
         JvmType::Double => Instruction::Dneg,
-        _ => Instruction::Ineg,
+        other => unreachable!("emit_neg: unsupported type {other:?}"),
     }
 }
 
@@ -764,6 +764,10 @@ fn emit_bitwise(op: BitwiseOp, ty: &JvmType) -> Instruction {
 }
 
 fn load_instruction(slot: u16, ty: &JvmType) -> Instruction {
+    assert!(
+        slot <= 255,
+        "local slot {slot} exceeds u8 range; wide prefix not yet supported"
+    );
     match ty {
         JvmType::Int | JvmType::Byte | JvmType::Short | JvmType::Char | JvmType::Boolean => {
             match slot {
@@ -806,6 +810,10 @@ fn load_instruction(slot: u16, ty: &JvmType) -> Instruction {
 }
 
 fn store_instruction(slot: u16, ty: &JvmType) -> Instruction {
+    assert!(
+        slot <= 255,
+        "local slot {slot} exceeds u8 range; wide prefix not yet supported"
+    );
     match ty {
         JvmType::Int | JvmType::Byte | JvmType::Short | JvmType::Char | JvmType::Boolean => {
             match slot {

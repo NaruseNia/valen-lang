@@ -98,6 +98,9 @@ expression: "check(\"fn f() -> Int { get_value()? }\")"
                     },
                 },
             ),
+            is_open: false,
+            is_override: false,
+            is_abstract: false,
             span: Span {
                 start: 0,
                 end: 30,

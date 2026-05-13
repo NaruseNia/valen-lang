@@ -262,6 +262,9 @@ expression: "check(\"fn f(x: Int) -> String { match x { 0 => zero, 1 => one, _ =
                     },
                 },
             ),
+            is_open: false,
+            is_override: false,
+            is_abstract: false,
             span: Span {
                 start: 0,
                 end: 70,

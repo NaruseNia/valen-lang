@@ -164,6 +164,9 @@ expression: "check(\"fn f() { for i in 0..10 { process(i); } }\")"
                     },
                 },
             ),
+            is_open: false,
+            is_override: false,
+            is_abstract: false,
             span: Span {
                 start: 0,
                 end: 41,
