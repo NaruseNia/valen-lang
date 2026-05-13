@@ -215,3 +215,45 @@ fn fixture_fn_string_interp() {
     // <init> + greet
     assert_eq!(c.methods.len(), 2);
 }
+
+#[test]
+fn fixture_java_import() {
+    let outputs = compile_fixture_outputs("java_import.vln");
+    assert_eq!(outputs.len(), 1);
+    assert_eq!(outputs[0].internal_name, "com/example/Importer");
+
+    let c = ClassFile::from_bytes(&outputs[0].bytes).expect("parse classfile");
+    assert_eq!(c.class_name().unwrap(), "com/example/Importer");
+    // <init> + create_list + create_file
+    assert_eq!(c.methods.len(), 3);
+
+    // Verify the constant pool contains the correct JVM internal names
+    // for imported types (not package-prefixed local names)
+    let cp_strings: Vec<String> = (1..c.constant_pool.len())
+        .filter_map(|i| c.constant_pool.try_get_utf8(i as u16).ok())
+        .map(|s| s.to_string())
+        .collect();
+
+    assert!(
+        cp_strings.iter().any(|s| s.contains("java/util/ArrayList")),
+        "constant pool should contain java/util/ArrayList, got: {:?}",
+        cp_strings
+    );
+    assert!(
+        cp_strings.iter().any(|s| s.contains("java/io/File")),
+        "constant pool should contain java/io/File, got: {:?}",
+        cp_strings
+    );
+}
+
+#[test]
+fn fixture_safe_block() {
+    let outputs = compile_fixture_outputs("safe_block.vln");
+    assert_eq!(outputs.len(), 1);
+    assert_eq!(outputs[0].internal_name, "com/example/SafeDemo");
+
+    let c = ClassFile::from_bytes(&outputs[0].bytes).expect("parse classfile");
+    assert_eq!(c.class_name().unwrap(), "com/example/SafeDemo");
+    // <init> + safe_call + safe_string
+    assert_eq!(c.methods.len(), 3);
+}

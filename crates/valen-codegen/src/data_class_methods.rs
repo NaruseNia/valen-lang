@@ -148,7 +148,11 @@ pub fn generate_equals(class_internal: &str, fields: &[(String, JvmType)]) -> Jv
         name: EQUALS.to_string(),
         params: vec![JvmType::Object(JVM_OBJECT.to_string())],
         return_type: JvmType::Boolean,
-        body: Some(JvmMethodBody { max_locals: 3, ops }),
+        body: Some(JvmMethodBody {
+            max_locals: 3,
+            ops,
+            exception_handlers: vec![],
+        }),
     }
 }
 
@@ -207,7 +211,11 @@ pub fn generate_hash_code(class_internal: &str, fields: &[(String, JvmType)]) ->
         name: HASH_CODE.to_string(),
         params: vec![],
         return_type: JvmType::Int,
-        body: Some(JvmMethodBody { max_locals: 2, ops }),
+        body: Some(JvmMethodBody {
+            max_locals: 2,
+            ops,
+            exception_handlers: vec![],
+        }),
     }
 }
 
@@ -291,7 +299,11 @@ pub fn generate_to_string(
         name: TO_STRING.to_string(),
         params: vec![],
         return_type: JvmType::Object(JVM_STRING.to_string()),
-        body: Some(JvmMethodBody { max_locals: 1, ops }),
+        body: Some(JvmMethodBody {
+            max_locals: 1,
+            ops,
+            exception_handlers: vec![],
+        }),
     }
 }
 
@@ -339,7 +351,11 @@ pub fn generate_copy(class_internal: &str, fields: &[(String, JvmType)]) -> JvmM
         name: "copy".to_string(),
         params: fields.iter().map(|(_, ty)| ty.clone()).collect(),
         return_type: JvmType::Object(class_internal.to_string()),
-        body: Some(JvmMethodBody { max_locals, ops }),
+        body: Some(JvmMethodBody {
+            max_locals,
+            ops,
+            exception_handlers: vec![],
+        }),
     }
 }
 

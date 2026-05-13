@@ -35,7 +35,7 @@ pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<DefId, TypedBody>) -> Vec<Jv
                 classes.push(lower_data_class(hir, def, data_def, pkg, source_file));
             }
             DefKind::Enum(enum_def) => {
-                classes.extend(lower_enum(def, enum_def, pkg, source_file));
+                classes.extend(lower_enum(def, enum_def, pkg, source_file, &hir.imports));
             }
             _ => {}
         }
@@ -57,7 +57,7 @@ fn lower_class(
     let super_class = class_def
         .superclass
         .as_ref()
-        .map(|s| match &tyref_to_jvm(s, pkg) {
+        .map(|s| match &tyref_to_jvm(s, pkg, &hir.imports) {
             JvmType::Object(name) => name.clone(),
             _ => JVM_OBJECT.to_string(),
         })
@@ -66,7 +66,7 @@ fn lower_class(
     let interfaces: Vec<String> = class_def
         .trait_impls
         .iter()
-        .filter_map(|t| match &tyref_to_jvm(t, pkg) {
+        .filter_map(|t| match &tyref_to_jvm(t, pkg, &hir.imports) {
             JvmType::Object(name) => Some(name.clone()),
             _ => None,
         })
@@ -75,7 +75,7 @@ fn lower_class(
     let fields: Vec<JvmField> = class_def
         .ctor_params
         .iter()
-        .map(|p| lower_field(p, pkg))
+        .map(|p| lower_field(p, pkg, &hir.imports))
         .collect();
 
     let mut methods = Vec::new();
@@ -108,7 +108,7 @@ fn lower_class(
 }
 
 fn lower_data_class(
-    _hir: &Hir,
+    hir: &Hir,
     def: &Def,
     data_def: &valen_hir::DataClassDef,
     pkg: Option<&[SmolStr]>,
@@ -120,7 +120,7 @@ fn lower_data_class(
     let fields: Vec<JvmField> = data_def
         .ctor_params
         .iter()
-        .map(|p| lower_field(p, pkg))
+        .map(|p| lower_field(p, pkg, &hir.imports))
         .collect();
 
     let field_info: Vec<(String, JvmType)> = fields
@@ -155,8 +155,12 @@ fn lower_data_class(
     }
 }
 
-fn lower_field(param: &valen_hir::CtorParamDef, pkg: Option<&[SmolStr]>) -> JvmField {
-    let ty = tyref_to_jvm(&param.ty, pkg);
+fn lower_field(
+    param: &valen_hir::CtorParamDef,
+    pkg: Option<&[SmolStr]>,
+    imports: &IndexMap<SmolStr, Vec<SmolStr>>,
+) -> JvmField {
+    let ty = tyref_to_jvm(&param.ty, pkg, imports);
     let is_pub = matches!(param.vis, Vis::Pub);
     JvmField {
         access: JvmFieldAccess {
@@ -207,7 +211,11 @@ fn generate_ctor(class_internal: &str, super_class: &str, fields: &[JvmField]) -
         name: INIT.to_string(),
         params: fields.iter().map(|f| f.ty.clone()).collect(),
         return_type: JvmType::Void,
-        body: Some(JvmMethodBody { max_locals, ops }),
+        body: Some(JvmMethodBody {
+            max_locals,
+            ops,
+            exception_handlers: vec![],
+        }),
     }
 }
 
@@ -231,6 +239,7 @@ fn generate_getter(class_internal: &str, field_name: &str, field_ty: &JvmType) -
                 },
                 JvmOp::Return(field_ty.clone()),
             ],
+            exception_handlers: vec![],
         }),
     }
 }
@@ -247,13 +256,13 @@ fn lower_method(
         .params
         .iter()
         .filter(|p| !p.is_self)
-        .map(|p| tyref_to_jvm(&p.ty, pkg))
+        .map(|p| tyref_to_jvm(&p.ty, pkg, &hir.imports))
         .collect();
 
     let return_type = fn_def
         .return_ty
         .as_ref()
-        .map(|t| tyref_to_jvm(t, pkg))
+        .map(|t| tyref_to_jvm(t, pkg, &hir.imports))
         .unwrap_or(JvmType::Void);
 
     let has_self = fn_def.params.iter().any(|p| p.is_self);
@@ -265,7 +274,7 @@ fn lower_method(
             .params
             .iter()
             .filter(|p| !p.is_self)
-            .map(|p| (p.name.clone(), tyref_to_jvm(&p.ty, pkg)))
+            .map(|p| (p.name.clone(), tyref_to_jvm(&p.ty, pkg, &hir.imports)))
             .collect();
         Some(crate::expr::lower_body(
             tb,
@@ -282,6 +291,7 @@ fn lower_method(
         Some(JvmMethodBody {
             max_locals,
             ops: vec![JvmOp::StubBody],
+            exception_handlers: vec![],
         })
     };
 
@@ -348,6 +358,7 @@ fn lower_enum(
     enum_def: &valen_hir::EnumDef,
     pkg: Option<&[SmolStr]>,
     source_file: Option<String>,
+    imports: &IndexMap<SmolStr, Vec<SmolStr>>,
 ) -> Vec<JvmClass> {
     let enum_internal = class_internal_name(&def.name, pkg);
     let mut classes = Vec::new();
@@ -390,6 +401,7 @@ fn lower_enum(
                 &variant.fields,
                 pkg,
                 source_file.clone(),
+                imports,
             ));
         }
     }
@@ -403,6 +415,7 @@ fn lower_record_variant(
     fields: &[(SmolStr, valen_hir::TyRef)],
     pkg: Option<&[SmolStr]>,
     source_file: Option<String>,
+    imports: &IndexMap<SmolStr, Vec<SmolStr>>,
 ) -> JvmClass {
     let jvm_fields: Vec<JvmField> = fields
         .iter()
@@ -413,7 +426,7 @@ fn lower_record_variant(
                 ..Default::default()
             },
             name: name.to_string(),
-            ty: tyref_to_jvm(tyref, pkg),
+            ty: tyref_to_jvm(tyref, pkg, imports),
         })
         .collect();
 
@@ -481,6 +494,7 @@ fn lower_unit_variant(
                 },
                 JvmOp::Return(JvmType::Void),
             ],
+            exception_handlers: vec![],
         }),
     };
 
@@ -510,6 +524,7 @@ fn lower_unit_variant(
                 },
                 JvmOp::Return(JvmType::Void),
             ],
+            exception_handlers: vec![],
         }),
     };
 

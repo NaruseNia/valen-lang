@@ -637,6 +637,7 @@ impl Parser {
                     | Expr::For(_)
                     | Expr::While(_)
                     | Expr::Loop(_)
+                    | Expr::Safe(_)
             );
             if self.at(&TokenKind::Semi) {
                 self.bump();
@@ -1019,6 +1020,7 @@ impl Parser {
             TokenKind::Continue => self.parse_continue_expr(),
             TokenKind::Return => self.parse_return_expr(),
             TokenKind::Pipe | TokenKind::PipePipe => self.parse_lambda_expr(),
+            TokenKind::Safe => self.parse_safe_expr(),
             _ => {
                 self.diagnostics.error(
                     DiagCode::PARSE_EXPECTED_EXPR,
@@ -1364,6 +1366,13 @@ impl Parser {
         let body = self.parse_block()?;
         let span = start.merge(body.span);
         Some(Expr::Loop(LoopExpr { body, span }))
+    }
+
+    fn parse_safe_expr(&mut self) -> Option<Expr> {
+        let start = self.expect(TokenKind::Safe)?;
+        let block = self.parse_block()?;
+        let span = start.merge(block.span);
+        Some(Expr::Safe(valen_ast::SafeExpr { block, span }))
     }
 
     fn parse_break_expr(&mut self) -> Option<Expr> {

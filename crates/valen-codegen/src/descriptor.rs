@@ -1,18 +1,42 @@
 //! JVM type descriptor and internal name generation.
 
+use indexmap::IndexMap;
 use smol_str::SmolStr;
 use valen_hir::{PrimTy, TyRef};
 
 use crate::jvm_ir::JvmType;
 
+/// Resolves a type name to its JVM internal name, checking imports first.
+pub fn resolve_type_internal_name(
+    name: &str,
+    package: Option<&[SmolStr]>,
+    imports: &IndexMap<SmolStr, Vec<SmolStr>>,
+) -> String {
+    if let Some(path_segments) = imports.get(name) {
+        path_segments
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>()
+            .join("/")
+    } else {
+        class_internal_name(name, package)
+    }
+}
+
 /// Converts a HIR type reference to its JVM type representation.
-pub fn tyref_to_jvm(tyref: &TyRef, package: Option<&[SmolStr]>) -> JvmType {
+pub fn tyref_to_jvm(
+    tyref: &TyRef,
+    package: Option<&[SmolStr]>,
+    imports: &IndexMap<SmolStr, Vec<SmolStr>>,
+) -> JvmType {
     match tyref {
         TyRef::Prim(p) => prim_to_jvm(p),
-        TyRef::Named(name) => JvmType::Object(class_internal_name(name, package)),
-        TyRef::Generic(name, _) => JvmType::Object(class_internal_name(name, package)),
+        TyRef::Named(name) => JvmType::Object(resolve_type_internal_name(name, package, imports)),
+        TyRef::Generic(name, _) => {
+            JvmType::Object(resolve_type_internal_name(name, package, imports))
+        }
         TyRef::Nullable(inner) => {
-            let inner_jvm = tyref_to_jvm(inner, package);
+            let inner_jvm = tyref_to_jvm(inner, package, imports);
             match JvmType::boxed_name(&inner_jvm) {
                 Some(boxed) => JvmType::Object(boxed.to_string()),
                 None => inner_jvm,
@@ -154,17 +178,21 @@ mod tests {
 
     #[test]
     fn tyref_prim_conversion() {
-        assert_eq!(tyref_to_jvm(&TyRef::Prim(PrimTy::Int), None), JvmType::Int);
+        let empty = IndexMap::new();
         assert_eq!(
-            tyref_to_jvm(&TyRef::Prim(PrimTy::Bool), None),
+            tyref_to_jvm(&TyRef::Prim(PrimTy::Int), None, &empty),
+            JvmType::Int
+        );
+        assert_eq!(
+            tyref_to_jvm(&TyRef::Prim(PrimTy::Bool), None, &empty),
             JvmType::Boolean
         );
         assert_eq!(
-            tyref_to_jvm(&TyRef::Prim(PrimTy::String), None),
+            tyref_to_jvm(&TyRef::Prim(PrimTy::String), None, &empty),
             JvmType::Object("java/lang/String".to_string())
         );
         assert_eq!(
-            tyref_to_jvm(&TyRef::Prim(PrimTy::Unit), None),
+            tyref_to_jvm(&TyRef::Prim(PrimTy::Unit), None, &empty),
             JvmType::Void
         );
     }
@@ -172,8 +200,9 @@ mod tests {
     #[test]
     fn tyref_named_with_package() {
         let pkg: Vec<SmolStr> = vec!["com".into(), "app".into()];
+        let empty = IndexMap::new();
         assert_eq!(
-            tyref_to_jvm(&TyRef::Named("User".into()), Some(&pkg)),
+            tyref_to_jvm(&TyRef::Named("User".into()), Some(&pkg), &empty),
             JvmType::Object("com/app/User".to_string())
         );
     }
@@ -181,8 +210,9 @@ mod tests {
     #[test]
     fn tyref_nullable_boxes_primitive() {
         let nullable_int = TyRef::Nullable(Box::new(TyRef::Prim(PrimTy::Int)));
+        let empty = IndexMap::new();
         assert_eq!(
-            tyref_to_jvm(&nullable_int, None),
+            tyref_to_jvm(&nullable_int, None, &empty),
             JvmType::Object("java/lang/Integer".to_string())
         );
     }
@@ -190,8 +220,9 @@ mod tests {
     #[test]
     fn tyref_nullable_keeps_reference() {
         let nullable_str = TyRef::Nullable(Box::new(TyRef::Prim(PrimTy::String)));
+        let empty = IndexMap::new();
         assert_eq!(
-            tyref_to_jvm(&nullable_str, None),
+            tyref_to_jvm(&nullable_str, None, &empty),
             JvmType::Object("java/lang/String".to_string())
         );
     }
@@ -199,9 +230,35 @@ mod tests {
     #[test]
     fn tyref_generic_erased() {
         let list_int = TyRef::Generic("List".into(), vec![TyRef::Prim(PrimTy::Int)]);
+        let empty = IndexMap::new();
         assert_eq!(
-            tyref_to_jvm(&list_int, None),
+            tyref_to_jvm(&list_int, None, &empty),
             JvmType::Object("List".to_string())
         );
+    }
+
+    #[test]
+    fn resolve_type_internal_name_with_imports() {
+        let mut imports: IndexMap<SmolStr, Vec<SmolStr>> = IndexMap::new();
+        imports.insert(
+            "User".into(),
+            vec!["com".into(), "example".into(), "User".into()],
+        );
+
+        // Imported type resolves via imports map
+        assert_eq!(
+            resolve_type_internal_name("User", None, &imports),
+            "com/example/User"
+        );
+
+        // Non-imported type falls back to class_internal_name
+        let pkg: Vec<SmolStr> = vec!["org".into(), "app".into()];
+        assert_eq!(
+            resolve_type_internal_name("Foo", Some(&pkg), &imports),
+            "org/app/Foo"
+        );
+
+        // Non-imported type without package
+        assert_eq!(resolve_type_internal_name("Bar", None, &imports), "Bar");
     }
 }

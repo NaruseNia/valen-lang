@@ -1,0 +1,15 @@
+package com.example;
+
+pub class SafeDemo {
+    fn safe_call(self) -> Int {
+        safe {
+            42
+        }
+    }
+
+    fn safe_string(self) -> String {
+        safe {
+            "hello"
+        }
+    }
+}

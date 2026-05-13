@@ -8,7 +8,9 @@ use valen_hir::{
 };
 
 use crate::jvm_const::*;
-use crate::jvm_ir::{ArithOp, BitwiseOp, CmpKind, JvmMethodBody, JvmOp, JvmType, Label};
+use crate::jvm_ir::{
+    ArithOp, BitwiseOp, CmpKind, ExceptionHandler, JvmMethodBody, JvmOp, JvmType, Label,
+};
 
 struct LoopContext {
     break_label: Label,
@@ -31,6 +33,8 @@ struct ExprLowering<'a> {
     pkg: Option<&'a [SmolStr]>,
     /// Undo log stack for lexical scoping.
     scope_stack: Vec<ScopeUndo>,
+    /// Exception handlers collected during lowering (for safe {} blocks).
+    exception_handlers: Vec<ExceptionHandler>,
 }
 
 /// Lowers a typed method body into JVM bytecode operations.
@@ -54,6 +58,7 @@ pub fn lower_body(
         loop_stack: Vec::new(),
         pkg,
         scope_stack: Vec::new(),
+        exception_handlers: Vec::new(),
     };
 
     if has_self {
@@ -83,6 +88,7 @@ pub fn lower_body(
     JvmMethodBody {
         max_locals: ctx.next_slot,
         ops: ctx.ops,
+        exception_handlers: ctx.exception_handlers,
     }
 }
 
@@ -170,7 +176,8 @@ impl<'a> ExprLowering<'a> {
                 for variant in &enum_def.variants {
                     if variant.name == variant_name {
                         for (fname, tyref) in &variant.fields {
-                            let jvm_ty = crate::descriptor::tyref_to_jvm(tyref, self.pkg);
+                            let jvm_ty =
+                                crate::descriptor::tyref_to_jvm(tyref, self.pkg, &self.hir.imports);
                             result.insert(fname.to_string(), jvm_ty);
                         }
                         return result;
@@ -214,10 +221,16 @@ impl<'a> ExprLowering<'a> {
                 PrimTy::Unit => JvmType::Void,
                 PrimTy::Nothing => JvmType::Void,
             },
-            Ty::Named(n) => JvmType::Object(crate::descriptor::class_internal_name(n, self.pkg)),
-            Ty::Generic(n, _) => {
-                JvmType::Object(crate::descriptor::class_internal_name(n, self.pkg))
-            }
+            Ty::Named(n) => JvmType::Object(crate::descriptor::resolve_type_internal_name(
+                n,
+                self.pkg,
+                &self.hir.imports,
+            )),
+            Ty::Generic(n, _) => JvmType::Object(crate::descriptor::resolve_type_internal_name(
+                n,
+                self.pkg,
+                &self.hir.imports,
+            )),
             Ty::Nullable(inner) => {
                 let inner_jvm = self.ty_to_jvm(inner);
                 match JvmType::boxed_name(&inner_jvm) {
@@ -410,6 +423,9 @@ impl<'a> ExprLowering<'a> {
             }
             TypedExprKind::StringInterp(parts) => {
                 self.lower_string_interp(parts);
+            }
+            TypedExprKind::Safe(body) => {
+                self.lower_safe(body, &expr.ty);
             }
             TypedExprKind::Error => {}
         }
@@ -933,6 +949,104 @@ impl<'a> ExprLowering<'a> {
         self.ops.push(JvmOp::Goto(continue_label));
         self.ops.push(JvmOp::Label(break_label));
         self.emit_frame(vec![]);
+    }
+
+    /// Lowers a `safe {}` block into a JVM try-catch.
+    ///
+    /// On success the block value remains on the stack.
+    /// On exception (java/lang/Exception) a type-appropriate default value
+    /// is pushed as a stub.  TASK-012 will replace this with proper
+    /// `Result<T, JavaException>` wrapping.
+    fn lower_safe(&mut self, body: &TypedBody, result_ty: &Ty) {
+        let try_start = self.alloc_label();
+        let try_end = self.alloc_label();
+        let handler_label = self.alloc_label();
+        let end_label = self.alloc_label();
+
+        let jvm_result_ty = self.ty_to_jvm(result_ty);
+        let is_void = matches!(jvm_result_ty, JvmType::Void);
+
+        // --- try region ---
+        self.ops.push(JvmOp::Label(try_start));
+
+        self.push_scope();
+        self.lower_body(body);
+        self.pop_scope();
+
+        // If the block produces a value, store it in a temp local so both
+        // paths converge with the same stack shape.
+        let result_slot = if !is_void {
+            let slot = self.next_slot;
+            self.next_slot += jvm_result_ty.slot_count();
+            self.ops
+                .push(JvmOp::StoreLocal(slot, jvm_result_ty.clone()));
+            Some(slot)
+        } else {
+            None
+        };
+
+        self.ops.push(JvmOp::Goto(end_label));
+
+        // --- try_end / handler entry ---
+        self.ops.push(JvmOp::Label(try_end));
+        self.ops.push(JvmOp::Label(handler_label));
+        // The JVM pushes the caught exception reference onto the stack here.
+        // Emit a FullFrame with a single java/lang/Exception on the stack.
+        self.emit_frame(vec![JvmType::Object("java/lang/Exception".to_string())]);
+
+        // Pop the exception reference (for MVP we discard it).
+        // TASK-012: replace with Result wrapping.
+        self.ops.push(JvmOp::Pop);
+
+        // Push a type-appropriate default value as a stub result.
+        if !is_void {
+            self.push_default_value(&jvm_result_ty);
+            self.ops.push(JvmOp::StoreLocal(
+                result_slot.unwrap(),
+                jvm_result_ty.clone(),
+            ));
+        }
+
+        // --- end label ---
+        self.ops.push(JvmOp::Label(end_label));
+        if !is_void {
+            let end_stack = vec![jvm_result_ty.clone()];
+            self.emit_frame(end_stack);
+            self.ops
+                .push(JvmOp::LoadLocal(result_slot.unwrap(), jvm_result_ty));
+        } else {
+            self.emit_frame(vec![]);
+        }
+
+        // Register the exception handler
+        self.exception_handlers.push(ExceptionHandler {
+            start: try_start,
+            end: try_end,
+            handler: handler_label,
+            catch_type: Some("java/lang/Exception".to_string()),
+        });
+    }
+
+    /// Pushes a type-appropriate default/zero value onto the stack.
+    fn push_default_value(&mut self, ty: &JvmType) {
+        match ty {
+            JvmType::Int | JvmType::Byte | JvmType::Short | JvmType::Char | JvmType::Boolean => {
+                self.ops.push(JvmOp::PushInt(0));
+            }
+            JvmType::Long => {
+                self.ops.push(JvmOp::PushLong(0));
+            }
+            JvmType::Float => {
+                self.ops.push(JvmOp::PushFloat(0.0));
+            }
+            JvmType::Double => {
+                self.ops.push(JvmOp::PushDouble(0.0));
+            }
+            JvmType::Object(_) | JvmType::Array(_) => {
+                self.ops.push(JvmOp::PushNull);
+            }
+            JvmType::Void => {}
+        }
     }
 
     fn lower_string_interp(&mut self, parts: &[TypedStringPart]) {
