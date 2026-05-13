@@ -48,6 +48,7 @@ ristretto_classfile = "0.31"
 # Test
 insta = "1"
 expect-test = "1"
+assert_cmd = "2"
 
 [profile.release]
 lto = "thin"
