@@ -29,7 +29,7 @@ expression: "check(\"fn main() { a < b && b < c || d == e }\")"
                                                         segments: [
                                                             PathSegment {
                                                                 name: "a",
-                                                                turbofish: false,
+                                                                double_colon: false,
                                                                 generics: [],
                                                                 span: Span {
                                                                     start: 12,
@@ -54,7 +54,7 @@ expression: "check(\"fn main() { a < b && b < c || d == e }\")"
                                                         segments: [
                                                             PathSegment {
                                                                 name: "b",
-                                                                turbofish: false,
+                                                                double_colon: false,
                                                                 generics: [],
                                                                 span: Span {
                                                                     start: 16,
@@ -91,7 +91,7 @@ expression: "check(\"fn main() { a < b && b < c || d == e }\")"
                                                         segments: [
                                                             PathSegment {
                                                                 name: "b",
-                                                                turbofish: false,
+                                                                double_colon: false,
                                                                 generics: [],
                                                                 span: Span {
                                                                     start: 21,
@@ -116,7 +116,7 @@ expression: "check(\"fn main() { a < b && b < c || d == e }\")"
                                                         segments: [
                                                             PathSegment {
                                                                 name: "c",
-                                                                turbofish: false,
+                                                                double_colon: false,
                                                                 generics: [],
                                                                 span: Span {
                                                                     start: 25,
@@ -162,7 +162,7 @@ expression: "check(\"fn main() { a < b && b < c || d == e }\")"
                                                 segments: [
                                                     PathSegment {
                                                         name: "d",
-                                                        turbofish: false,
+                                                        double_colon: false,
                                                         generics: [],
                                                         span: Span {
                                                             start: 30,
@@ -187,7 +187,7 @@ expression: "check(\"fn main() { a < b && b < c || d == e }\")"
                                                 segments: [
                                                     PathSegment {
                                                         name: "e",
-                                                        turbofish: false,
+                                                        double_colon: false,
                                                         generics: [],
                                                         span: Span {
                                                             start: 35,

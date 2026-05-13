@@ -13,8 +13,6 @@ valen-ast = { workspace = true }
 valen-diagnostics = { workspace = true }
 logos = { workspace = true }
 smol_str = { workspace = true }
-thiserror = { workspace = true }
 
 [dev-dependencies]
-expect-test = { workspace = true }
 insta = { workspace = true }

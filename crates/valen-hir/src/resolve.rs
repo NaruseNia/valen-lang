@@ -7,7 +7,7 @@ use valen_diagnostics::DiagCode;
 
 use crate::{
     ClassDef, ClassDefKind, CtorParamDef, DataClassDef, Def, DefId, DefKind, EnumDef,
-    EnumVariantDef, FnDef, Hir, ImplDef, ImplEntry, ParamDef, PrimTy, TraitDef, TyRef, Vis,
+    EnumVariantDef, FnDef, Hir, ImplDef, ImplEntry, ParamDef, TraitDef, TyRef, Vis,
 };
 
 pub struct Resolver {
@@ -353,7 +353,7 @@ fn lower_type_ref(ty: &valen_ast::Type) -> TyRef {
             if tp.segments.len() == 1 {
                 let seg = &tp.segments[0];
                 let name = &seg.name;
-                if let Some(prim) = resolve_primitive(name) {
+                if let Some(prim) = crate::resolve_prim(name) {
                     return TyRef::Prim(prim);
                 }
                 if seg.generics.is_empty() {
@@ -373,7 +373,7 @@ fn lower_type_ref(ty: &valen_ast::Type) -> TyRef {
                 .join(".");
             TyRef::Named(SmolStr::from(full))
         }
-        valen_ast::Type::Nullable(inner) => TyRef::Nullable(Box::new(lower_type_ref(inner))),
+        valen_ast::Type::Nullable { inner, .. } => TyRef::Nullable(Box::new(lower_type_ref(inner))),
         valen_ast::Type::Fn(ft) => {
             let params = ft.params.iter().map(lower_type_ref).collect();
             let ret = Box::new(lower_type_ref(&ft.return_type));
@@ -383,26 +383,10 @@ fn lower_type_ref(ty: &valen_ast::Type) -> TyRef {
     }
 }
 
-fn resolve_primitive(name: &str) -> Option<PrimTy> {
-    match name {
-        "Int" => Some(PrimTy::Int),
-        "Long" => Some(PrimTy::Long),
-        "Float" => Some(PrimTy::Float),
-        "Double" => Some(PrimTy::Double),
-        "Bool" => Some(PrimTy::Bool),
-        "Char" => Some(PrimTy::Char),
-        "Byte" => Some(PrimTy::Byte),
-        "Short" => Some(PrimTy::Short),
-        "String" => Some(PrimTy::String),
-        "Unit" => Some(PrimTy::Unit),
-        "Nothing" => Some(PrimTy::Nothing),
-        _ => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::PrimTy;
     use valen_ast::FileId;
     use valen_parser::parse;
 

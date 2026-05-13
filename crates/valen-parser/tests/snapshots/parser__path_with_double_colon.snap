@@ -20,7 +20,7 @@ expression: "check(\"fn main() { Shape::Circle }\")"
                                 segments: [
                                     PathSegment {
                                         name: "Shape",
-                                        turbofish: false,
+                                        double_colon: false,
                                         generics: [],
                                         span: Span {
                                             start: 12,
@@ -32,7 +32,7 @@ expression: "check(\"fn main() { Shape::Circle }\")"
                                     },
                                     PathSegment {
                                         name: "Circle",
-                                        turbofish: true,
+                                        double_colon: true,
                                         generics: [],
                                         span: Span {
                                             start: 19,

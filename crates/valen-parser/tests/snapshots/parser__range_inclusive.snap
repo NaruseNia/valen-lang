@@ -68,7 +68,7 @@ expression: "check(\"fn f() { for i in 1..=9 { process(i); } }\")"
                                                             segments: [
                                                                 PathSegment {
                                                                     name: "process",
-                                                                    turbofish: false,
+                                                                    double_colon: false,
                                                                     generics: [],
                                                                     span: Span {
                                                                         start: 26,
@@ -96,7 +96,7 @@ expression: "check(\"fn f() { for i in 1..=9 { process(i); } }\")"
                                                                     segments: [
                                                                         PathSegment {
                                                                             name: "i",
-                                                                            turbofish: false,
+                                                                            double_colon: false,
                                                                             generics: [],
                                                                             span: Span {
                                                                                 start: 34,

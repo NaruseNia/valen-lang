@@ -129,7 +129,7 @@ expression: "check(\"class Dog(pub name: String) { fn greet(self) -> String { se
                                                     segments: [
                                                         PathSegment {
                                                             name: "self",
-                                                            turbofish: false,
+                                                            double_colon: false,
                                                             generics: [],
                                                             span: Span {
                                                                 start: 57,

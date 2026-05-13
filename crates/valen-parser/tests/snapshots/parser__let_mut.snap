@@ -47,7 +47,7 @@ expression: "check(\"fn main() { let mut count = 0; count }\")"
                                 segments: [
                                     PathSegment {
                                         name: "count",
-                                        turbofish: false,
+                                        double_colon: false,
                                         generics: [],
                                         span: Span {
                                             start: 31,

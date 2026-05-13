@@ -72,7 +72,7 @@ expression: "check(\"fn main() { let x: Int = 42; x }\")"
                                 segments: [
                                     PathSegment {
                                         name: "x",
-                                        turbofish: false,
+                                        double_colon: false,
                                         generics: [],
                                         span: Span {
                                             start: 29,

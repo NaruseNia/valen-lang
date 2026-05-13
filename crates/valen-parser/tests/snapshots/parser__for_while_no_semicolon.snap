@@ -23,7 +23,7 @@ expression: "check(\"fn f() { for x in xs { process(x); }\\nwhile cond { tick();
                                             segments: [
                                                 PathSegment {
                                                     name: "xs",
-                                                    turbofish: false,
+                                                    double_colon: false,
                                                     generics: [],
                                                     span: Span {
                                                         start: 18,
@@ -53,7 +53,7 @@ expression: "check(\"fn f() { for x in xs { process(x); }\\nwhile cond { tick();
                                                                 segments: [
                                                                     PathSegment {
                                                                         name: "process",
-                                                                        turbofish: false,
+                                                                        double_colon: false,
                                                                         generics: [],
                                                                         span: Span {
                                                                             start: 23,
@@ -81,7 +81,7 @@ expression: "check(\"fn f() { for x in xs { process(x); }\\nwhile cond { tick();
                                                                         segments: [
                                                                             PathSegment {
                                                                                 name: "x",
-                                                                                turbofish: false,
+                                                                                double_colon: false,
                                                                                 generics: [],
                                                                                 span: Span {
                                                                                     start: 31,
@@ -148,7 +148,7 @@ expression: "check(\"fn f() { for x in xs { process(x); }\\nwhile cond { tick();
                                             segments: [
                                                 PathSegment {
                                                     name: "cond",
-                                                    turbofish: false,
+                                                    double_colon: false,
                                                     generics: [],
                                                     span: Span {
                                                         start: 43,
@@ -178,7 +178,7 @@ expression: "check(\"fn f() { for x in xs { process(x); }\\nwhile cond { tick();
                                                                 segments: [
                                                                     PathSegment {
                                                                         name: "tick",
-                                                                        turbofish: false,
+                                                                        double_colon: false,
                                                                         generics: [],
                                                                         span: Span {
                                                                             start: 50,

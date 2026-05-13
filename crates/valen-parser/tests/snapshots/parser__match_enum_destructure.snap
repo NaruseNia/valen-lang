@@ -47,7 +47,7 @@ expression: "check(\"fn f() -> Int { match shape { Shape::Circle(r) => r, Shape:
                                         segments: [
                                             PathSegment {
                                                 name: "shape",
-                                                turbofish: false,
+                                                double_colon: false,
                                                 generics: [],
                                                 span: Span {
                                                     start: 22,
@@ -75,7 +75,7 @@ expression: "check(\"fn f() -> Int { match shape { Shape::Circle(r) => r, Shape:
                                                     segments: [
                                                         PathSegment {
                                                             name: "Shape",
-                                                            turbofish: false,
+                                                            double_colon: false,
                                                             generics: [],
                                                             span: Span {
                                                                 start: 30,
@@ -87,7 +87,7 @@ expression: "check(\"fn f() -> Int { match shape { Shape::Circle(r) => r, Shape:
                                                         },
                                                         PathSegment {
                                                             name: "Circle",
-                                                            turbofish: true,
+                                                            double_colon: true,
                                                             generics: [],
                                                             span: Span {
                                                                 start: 37,
@@ -135,7 +135,7 @@ expression: "check(\"fn f() -> Int { match shape { Shape::Circle(r) => r, Shape:
                                                 segments: [
                                                     PathSegment {
                                                         name: "r",
-                                                        turbofish: false,
+                                                        double_colon: false,
                                                         generics: [],
                                                         span: Span {
                                                             start: 50,
@@ -169,7 +169,7 @@ expression: "check(\"fn f() -> Int { match shape { Shape::Circle(r) => r, Shape:
                                                 segments: [
                                                     PathSegment {
                                                         name: "Shape",
-                                                        turbofish: false,
+                                                        double_colon: false,
                                                         generics: [],
                                                         span: Span {
                                                             start: 53,
@@ -181,7 +181,7 @@ expression: "check(\"fn f() -> Int { match shape { Shape::Circle(r) => r, Shape:
                                                     },
                                                     PathSegment {
                                                         name: "Point",
-                                                        turbofish: true,
+                                                        double_colon: true,
                                                         generics: [],
                                                         span: Span {
                                                             start: 60,

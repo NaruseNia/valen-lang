@@ -22,7 +22,7 @@ expression: "check(\"fn main() { user.name }\")"
                                         segments: [
                                             PathSegment {
                                                 name: "user",
-                                                turbofish: false,
+                                                double_colon: false,
                                                 generics: [],
                                                 span: Span {
                                                     start: 12,

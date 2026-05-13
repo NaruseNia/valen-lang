@@ -49,7 +49,7 @@ expression: "check(\"fn f() -> Int { get_value()? }\")"
                                                 segments: [
                                                     PathSegment {
                                                         name: "get_value",
-                                                        turbofish: false,
+                                                        double_colon: false,
                                                         generics: [],
                                                         span: Span {
                                                             start: 16,

@@ -22,7 +22,7 @@ expression: "check(\"fn main() { greet(msg = hello, count = 3) }\")"
                                         segments: [
                                             PathSegment {
                                                 name: "greet",
-                                                turbofish: false,
+                                                double_colon: false,
                                                 generics: [],
                                                 span: Span {
                                                     start: 12,
@@ -52,7 +52,7 @@ expression: "check(\"fn main() { greet(msg = hello, count = 3) }\")"
                                                 segments: [
                                                     PathSegment {
                                                         name: "hello",
-                                                        turbofish: false,
+                                                        double_colon: false,
                                                         generics: [],
                                                         span: Span {
                                                             start: 24,
