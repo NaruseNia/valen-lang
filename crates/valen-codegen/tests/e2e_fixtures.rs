@@ -310,23 +310,32 @@ fn fixture_fn_for_loop() {
 
 #[test]
 fn fixture_fn_lambda() {
-    // Lambda codegen currently triggers a debug_assert (stack underflow) in emit,
-    // so we only verify parsing and HIR succeed. Full codegen test pending fix.
-    let path = fixture_path("fn_lambda.vln");
-    let source = std::fs::read_to_string(&path).expect("read fixture");
-    let file_id = valen_ast::FileId(0);
-    let parse_result = valen_parser::parse(&source, file_id);
+    let classes = compile_fixture("fn_lambda.vln");
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+    assert_eq!(c.class_name().unwrap(), "com/example/Funcs");
+    // <init> + apply + lambda$0 (synthetic)
     assert!(
-        !parse_result.diagnostics.has_errors(),
-        "parse errors in fn_lambda.vln"
+        c.methods.len() >= 3,
+        "expected at least 3 methods (init, apply, lambda$0), got {}",
+        c.methods.len()
     );
-    let resolve_result = valen_hir::resolve::resolve(&parse_result.items);
-    assert!(
-        !resolve_result.diagnostics.has_errors(),
-        "resolve errors in fn_lambda.vln"
-    );
-    let _tc = valen_hir::ty::type_check(&resolve_result.hir, &parse_result.items);
-    // codegen omitted: lambda emit has a known stack underflow bug
+    // Verify the synthetic lambda method exists.
+    let has_lambda = c.methods.iter().any(|m| {
+        c.constant_pool
+            .try_get_utf8(m.name_index)
+            .ok()
+            .and_then(|n| n.as_str())
+            .map(|s| s.starts_with("lambda$"))
+            .unwrap_or(false)
+    });
+    assert!(has_lambda, "expected a synthetic lambda$ method");
+    // Verify BootstrapMethods attribute is present.
+    let has_bsm = c
+        .attributes
+        .iter()
+        .any(|a| matches!(a, Attribute::BootstrapMethods { .. }));
+    assert!(has_bsm, "expected BootstrapMethods attribute for lambda");
 }
 
 #[test]

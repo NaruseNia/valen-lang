@@ -3,11 +3,12 @@
 use std::collections::HashMap;
 
 use ristretto_classfile::attributes::{
-    Attribute, ExceptionTableEntry, Instruction, Record, StackFrame, VerificationType,
+    Attribute, BootstrapMethod, ExceptionTableEntry, Instruction, Record, StackFrame,
+    VerificationType,
 };
 use ristretto_classfile::{
     BaseType, ClassAccessFlags, ClassFile, ConstantPool, Field, FieldAccessFlags, FieldType,
-    JavaString, Method, MethodAccessFlags, JAVA_21,
+    JavaString, Method, MethodAccessFlags, ReferenceKind, JAVA_21,
 };
 
 use crate::descriptor::{jvm_method_descriptor, jvm_type_descriptor};
@@ -48,13 +49,28 @@ pub fn emit_class(jvm_class: &JvmClass) -> Result<ClassFileOutput, CodegenError>
 
     let code_name = cp.add_utf8("Code")?;
 
-    let methods: Vec<Method> = jvm_class
+    let mut methods: Vec<Method> = jvm_class
         .methods
         .iter()
         .map(|m| emit_method(&mut cp, m, code_name))
         .collect::<Result<_, _>>()?;
 
+    // Emit synthetic lambda methods.
+    for m in &jvm_class.synthetic_methods {
+        methods.push(emit_method(&mut cp, m, code_name)?);
+    }
+
     let mut attributes = Vec::new();
+
+    // Emit BootstrapMethods attribute if any lambda call sites exist.
+    if !jvm_class.bootstrap_methods.is_empty() {
+        let bsm_name_idx = cp.add_utf8("BootstrapMethods")?;
+        let bsm_entries = emit_bootstrap_methods(&mut cp, &jvm_class.bootstrap_methods)?;
+        attributes.push(Attribute::BootstrapMethods {
+            name_index: bsm_name_idx,
+            methods: bsm_entries,
+        });
+    }
 
     if !jvm_class.permitted_subclasses.is_empty() {
         let ps_name = cp.add_utf8("PermittedSubclasses")?;
@@ -153,6 +169,61 @@ pub fn emit_class(jvm_class: &JvmClass) -> Result<ClassFileOutput, CodegenError>
         internal_name: jvm_class.name.clone(),
         bytes,
     })
+}
+
+/// Emits BootstrapMethod entries from the IR-level bootstrap method descriptors.
+fn emit_bootstrap_methods(
+    cp: &mut ConstantPool,
+    bsm_list: &[crate::jvm_ir::JvmBootstrapMethod],
+) -> Result<Vec<BootstrapMethod>, CodegenError> {
+    let mut result = Vec::new();
+    for bsm in bsm_list {
+        // Resolve the bootstrap method reference.
+        let bsm_ref_index = match &bsm.method_ref {
+            crate::jvm_ir::BootstrapMethodRef::LambdaMetafactory => {
+                // LambdaMetafactory.metafactory is a static method in java/lang/invoke/LambdaMetafactory
+                let class_idx = cp.add_class("java/lang/invoke/LambdaMetafactory")?;
+                let method_ref = cp.add_method_ref(
+                    class_idx,
+                    "metafactory",
+                    "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodHandle;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/CallSite;",
+                )?;
+                cp.add_method_handle(ReferenceKind::InvokeStatic, method_ref)?
+            }
+        };
+
+        // Resolve the bootstrap arguments.
+        let mut arguments = Vec::new();
+        for arg in &bsm.arguments {
+            let idx = match arg {
+                crate::jvm_ir::BootstrapArg::MethodType(descriptor) => {
+                    cp.add_method_type(descriptor)?
+                }
+                crate::jvm_ir::BootstrapArg::MethodHandle {
+                    kind,
+                    owner,
+                    name,
+                    descriptor,
+                } => {
+                    let ref_kind = match kind {
+                        crate::jvm_ir::MethodHandleKind::InvokeStatic => {
+                            ReferenceKind::InvokeStatic
+                        }
+                    };
+                    let class_idx = cp.add_class(owner)?;
+                    let method_ref = cp.add_method_ref(class_idx, name.as_str(), descriptor)?;
+                    cp.add_method_handle(ref_kind, method_ref)?
+                }
+            };
+            arguments.push(idx);
+        }
+
+        result.push(BootstrapMethod {
+            bootstrap_method_ref: bsm_ref_index,
+            arguments,
+        });
+    }
+    Ok(result)
 }
 
 fn emit_field(cp: &mut ConstantPool, field: &JvmField) -> Result<Field, CodegenError> {
@@ -714,6 +785,16 @@ fn emit_op(
 
         JvmOp::AThrow => vec![Instruction::Athrow],
 
+        JvmOp::InvokeDynamic {
+            bootstrap_index,
+            name,
+            descriptor,
+        } => {
+            let idx =
+                cp.add_invoke_dynamic(*bootstrap_index, name.as_str(), descriptor.as_str())?;
+            vec![Instruction::Invokedynamic(idx)]
+        }
+
         JvmOp::Label(_) | JvmOp::StubBody | JvmOp::Frame { .. } => vec![],
     })
 }
@@ -989,6 +1070,8 @@ mod tests {
             source_file: None,
             permitted_subclasses: vec![],
             is_record: false,
+            bootstrap_methods: vec![],
+            synthetic_methods: vec![],
         }
     }
 
@@ -1198,6 +1281,8 @@ mod tests {
             source_file: None,
             permitted_subclasses: vec!["Card".to_string(), "Cash".to_string()],
             is_record: false,
+            bootstrap_methods: vec![],
+            synthetic_methods: vec![],
         };
 
         let output = emit_class(&jvm_class).unwrap();

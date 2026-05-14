@@ -9,7 +9,8 @@ use valen_hir::{
 
 use crate::jvm_const::*;
 use crate::jvm_ir::{
-    ArithOp, BitwiseOp, CmpKind, ExceptionHandler, JvmMethodBody, JvmOp, JvmType, Label,
+    ArithOp, BitwiseOp, BootstrapArg, BootstrapMethodRef, CmpKind, ExceptionHandler,
+    JvmBootstrapMethod, JvmMethodBody, JvmOp, JvmType, Label, MethodHandleKind, SyntheticLambda,
 };
 
 struct LoopContext {
@@ -35,6 +36,22 @@ struct ExprLowering<'a> {
     scope_stack: Vec<ScopeUndo>,
     /// Exception handlers collected during lowering (for safe {} blocks).
     exception_handlers: Vec<ExceptionHandler>,
+    /// Counter for generating unique lambda synthetic method names.
+    lambda_counter: u32,
+    /// Synthetic lambda methods collected during expression lowering.
+    synthetic_lambdas: Vec<SyntheticLambda>,
+    /// Bootstrap method entries collected for lambda `invokedynamic` call sites.
+    bootstrap_methods: Vec<JvmBootstrapMethod>,
+}
+
+/// Result of lowering a method body, including any lambda artifacts.
+pub struct LowerBodyResult {
+    /// The lowered method body.
+    pub body: JvmMethodBody,
+    /// Synthetic lambda methods generated within this body.
+    pub synthetic_lambdas: Vec<SyntheticLambda>,
+    /// Bootstrap method entries for lambda `invokedynamic` call sites.
+    pub bootstrap_methods: Vec<JvmBootstrapMethod>,
 }
 
 /// Lowers a typed method body into JVM bytecode operations.
@@ -46,7 +63,7 @@ pub fn lower_body(
     has_self: bool,
     pkg: Option<&[SmolStr]>,
     hir: &Hir,
-) -> JvmMethodBody {
+) -> LowerBodyResult {
     let mut ctx = ExprLowering {
         hir,
         ops: Vec::new(),
@@ -59,6 +76,9 @@ pub fn lower_body(
         pkg,
         scope_stack: Vec::new(),
         exception_handlers: Vec::new(),
+        lambda_counter: 0,
+        synthetic_lambdas: Vec::new(),
+        bootstrap_methods: Vec::new(),
     };
 
     if has_self {
@@ -85,10 +105,14 @@ pub fn lower_body(
         ctx.ops.push(JvmOp::Return(return_ty.clone()));
     }
 
-    JvmMethodBody {
-        max_locals: ctx.next_slot,
-        ops: ctx.ops,
-        exception_handlers: ctx.exception_handlers,
+    LowerBodyResult {
+        body: JvmMethodBody {
+            max_locals: ctx.next_slot,
+            ops: ctx.ops,
+            exception_handlers: ctx.exception_handlers,
+        },
+        synthetic_lambdas: ctx.synthetic_lambdas,
+        bootstrap_methods: ctx.bootstrap_methods,
     }
 }
 
@@ -413,9 +437,8 @@ impl<'a> ExprLowering<'a> {
                 let _ = (var, iter, body);
                 self.ops.push(JvmOp::StubBody);
             }
-            TypedExprKind::Lambda { .. } => {
-                // MVP: stub — InvokeDynamic + LambdaMetafactory not yet wired
-                self.ops.push(JvmOp::StubBody);
+            TypedExprKind::Lambda { params, body } => {
+                self.lower_lambda(params, body, &expr.ty);
             }
             TypedExprKind::Range { .. } => {
                 // MVP: stub — Range type not yet in stdlib
@@ -437,6 +460,11 @@ impl<'a> ExprLowering<'a> {
 
         match &callee.kind {
             TypedExprKind::LocalVar(name) => {
+                // Check if the callee is a function-typed local variable (lambda).
+                if matches!(callee.ty, Ty::Fn(_, _)) {
+                    self.lower_lambda_call(callee, args, result_ty);
+                    return;
+                }
                 for arg in args {
                     self.lower_expr(arg);
                 }
@@ -448,6 +476,11 @@ impl<'a> ExprLowering<'a> {
                 });
             }
             _ => {
+                // Non-local callees that are function-typed also need lambda call path.
+                if matches!(callee.ty, Ty::Fn(_, _)) {
+                    self.lower_lambda_call(callee, args, result_ty);
+                    return;
+                }
                 self.lower_expr(callee);
                 for arg in args {
                     self.lower_expr(arg);
@@ -458,6 +491,255 @@ impl<'a> ExprLowering<'a> {
                     params: param_tys,
                     ret: ret_ty,
                 });
+            }
+        }
+    }
+
+    /// Lowers a lambda expression into an `invokedynamic` call site and a synthetic method.
+    ///
+    /// The lambda body is compiled into a `private static synthetic` method, and an
+    /// `invokedynamic` instruction referencing `LambdaMetafactory.metafactory` is emitted
+    /// at the call site to create a functional interface proxy.
+    fn lower_lambda(&mut self, params: &[(SmolStr, Ty)], body: &TypedExpr, _lambda_ty: &Ty) {
+        let lambda_idx = self.lambda_counter;
+        self.lambda_counter += 1;
+        let synth_name = format!("lambda${lambda_idx}");
+
+        // Build the synthetic method's param types and return type.
+        let param_types: Vec<JvmType> = params.iter().map(|(_, ty)| self.ty_to_jvm(ty)).collect();
+        let return_type = self.ty_to_jvm(&body.ty);
+
+        // Lower the lambda body into a separate method body.
+        let param_pairs: Vec<(SmolStr, JvmType)> = params
+            .iter()
+            .map(|(name, ty)| (name.clone(), self.ty_to_jvm(ty)))
+            .collect();
+        let synth_body = {
+            let tb = TypedBody {
+                stmts: vec![],
+                tail: Some(Box::new(body.clone())),
+                ty: body.ty.clone(),
+            };
+            let result = lower_body(
+                &tb,
+                self.class_internal,
+                &param_pairs,
+                &return_type,
+                false,
+                self.pkg,
+                self.hir,
+            );
+            // Hoist any nested lambdas up.
+            // Nested lambda bootstrap indices are offset by the current bootstrap table size.
+            let base_bsm = self.bootstrap_methods.len() as u32;
+            self.synthetic_lambdas.extend(result.synthetic_lambdas);
+            self.bootstrap_methods.extend(result.bootstrap_methods);
+            // Fix up bootstrap indices for nested lambdas in the body ops.
+            let mut body_result = result.body;
+            if base_bsm > 0 {
+                for op in &mut body_result.ops {
+                    if let JvmOp::InvokeDynamic {
+                        bootstrap_index, ..
+                    } = op
+                    {
+                        *bootstrap_index += base_bsm as u16;
+                    }
+                }
+            }
+            body_result
+        };
+
+        // Store the synthetic method.
+        self.synthetic_lambdas.push(SyntheticLambda {
+            name: synth_name.clone(),
+            params: param_types.clone(),
+            return_type: return_type.clone(),
+            body: synth_body,
+        });
+
+        // Determine the functional interface based on arity.
+        let (func_iface, sam_name, erased_sam_desc, specialized_sam_desc) =
+            self.lambda_functional_interface(&param_types, &return_type);
+
+        // Build the implementation method descriptor (uses actual primitive types).
+        let impl_descriptor = crate::descriptor::jvm_method_descriptor(&param_types, &return_type);
+
+        // Register the bootstrap method (LambdaMetafactory.metafactory).
+        let bsm_index = self.bootstrap_methods.len() as u16;
+        self.bootstrap_methods.push(JvmBootstrapMethod {
+            method_ref: BootstrapMethodRef::LambdaMetafactory,
+            arguments: vec![
+                // arg0: erased SAM type  e.g. (Ljava/lang/Object;)Ljava/lang/Object;
+                BootstrapArg::MethodType(erased_sam_desc),
+                // arg1: MethodHandle to the implementation method
+                BootstrapArg::MethodHandle {
+                    kind: MethodHandleKind::InvokeStatic,
+                    owner: self.class_internal.to_string(),
+                    name: synth_name,
+                    descriptor: impl_descriptor,
+                },
+                // arg2: specialized SAM type  e.g. (Ljava/lang/Integer;)Ljava/lang/Integer;
+                BootstrapArg::MethodType(specialized_sam_desc),
+            ],
+        });
+
+        // Emit the invokedynamic instruction.
+        // Factory type for no-capture lambda: "()L<func_iface>;"
+        let factory_descriptor = format!("()L{func_iface};");
+        self.ops.push(JvmOp::InvokeDynamic {
+            bootstrap_index: bsm_index,
+            name: sam_name,
+            descriptor: factory_descriptor,
+        });
+    }
+
+    /// Returns `(interface_internal, sam_name, erased_descriptor, specialized_descriptor)`
+    /// for the given lambda parameter/return types.
+    fn lambda_functional_interface(
+        &self,
+        param_types: &[JvmType],
+        return_type: &JvmType,
+    ) -> (String, String, String, String) {
+        let obj = "Ljava/lang/Object;";
+        match param_types.len() {
+            0 => {
+                // java.util.function.Supplier<R>
+                let erased = format!("(){obj}");
+                let specialized_ret = self.boxed_descriptor(return_type);
+                let specialized = format!("(){specialized_ret}");
+                (
+                    "java/util/function/Supplier".to_string(),
+                    "get".to_string(),
+                    erased,
+                    specialized,
+                )
+            }
+            1 => {
+                // java.util.function.Function<T, R>
+                let erased = format!("({obj}){obj}");
+                let specialized_param = self.boxed_descriptor(&param_types[0]);
+                let specialized_ret = self.boxed_descriptor(return_type);
+                let specialized = format!("({specialized_param}){specialized_ret}");
+                (
+                    "java/util/function/Function".to_string(),
+                    "apply".to_string(),
+                    erased,
+                    specialized,
+                )
+            }
+            2 => {
+                // java.util.function.BiFunction<T, U, R>
+                let erased = format!("({obj}{obj}){obj}");
+                let s0 = self.boxed_descriptor(&param_types[0]);
+                let s1 = self.boxed_descriptor(&param_types[1]);
+                let sr = self.boxed_descriptor(return_type);
+                let specialized = format!("({s0}{s1}){sr}");
+                (
+                    "java/util/function/BiFunction".to_string(),
+                    "apply".to_string(),
+                    erased,
+                    specialized,
+                )
+            }
+            _ => {
+                // Fallback: use Function<Object, Object> and ignore extra args for MVP.
+                let erased = format!("({obj}){obj}");
+                (
+                    "java/util/function/Function".to_string(),
+                    "apply".to_string(),
+                    erased.clone(),
+                    erased,
+                )
+            }
+        }
+    }
+
+    /// Returns the boxed type descriptor for a JVM type.
+    /// Primitive types are mapped to their wrapper classes; reference types stay as-is.
+    fn boxed_descriptor(&self, ty: &JvmType) -> String {
+        match JvmType::boxed_name(ty) {
+            Some(boxed) => format!("L{boxed};"),
+            None => crate::descriptor::jvm_type_descriptor(ty),
+        }
+    }
+
+    /// Emits boxing instructions for a primitive value on the stack.
+    fn emit_box(&mut self, ty: &JvmType) {
+        if let Some(boxed) = JvmType::boxed_name(ty) {
+            self.ops.push(JvmOp::InvokeStatic {
+                owner: boxed.to_string(),
+                name: "valueOf".to_string(),
+                params: vec![ty.clone()],
+                ret: JvmType::Object(boxed.to_string()),
+            });
+        }
+    }
+
+    /// Emits unboxing instructions: checkcast + intValue/longValue/etc.
+    fn emit_unbox(&mut self, ty: &JvmType) {
+        if let Some(boxed) = JvmType::boxed_name(ty) {
+            self.ops.push(JvmOp::Checkcast(boxed.to_string()));
+            let unbox_method = match ty {
+                JvmType::Int => "intValue",
+                JvmType::Long => "longValue",
+                JvmType::Float => "floatValue",
+                JvmType::Double => "doubleValue",
+                JvmType::Boolean => "booleanValue",
+                JvmType::Char => "charValue",
+                JvmType::Byte => "byteValue",
+                JvmType::Short => "shortValue",
+                _ => return,
+            };
+            self.ops.push(JvmOp::InvokeVirtual {
+                owner: boxed.to_string(),
+                name: unbox_method.to_string(),
+                params: vec![],
+                ret: ty.clone(),
+            });
+        }
+    }
+
+    /// Lowers a call to a function-typed local variable (lambda invocation).
+    ///
+    /// Loads the lambda reference, boxes primitive arguments, calls the SAM method
+    /// via `invokeinterface`, then unboxes the result if needed.
+    fn lower_lambda_call(&mut self, callee: &TypedExpr, args: &[TypedExpr], result_ty: &Ty) {
+        let ret_ty = self.ty_to_jvm(result_ty);
+
+        // Load the functional interface reference.
+        self.lower_expr(callee);
+
+        // Determine the functional interface and SAM method.
+        let (func_iface, sam_name) = match args.len() {
+            0 => ("java/util/function/Supplier", "get"),
+            1 => ("java/util/function/Function", "apply"),
+            2 => ("java/util/function/BiFunction", "apply"),
+            _ => ("java/util/function/Function", "apply"), // fallback
+        };
+
+        // Box each argument and emit.
+        let mut erased_params = Vec::new();
+        for arg in args {
+            self.lower_expr(arg);
+            let arg_ty = self.ty_to_jvm(&arg.ty);
+            self.emit_box(&arg_ty);
+            erased_params.push(JvmType::Object(JVM_OBJECT.to_string()));
+        }
+
+        // Call via invokeinterface on the functional interface.
+        self.ops.push(JvmOp::InvokeInterface {
+            owner: func_iface.to_string(),
+            name: sam_name.to_string(),
+            params: erased_params,
+            ret: JvmType::Object(JVM_OBJECT.to_string()),
+        });
+
+        // Unbox the result if the expected type is primitive.
+        if JvmType::boxed_name(&ret_ty).is_some() {
+            self.emit_unbox(&ret_ty);
+        } else if let JvmType::Object(ref name) = ret_ty {
+            if name != JVM_OBJECT {
+                self.ops.push(JvmOp::Checkcast(name.clone()));
             }
         }
     }
