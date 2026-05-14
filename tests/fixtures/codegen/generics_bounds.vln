@@ -1,0 +1,19 @@
+package com.example;
+
+pub trait Show {
+    fn show(self) -> String;
+}
+
+pub class Dog(pub name: String) {}
+
+impl Show for Dog {
+    fn show(self) -> String { self.name }
+}
+
+pub fn display<T: Show>(x: T) -> String {
+    x.show()
+}
+
+pub fn describe<T>(x: T) -> String {
+    x.toString()
+}
