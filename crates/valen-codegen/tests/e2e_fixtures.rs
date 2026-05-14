@@ -384,6 +384,16 @@ fn fixture_fn_range_standalone() {
 }
 
 #[test]
+fn fixture_typealias() {
+    let classes = compile_fixture("typealias.vln");
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+    assert_eq!(c.class_name().unwrap(), "com/example/AliasDemo");
+    // <init> + make_list
+    assert_eq!(c.methods.len(), 2);
+}
+
+#[test]
 fn fixture_fn_nested_control() {
     let classes = compile_fixture("fn_nested_control.vln");
     assert_eq!(classes.len(), 1);

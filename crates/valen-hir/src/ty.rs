@@ -6,7 +6,7 @@ use valen_ast::{self, BinaryOp, Span, UnaryOp};
 use valen_diagnostics::{DiagCode, Diagnostics};
 
 use crate::{
-    tyref_to_ty, DefId, DefKind, Hir, PrimTy, Ty, TypedBody, TypedExpr, TypedExprKind,
+    tyref_to_ty, DefId, DefKind, Hir, PrimTy, Ty, TyRef, TypedBody, TypedExpr, TypedExprKind,
     TypedMatchArm, TypedStmt, TypedStringPart,
 };
 
@@ -126,6 +126,48 @@ impl<'hir> TypeChecker<'hir> {
         }
     }
 
+    fn expand_type_alias(&self, name: &str, args: &[Ty]) -> Option<Ty> {
+        let def = self.hir.defs.values().find(|d| d.name == name)?;
+        let alias = match &def.kind {
+            DefKind::TypeAlias(a) => a,
+            _ => return None,
+        };
+        Some(self.substitute_tyref(&alias.target, &alias.generics, args))
+    }
+
+    fn substitute_tyref(&self, tyref: &TyRef, params: &[SmolStr], args: &[Ty]) -> Ty {
+        match tyref {
+            TyRef::Unresolved(name) => {
+                if let Some(idx) = params.iter().position(|p| p == name) {
+                    args.get(idx).cloned().unwrap_or(Ty::Error)
+                } else {
+                    Ty::Named(name.clone())
+                }
+            }
+            TyRef::Named(name) => Ty::Named(name.clone()),
+            TyRef::Prim(p) => Ty::Prim(*p),
+            TyRef::Generic(name, ga) => {
+                let resolved: Vec<Ty> = ga
+                    .iter()
+                    .map(|a| self.substitute_tyref(a, params, args))
+                    .collect();
+                Ty::Generic(name.clone(), resolved)
+            }
+            TyRef::Nullable(inner) => {
+                Ty::Nullable(Box::new(self.substitute_tyref(inner, params, args)))
+            }
+            TyRef::Fn(p, r) => {
+                let ps = p
+                    .iter()
+                    .map(|t| self.substitute_tyref(t, params, args))
+                    .collect();
+                let ret = Box::new(self.substitute_tyref(r, params, args));
+                Ty::Fn(ps, ret)
+            }
+            TyRef::SelfTy | TyRef::Error => Ty::Error,
+        }
+    }
+
     fn lookup_def_id(&self, name: &str) -> Option<DefId> {
         self.hir
             .defs
@@ -221,14 +263,17 @@ impl<'hir> TypeChecker<'hir> {
                     if let Some(prim) = crate::resolve_prim(&seg.name) {
                         return Ty::Prim(prim);
                     }
-                    if seg.generics.is_empty() {
-                        return Ty::Named(seg.name.clone());
-                    }
-                    let args = seg
+                    let args: Vec<Ty> = seg
                         .generics
                         .iter()
                         .map(|g| self.resolve_ast_type(g))
                         .collect();
+                    if let Some(expanded) = self.expand_type_alias(&seg.name, &args) {
+                        return expanded;
+                    }
+                    if args.is_empty() {
+                        return Ty::Named(seg.name.clone());
+                    }
                     return Ty::Generic(seg.name.clone(), args);
                 }
                 let full: String = tp

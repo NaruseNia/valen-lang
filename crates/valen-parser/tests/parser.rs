@@ -390,3 +390,13 @@ fn range_exclusive() {
 fn range_inclusive() {
     assert_snapshot!(check("fn f() { for i in 1..=9 { process(i); } }"));
 }
+
+#[test]
+fn typealias_simple() {
+    assert_snapshot!(check("typealias StringList = List<String>;"));
+}
+
+#[test]
+fn typealias_generic() {
+    assert_snapshot!(check("pub typealias Mapping<K, V> = java.util.Map<K, V>;"));
+}

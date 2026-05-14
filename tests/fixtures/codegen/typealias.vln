@@ -1,0 +1,9 @@
+package com.example;
+
+typealias Name = String;
+
+pub class AliasDemo {
+    fn greet(self, n: Name) -> Name {
+        n
+    }
+}

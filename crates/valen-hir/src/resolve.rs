@@ -609,10 +609,14 @@ impl Resolver {
             }
             Item::TypeAlias(ta) => {
                 let id = self.hir.alloc_id();
+                let ta_params: Vec<SmolStr> = ta.generics.iter().map(|g| g.name.clone()).collect();
                 let def = Def {
                     id,
                     name: ta.name.clone(),
-                    kind: DefKind::TypeAlias,
+                    kind: DefKind::TypeAlias(crate::TypeAliasDef {
+                        generics: ta_params.clone(),
+                        target: lower_type_ref_with_params(&ta.ty, &ta_params),
+                    }),
                     vis: lower_vis(ta.visibility),
                     span: ta.span,
                     package: self.current_package.clone(),
