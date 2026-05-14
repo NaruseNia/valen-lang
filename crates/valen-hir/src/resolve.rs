@@ -223,6 +223,7 @@ impl Resolver {
                     ty: TyRef::SelfTy,
                     mutable: false,
                     is_self: true,
+                    has_default: false,
                 }],
                 return_ty: Some(TyRef::Prim(crate::PrimTy::String)),
                 has_body: false,
@@ -273,6 +274,7 @@ impl Resolver {
                     ty: TyRef::SelfTy,
                     mutable: true,
                     is_self: true,
+                    has_default: false,
                 }],
                 return_ty: Some(TyRef::Generic(
                     SmolStr::from("Option"),
@@ -327,18 +329,21 @@ impl Resolver {
                         name: SmolStr::from("start"),
                         ty: TyRef::Unresolved(SmolStr::from("T")),
                         mutable: false,
+                        has_default: false,
                     },
                     CtorParamDef {
                         vis: Vis::Pub,
                         name: SmolStr::from("end"),
                         ty: TyRef::Unresolved(SmolStr::from("T")),
                         mutable: false,
+                        has_default: false,
                     },
                     CtorParamDef {
                         vis: Vis::Pub,
                         name: SmolStr::from("inclusive"),
                         ty: TyRef::Prim(crate::PrimTy::Bool),
                         mutable: false,
+                        has_default: false,
                     },
                 ],
             }),
@@ -374,12 +379,14 @@ impl Resolver {
                         name: SmolStr::from("message"),
                         ty: TyRef::Prim(crate::PrimTy::String),
                         mutable: false,
+                        has_default: false,
                     },
                     CtorParamDef {
                         vis: Vis::Pub,
                         name: SmolStr::from("class_name"),
                         ty: TyRef::Prim(crate::PrimTy::String),
                         mutable: false,
+                        has_default: false,
                     },
                 ],
             }),
@@ -691,6 +698,7 @@ impl Resolver {
                 ty: lower_type_ref_with_params(&p.ty, &all_params),
                 mutable: p.mutable,
                 is_self: p.name == "self",
+                has_default: p.default.is_some(),
             })
             .collect();
         FnDef {
@@ -735,6 +743,7 @@ fn lower_ctor_param_with_params(p: &valen_ast::CtorParam, type_params: &[SmolStr
         name: p.name.clone(),
         ty: lower_type_ref_with_params(&p.ty, type_params),
         mutable: p.mutable,
+        has_default: p.default.is_some(),
     }
 }
 

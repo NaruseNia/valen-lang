@@ -41,6 +41,7 @@ expression: "check(\"class User(pub name: String, mut age: Int) {}\")"
                         },
                     ),
                     mutable: false,
+                    default: None,
                     span: Span {
                         start: 11,
                         end: 27,
@@ -78,6 +79,7 @@ expression: "check(\"class User(pub name: String, mut age: Int) {}\")"
                         },
                     ),
                     mutable: true,
+                    default: None,
                     span: Span {
                         start: 29,
                         end: 41,

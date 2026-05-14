@@ -1,0 +1,11 @@
+package com.example;
+
+pub class Greeter(pub greeting: String = "hello") {
+    fn greet(self, name: String, count: Int = 1) -> String {
+        self.greeting
+    }
+}
+
+pub fn repeat(msg: String = "hi", times: Int = 3) -> String {
+    msg
+}

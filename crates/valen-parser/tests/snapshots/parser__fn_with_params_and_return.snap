@@ -38,6 +38,7 @@ expression: "check(\"fn add(a: Int, b: Int) -> Int { a }\")"
                         },
                     ),
                     mutable: false,
+                    default: None,
                     span: Span {
                         start: 7,
                         end: 13,
@@ -73,6 +74,7 @@ expression: "check(\"fn add(a: Int, b: Int) -> Int { a }\")"
                         },
                     ),
                     mutable: false,
+                    default: None,
                     span: Span {
                         start: 15,
                         end: 21,

@@ -117,6 +117,7 @@ pub fn ctor_param(name: &str, ty: TyRef, vis: Vis, mutable: bool) -> CtorParamDe
         name: SmolStr::from(name),
         ty,
         mutable,
+        has_default: false,
     }
 }
 
@@ -126,6 +127,7 @@ pub fn self_param() -> ParamDef {
         ty: TyRef::SelfTy,
         mutable: false,
         is_self: true,
+        has_default: false,
     }
 }
 
@@ -135,6 +137,7 @@ pub fn param(name: &str, ty: TyRef) -> ParamDef {
         ty,
         mutable: false,
         is_self: false,
+        has_default: false,
     }
 }
 

@@ -41,6 +41,7 @@ expression: "check(\"class Dog(pub name: String) : Animal {}\")"
                         },
                     ),
                     mutable: false,
+                    default: None,
                     span: Span {
                         start: 10,
                         end: 26,

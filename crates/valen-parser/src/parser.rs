@@ -347,6 +347,7 @@ impl Parser {
                     name: SmolStr::from("self"),
                     ty: self_type,
                     mutable,
+                    default: None,
                     span,
                 });
                 continue;
@@ -356,11 +357,17 @@ impl Parser {
             let name = self.expect_ident()?;
             self.expect(TokenKind::Colon)?;
             let ty = self.parse_type()?;
-            let span = param_start.merge(type_span(&ty));
+            let default = if self.eat(&TokenKind::Eq).is_some() {
+                Some(self.parse_expr()?)
+            } else {
+                None
+            };
+            let span = param_start.merge(self.prev_span());
             params.push(Param {
                 name,
                 ty,
                 mutable,
+                default,
                 span,
             });
         }
@@ -480,13 +487,19 @@ impl Parser {
             let name = self.expect_ident()?;
             self.expect(TokenKind::Colon)?;
             let ty = self.parse_type()?;
-            let span = param_start.merge(type_span(&ty));
+            let default = if self.eat(&TokenKind::Eq).is_some() {
+                Some(self.parse_expr()?)
+            } else {
+                None
+            };
+            let span = param_start.merge(self.prev_span());
             params.push(CtorParam {
                 annotations: param_annotations,
                 visibility: vis,
                 name,
                 ty,
                 mutable,
+                default,
                 span,
             });
         }

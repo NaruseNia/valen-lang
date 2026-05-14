@@ -775,15 +775,25 @@ impl<'hir> TypeChecker<'hir> {
 
         match &callee.ty {
             Ty::Fn(param_tys, ret_ty) => {
-                if args.len() != param_tys.len() {
+                let min_args = self.min_required_args_for_callee(&call.callee, param_tys.len());
+                if args.len() < min_args || args.len() > param_tys.len() {
                     self.diags.error(
                         DiagCode::ARG_COUNT_MISMATCH,
                         call.span,
-                        SmolStr::from(format!(
-                            "expected {} argument(s), found {}",
-                            param_tys.len(),
-                            args.len()
-                        )),
+                        SmolStr::from(if min_args == param_tys.len() {
+                            format!(
+                                "expected {} argument(s), found {}",
+                                param_tys.len(),
+                                args.len()
+                            )
+                        } else {
+                            format!(
+                                "expected {}-{} argument(s), found {}",
+                                min_args,
+                                param_tys.len(),
+                                args.len()
+                            )
+                        }),
                     );
                 } else {
                     for (arg, expected) in args.iter().zip(param_tys.iter()) {
@@ -851,12 +861,14 @@ impl<'hir> TypeChecker<'hir> {
             }
             match &def.kind {
                 DefKind::Class(c) => {
-                    if args.len() != c.ctor_params.len() {
+                    let min_args = c.ctor_params.iter().filter(|p| !p.has_default).count();
+                    if args.len() < min_args || args.len() > c.ctor_params.len() {
                         self.diags.error(
                             DiagCode::ARG_COUNT_MISMATCH,
                             span,
                             SmolStr::from(format!(
-                                "`{name}` constructor expects {} argument(s), found {}",
+                                "`{name}` constructor expects {}-{} argument(s), found {}",
+                                min_args,
                                 c.ctor_params.len(),
                                 args.len()
                             )),
@@ -879,12 +891,14 @@ impl<'hir> TypeChecker<'hir> {
                     return Ty::Named(name.clone());
                 }
                 DefKind::DataClass(dc) => {
-                    if args.len() != dc.ctor_params.len() {
+                    let min_args = dc.ctor_params.iter().filter(|p| !p.has_default).count();
+                    if args.len() < min_args || args.len() > dc.ctor_params.len() {
                         self.diags.error(
                             DiagCode::ARG_COUNT_MISMATCH,
                             span,
                             SmolStr::from(format!(
-                                "`{name}` constructor expects {} argument(s), found {}",
+                                "`{name}` constructor expects {}-{} argument(s), found {}",
+                                min_args,
                                 dc.ctor_params.len(),
                                 args.len()
                             )),
@@ -1070,6 +1084,26 @@ impl<'hir> TypeChecker<'hir> {
             ty: Ty::Error,
             span: mc.span,
         }
+    }
+
+    fn min_required_args_for_callee(&self, callee: &valen_ast::Expr, total: usize) -> usize {
+        if let valen_ast::Expr::Path(path) = callee {
+            if path.segments.len() == 1 {
+                let name = &path.segments[0].name;
+                for def in self.hir.defs.values() {
+                    if def.name == *name {
+                        if let DefKind::Fn(fn_def) = &def.kind {
+                            return fn_def
+                                .params
+                                .iter()
+                                .filter(|p| !p.is_self && !p.has_default)
+                                .count();
+                        }
+                    }
+                }
+            }
+        }
+        total
     }
 
     fn ty_name(&self, ty: &Ty) -> Option<SmolStr> {
@@ -1753,6 +1787,30 @@ mod tests {
     fn call_arg_count_mismatch() {
         let r =
             check_source("fn add(a: Int, b: Int) -> Int { a + b }\nfn main() -> Int { add(1) }");
+        assert_has_error(&r, DiagCode::ARG_COUNT_MISMATCH);
+    }
+
+    #[test]
+    fn call_with_default_args_omitted() {
+        let r = check_source(
+            "fn greet(msg: String, count: Int = 1) -> String { msg }\nfn main() -> String { greet(\"hi\") }",
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn call_with_default_args_provided() {
+        let r = check_source(
+            "fn greet(msg: String, count: Int = 1) -> String { msg }\nfn main() -> String { greet(\"hi\", 3) }",
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn call_with_default_args_too_few() {
+        let r = check_source(
+            "fn greet(msg: String, count: Int = 1) -> String { msg }\nfn main() -> String { greet() }",
+        );
         assert_has_error(&r, DiagCode::ARG_COUNT_MISMATCH);
     }
 

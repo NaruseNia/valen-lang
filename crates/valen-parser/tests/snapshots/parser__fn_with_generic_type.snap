@@ -63,6 +63,7 @@ expression: "check(\"fn first(xs: List<Int>) -> Option<Int> { xs }\")"
                         },
                     ),
                     mutable: false,
+                    default: None,
                     span: Span {
                         start: 9,
                         end: 22,

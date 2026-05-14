@@ -46,6 +46,7 @@ expression: "check(\"trait Area { fn area(self) -> Float; }\")"
                                     },
                                 ),
                                 mutable: false,
+                                default: None,
                                 span: Span {
                                     start: 21,
                                     end: 25,

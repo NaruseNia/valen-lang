@@ -46,6 +46,7 @@ expression: "check(\"trait Display { fn display(self) -> String { self.name } }\
                                     },
                                 ),
                                 mutable: false,
+                                default: None,
                                 span: Span {
                                     start: 27,
                                     end: 31,

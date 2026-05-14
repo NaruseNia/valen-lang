@@ -19,20 +19,22 @@ fn greet(msg: String, count: Int) -> String { /* ... */ }
 greet(msg = "hi", count = 3);
 ```
 
-## 4.3 デフォルト引数（Phase 1.5）
+## 4.3 デフォルト引数（Phase 1.5 実装済み）
 
 ```valen
-// Phase 1.5 以降
 fn greet(msg: String = "hi", count: Int = 1) -> String { /* ... */ }
+
+greet()              // msg = "hi", count = 1
+greet("yo")          // msg = "yo", count = 1
+greet("yo", 3)       // msg = "yo", count = 3
 ```
 
-MVP では overload で代替：
-
-```valen
-fn greet(msg: String, count: Int) -> String { /* ... */ }
-fn greet(msg: String) -> String { greet(msg, 1) }
-fn greet() -> String { greet("hi", 1) }
-```
+- デフォルト値は **任意の式**（リテラル、関数呼び出し等）
+- 評価タイミングは **call-site**（呼び出しごとに評価）
+- 任意のパラメータ位置にデフォルト値を指定可能（末尾制約なし）
+- named args と組み合わせて中間パラメータの省略も可能
+- class / data class の ctor パラメータにも使用可能
+- trait メソッドにもデフォルト値を指定可能（impl での上書きは不可）
 
 ## 4.4 UFCS
 

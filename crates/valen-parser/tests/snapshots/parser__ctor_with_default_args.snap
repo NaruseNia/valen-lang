@@ -1,27 +1,30 @@
 ---
 source: crates/valen-parser/tests/parser.rs
-expression: "check(\"fn find(id: Int) -> String? { id }\")"
+expression: "check(\"class User(pub name: String, pub age: Int = 0) {}\")"
 ---
 === AST ===
 [
-    Fn(
-        FnDecl {
+    Class(
+        ClassDecl {
             annotations: [],
             visibility: Internal,
-            name: "find",
+            kind: Final,
+            name: "User",
             generics: [],
-            params: [
-                Param {
-                    name: "id",
+            ctor_params: [
+                CtorParam {
+                    annotations: [],
+                    visibility: Pub,
+                    name: "name",
                     ty: Path(
                         TypePath {
                             segments: [
                                 TypePathSegment {
-                                    name: "Int",
+                                    name: "String",
                                     generics: [],
                                     span: Span {
-                                        start: 12,
-                                        end: 15,
+                                        start: 21,
+                                        end: 27,
                                         file_id: FileId(
                                             0,
                                         ),
@@ -29,8 +32,8 @@ expression: "check(\"fn find(id: Int) -> String? { id }\")"
                                 },
                             ],
                             span: Span {
-                                start: 12,
-                                end: 15,
+                                start: 21,
+                                end: 27,
                                 file_id: FileId(
                                     0,
                                 ),
@@ -40,25 +43,26 @@ expression: "check(\"fn find(id: Int) -> String? { id }\")"
                     mutable: false,
                     default: None,
                     span: Span {
-                        start: 8,
-                        end: 15,
+                        start: 11,
+                        end: 27,
                         file_id: FileId(
                             0,
                         ),
                     },
                 },
-            ],
-            return_type: Some(
-                Nullable {
-                    inner: Path(
+                CtorParam {
+                    annotations: [],
+                    visibility: Pub,
+                    name: "age",
+                    ty: Path(
                         TypePath {
                             segments: [
                                 TypePathSegment {
-                                    name: "String",
+                                    name: "Int",
                                     generics: [],
                                     span: Span {
-                                        start: 20,
-                                        end: 26,
+                                        start: 38,
+                                        end: 41,
                                         file_id: FileId(
                                             0,
                                         ),
@@ -66,68 +70,43 @@ expression: "check(\"fn find(id: Int) -> String? { id }\")"
                                 },
                             ],
                             span: Span {
-                                start: 20,
-                                end: 26,
+                                start: 38,
+                                end: 41,
                                 file_id: FileId(
                                     0,
                                 ),
                             },
                         },
                     ),
-                    span: Span {
-                        start: 20,
-                        end: 27,
-                        file_id: FileId(
-                            0,
-                        ),
-                    },
-                },
-            ),
-            body: Some(
-                Block {
-                    stmts: [],
-                    tail: Some(
-                        Path(
-                            Path {
-                                segments: [
-                                    PathSegment {
-                                        name: "id",
-                                        double_colon: false,
-                                        generics: [],
-                                        span: Span {
-                                            start: 30,
-                                            end: 32,
-                                            file_id: FileId(
-                                                0,
-                                            ),
-                                        },
-                                    },
-                                ],
-                                span: Span {
-                                    start: 30,
-                                    end: 32,
+                    mutable: false,
+                    default: Some(
+                        Literal(
+                            Int(
+                                0,
+                                Span {
+                                    start: 44,
+                                    end: 45,
                                     file_id: FileId(
                                         0,
                                     ),
                                 },
-                            },
+                            ),
                         ),
                     ),
                     span: Span {
-                        start: 28,
-                        end: 34,
+                        start: 29,
+                        end: 45,
                         file_id: FileId(
                             0,
                         ),
                     },
                 },
-            ),
-            is_open: false,
-            is_override: false,
-            is_abstract: false,
+            ],
+            supertypes: [],
+            body: [],
             span: Span {
                 start: 0,
-                end: 34,
+                end: 49,
                 file_id: FileId(
                     0,
                 ),

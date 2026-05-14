@@ -46,6 +46,7 @@ expression: "check(\"sealed trait Expr { fn eval(self) -> Int; }\")"
                                     },
                                 ),
                                 mutable: false,
+                                default: None,
                                 span: Span {
                                     start: 28,
                                     end: 32,

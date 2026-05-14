@@ -235,6 +235,10 @@ impl<'a> Printer<'a> {
             self.w(&p.name);
             self.w(": ");
             self.print_type(&p.ty);
+            if let Some(default) = &p.default {
+                self.w(" = ");
+                self.print_expr(default);
+            }
         }
     }
 
@@ -303,6 +307,10 @@ impl<'a> Printer<'a> {
             self.w(&p.name);
             self.w(": ");
             self.print_type(&p.ty);
+            if let Some(default) = &p.default {
+                self.w(" = ");
+                self.print_expr(default);
+            }
         }
     }
 
