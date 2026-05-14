@@ -219,7 +219,7 @@ impl<'a> ExprLowering<'a> {
     }
 
     fn pop_if_needed(&mut self, ty: &Ty) {
-        if matches!(ty, Ty::Prim(PrimTy::Unit) | Ty::Error) {
+        if matches!(ty, Ty::Prim(PrimTy::Unit | PrimTy::Nothing) | Ty::Error) {
             return;
         }
         let jvm_ty = self.ty_to_jvm(ty);
@@ -433,15 +433,14 @@ impl<'a> ExprLowering<'a> {
                 self.lower_loop(body);
             }
             TypedExprKind::For { var, iter, body } => {
-                // MVP: stub — Iterator/Iterable integration not yet available
-                let _ = (var, iter, body);
-                self.ops.push(JvmOp::StubBody);
+                self.lower_for(var, iter, body);
             }
             TypedExprKind::Lambda { params, body } => {
                 self.lower_lambda(params, body, &expr.ty);
             }
             TypedExprKind::Range { .. } => {
-                // MVP: stub — Range type not yet in stdlib
+                // Standalone Range expressions not yet supported (no Range class in stdlib).
+                // Range is handled inline when used as the iter of a for-loop.
                 self.ops.push(JvmOp::StubBody);
             }
             TypedExprKind::StringInterp(parts) => {
@@ -1231,6 +1230,138 @@ impl<'a> ExprLowering<'a> {
         self.ops.push(JvmOp::Goto(continue_label));
         self.ops.push(JvmOp::Label(break_label));
         self.emit_frame(vec![]);
+    }
+
+    fn lower_for(&mut self, var: &SmolStr, iter: &TypedExpr, body: &TypedBody) {
+        if let TypedExprKind::Range {
+            start,
+            end,
+            inclusive,
+        } = &iter.kind
+        {
+            self.lower_for_range(
+                var,
+                start.as_deref(),
+                end.as_deref(),
+                *inclusive,
+                &iter.ty,
+                body,
+            );
+        } else {
+            // General iterable: needs Iterator protocol (TASK-023 prelude)
+            self.ops.push(JvmOp::StubBody);
+        }
+    }
+
+    fn lower_for_range(
+        &mut self,
+        var: &SmolStr,
+        start: Option<&TypedExpr>,
+        end: Option<&TypedExpr>,
+        inclusive: bool,
+        range_ty: &Ty,
+        body: &TypedBody,
+    ) {
+        let elem_ty = match range_ty {
+            Ty::Generic(_, args) if !args.is_empty() => self.ty_to_jvm(&args[0]),
+            _ => JvmType::Int,
+        };
+
+        let is_int = matches!(
+            elem_ty,
+            JvmType::Int | JvmType::Byte | JvmType::Short | JvmType::Char
+        );
+        let is_long = matches!(elem_ty, JvmType::Long);
+
+        if !is_int && !is_long {
+            self.ops.push(JvmOp::StubBody);
+            return;
+        }
+
+        self.push_scope();
+
+        // Store start value into loop variable
+        if let Some(s) = start {
+            self.lower_expr(s);
+        } else if is_long {
+            self.ops.push(JvmOp::PushLong(0));
+        } else {
+            self.ops.push(JvmOp::PushInt(0));
+        }
+        let var_slot = self.alloc_local(var.clone(), elem_ty.clone());
+        self.ops.push(JvmOp::StoreLocal(var_slot, elem_ty.clone()));
+
+        // Store end value into limit variable
+        if let Some(e) = end {
+            self.lower_expr(e);
+        } else if is_long {
+            self.ops.push(JvmOp::PushLong(i64::MAX));
+        } else {
+            self.ops.push(JvmOp::PushInt(i32::MAX));
+        }
+        let limit_slot = self.next_slot;
+        self.next_slot += elem_ty.slot_count();
+        self.ops
+            .push(JvmOp::StoreLocal(limit_slot, elem_ty.clone()));
+
+        let loop_label = self.alloc_label();
+        let continue_label = self.alloc_label();
+        let condition_label = self.alloc_label();
+        let break_label = self.alloc_label();
+
+        self.ops.push(JvmOp::Goto(condition_label));
+
+        // Loop body
+        self.ops.push(JvmOp::Label(loop_label));
+        self.emit_frame(vec![]);
+
+        self.loop_stack.push(LoopContext {
+            break_label,
+            continue_label,
+        });
+        self.lower_body(body);
+        self.loop_stack.pop();
+
+        // Increment (continue target)
+        self.ops.push(JvmOp::Label(continue_label));
+        self.emit_frame(vec![]);
+
+        if is_int {
+            self.ops.push(JvmOp::IInc(var_slot, 1));
+        } else {
+            self.ops.push(JvmOp::LoadLocal(var_slot, JvmType::Long));
+            self.ops.push(JvmOp::PushLong(1));
+            self.ops.push(JvmOp::Arith(ArithOp::Add, JvmType::Long));
+            self.ops.push(JvmOp::StoreLocal(var_slot, JvmType::Long));
+        }
+
+        // Condition check
+        self.ops.push(JvmOp::Label(condition_label));
+        self.emit_frame(vec![]);
+
+        self.ops.push(JvmOp::LoadLocal(var_slot, elem_ty.clone()));
+        self.ops.push(JvmOp::LoadLocal(limit_slot, elem_ty.clone()));
+
+        if is_int {
+            if inclusive {
+                self.ops.push(JvmOp::IfICmpLe(loop_label));
+            } else {
+                self.ops.push(JvmOp::IfICmpLt(loop_label));
+            }
+        } else {
+            self.ops.push(JvmOp::Cmp(CmpKind::LCmp));
+            if inclusive {
+                self.ops.push(JvmOp::IfLe(loop_label));
+            } else {
+                self.ops.push(JvmOp::IfLt(loop_label));
+            }
+        }
+
+        // Loop exit
+        self.ops.push(JvmOp::Label(break_label));
+        self.emit_frame(vec![]);
+
+        self.pop_scope();
     }
 
     /// Lowers a `safe {}` block into a JVM try-catch.

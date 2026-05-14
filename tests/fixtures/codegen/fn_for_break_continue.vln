@@ -1,0 +1,17 @@
+package com.example;
+
+pub class BreakCont {
+    fn find_first_even(self) -> Int {
+        let mut result = 0;
+        for i in 0..100 {
+            if i % 2 != 0 {
+                continue;
+            }
+            if i > 10 {
+                break;
+            }
+            result = i;
+        }
+        result
+    }
+}
