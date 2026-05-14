@@ -1,0 +1,11 @@
+package com.example;
+
+pub class Box<T>(pub value: T) {
+    fn get(self) -> T {
+        self.value
+    }
+}
+
+pub fn identity<T>(x: T) -> T {
+    x
+}

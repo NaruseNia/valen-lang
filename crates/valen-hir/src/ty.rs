@@ -1,6 +1,6 @@
 //! Bidirectional type checker producing typed HIR bodies.
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use smol_str::SmolStr;
 use valen_ast::{self, BinaryOp, Span, UnaryOp};
 use valen_diagnostics::{DiagCode, Diagnostics};
@@ -93,6 +93,7 @@ struct TypeChecker<'hir> {
     bodies: IndexMap<DefId, TypedBody>,
     return_ty: Option<Ty>,
     in_loop: bool,
+    type_params: IndexSet<SmolStr>,
 }
 
 impl<'hir> TypeChecker<'hir> {
@@ -104,6 +105,7 @@ impl<'hir> TypeChecker<'hir> {
             bodies: IndexMap::new(),
             return_ty: None,
             in_loop: false,
+            type_params: IndexSet::new(),
         }
     }
 
@@ -216,7 +218,12 @@ impl<'hir> TypeChecker<'hir> {
         for item in items {
             match item {
                 valen_ast::Item::Fn(f) => {
+                    let prev = std::mem::take(&mut self.type_params);
+                    for g in &f.generics {
+                        self.type_params.insert(g.name.clone());
+                    }
                     let ty = self.fn_decl_ty(f);
+                    self.type_params = prev;
                     self.env.define(f.name.clone(), ty, false);
                 }
                 valen_ast::Item::Class(c) => {
@@ -263,6 +270,9 @@ impl<'hir> TypeChecker<'hir> {
                     if let Some(prim) = crate::resolve_prim(&seg.name) {
                         return Ty::Prim(prim);
                     }
+                    if self.type_params.contains(&seg.name) {
+                        return Ty::TypeParam(seg.name.clone());
+                    }
                     let args: Vec<Ty> = seg
                         .generics
                         .iter()
@@ -305,6 +315,11 @@ impl<'hir> TypeChecker<'hir> {
         def_id: Option<DefId>,
     ) {
         let Some(body) = &f.body else { return };
+
+        let prev_type_params = self.type_params.clone();
+        for g in &f.generics {
+            self.type_params.insert(g.name.clone());
+        }
 
         let ret_ty = f
             .return_type
@@ -349,6 +364,7 @@ impl<'hir> TypeChecker<'hir> {
 
         self.env.pop_scope();
         self.return_ty = prev_return;
+        self.type_params = prev_type_params;
 
         if let Some(id) = def_id {
             self.bodies.insert(id, typed_body);
@@ -356,6 +372,10 @@ impl<'hir> TypeChecker<'hir> {
     }
 
     fn check_class(&mut self, c: &valen_ast::ClassDecl) {
+        let prev_type_params = std::mem::take(&mut self.type_params);
+        for g in &c.generics {
+            self.type_params.insert(g.name.clone());
+        }
         let self_ty = Ty::Named(c.name.clone());
         for member in &c.body {
             if let valen_ast::ClassMember::Method(m) = member {
@@ -363,9 +383,14 @@ impl<'hir> TypeChecker<'hir> {
                 self.check_fn_decl(m, Some(&self_ty), def_id);
             }
         }
+        self.type_params = prev_type_params;
     }
 
     fn check_impl(&mut self, imp: &valen_ast::ImplBlock) {
+        let prev_type_params = std::mem::take(&mut self.type_params);
+        for g in &imp.generics {
+            self.type_params.insert(g.name.clone());
+        }
         let self_ty = self.resolve_ast_type(&imp.target);
         for item in &imp.items {
             if let valen_ast::ImplItem::Fn(m) = item {
@@ -373,9 +398,14 @@ impl<'hir> TypeChecker<'hir> {
                 self.check_fn_decl(m, Some(&self_ty), def_id);
             }
         }
+        self.type_params = prev_type_params;
     }
 
     fn check_trait(&mut self, t: &valen_ast::TraitDecl) {
+        let prev_type_params = std::mem::take(&mut self.type_params);
+        for g in &t.generics {
+            self.type_params.insert(g.name.clone());
+        }
         let self_ty = Ty::Named(t.name.clone());
         for item in &t.items {
             if let valen_ast::TraitItem::Fn(f) = item {
@@ -385,6 +415,7 @@ impl<'hir> TypeChecker<'hir> {
                 }
             }
         }
+        self.type_params = prev_type_params;
     }
 
     // -- block --------------------------------------------------------------
@@ -796,17 +827,47 @@ impl<'hir> TypeChecker<'hir> {
                         }),
                     );
                 } else {
-                    for (arg, expected) in args.iter().zip(param_tys.iter()) {
-                        if !arg.ty.is_error() && !expected.is_error() && arg.ty != *expected {
-                            self.diags.error(
-                                DiagCode::TYPE_MISMATCH,
-                                arg.span,
-                                SmolStr::from(format!("expected `{expected}`, found `{}`", arg.ty)),
-                            );
+                    let has_type_params = param_tys.iter().any(|t| matches!(t, Ty::TypeParam(_)));
+                    if has_type_params {
+                        let bindings = infer_type_bindings(param_tys, &args);
+                        for (arg, expected) in args.iter().zip(param_tys.iter()) {
+                            let resolved = substitute_ty(expected, &bindings);
+                            if !arg.ty.is_error()
+                                && !resolved.is_error()
+                                && arg.ty != resolved
+                                && !is_subtype(&arg.ty, &resolved)
+                            {
+                                self.diags.error(
+                                    DiagCode::TYPE_MISMATCH,
+                                    arg.span,
+                                    SmolStr::from(format!(
+                                        "expected `{resolved}`, found `{}`",
+                                        arg.ty
+                                    )),
+                                );
+                            }
+                        }
+                    } else {
+                        for (arg, expected) in args.iter().zip(param_tys.iter()) {
+                            if !arg.ty.is_error()
+                                && !expected.is_error()
+                                && arg.ty != *expected
+                                && !is_subtype(&arg.ty, expected)
+                            {
+                                self.diags.error(
+                                    DiagCode::TYPE_MISMATCH,
+                                    arg.span,
+                                    SmolStr::from(format!(
+                                        "expected `{expected}`, found `{}`",
+                                        arg.ty
+                                    )),
+                                );
+                            }
                         }
                     }
                 }
-                let ret = (**ret_ty).clone();
+                let bindings = infer_type_bindings(param_tys, &args);
+                let ret = substitute_ty(ret_ty, &bindings);
                 TypedExpr {
                     kind: TypedExprKind::Call {
                         callee: Box::new(callee),
@@ -874,17 +935,47 @@ impl<'hir> TypeChecker<'hir> {
                             )),
                         );
                     } else {
-                        for (arg, param) in args.iter().zip(c.ctor_params.iter()) {
-                            let expected = tyref_to_ty(&param.ty);
-                            if !arg.ty.is_error() && !expected.is_error() && arg.ty != expected {
-                                self.diags.error(
-                                    DiagCode::TYPE_MISMATCH,
-                                    arg.span,
-                                    SmolStr::from(format!(
-                                        "expected `{expected}`, found `{}`",
-                                        arg.ty
-                                    )),
+                        let param_tys: Vec<Ty> =
+                            c.ctor_params.iter().map(|p| tyref_to_ty(&p.ty)).collect();
+                        let has_tp = param_tys.iter().any(|t| matches!(t, Ty::TypeParam(_)));
+                        if has_tp {
+                            let bindings = infer_type_bindings(&param_tys, args);
+                            for (arg, expected) in args.iter().zip(param_tys.iter()) {
+                                let resolved = substitute_ty(expected, &bindings);
+                                if !arg.ty.is_error()
+                                    && !resolved.is_error()
+                                    && arg.ty != resolved
+                                    && !is_subtype(&arg.ty, &resolved)
+                                {
+                                    self.diags.error(
+                                        DiagCode::TYPE_MISMATCH,
+                                        arg.span,
+                                        SmolStr::from(format!(
+                                            "expected `{resolved}`, found `{}`",
+                                            arg.ty
+                                        )),
+                                    );
+                                }
+                            }
+                            if !bindings.is_empty() {
+                                return Ty::Generic(
+                                    name.clone(),
+                                    bindings.values().cloned().collect(),
                                 );
+                            }
+                        } else {
+                            for (arg, expected) in args.iter().zip(param_tys.iter()) {
+                                if !arg.ty.is_error() && !expected.is_error() && arg.ty != *expected
+                                {
+                                    self.diags.error(
+                                        DiagCode::TYPE_MISMATCH,
+                                        arg.span,
+                                        SmolStr::from(format!(
+                                            "expected `{expected}`, found `{}`",
+                                            arg.ty
+                                        )),
+                                    );
+                                }
                             }
                         }
                     }
@@ -947,10 +1038,12 @@ impl<'hir> TypeChecker<'hir> {
             };
         }
 
-        let type_name = match &receiver.ty {
-            Ty::Named(n) => Some(n.clone()),
-            Ty::Prim(p) => Some(SmolStr::from(format!("{p:?}"))),
-            _ => None,
+        let (type_name, generic_args) = match &receiver.ty {
+            Ty::Named(n) => (Some(n.clone()), vec![]),
+            Ty::Generic(n, args) => (Some(n.clone()), args.clone()),
+            Ty::Prim(p) => (Some(SmolStr::from(format!("{p:?}"))), vec![]),
+            Ty::TypeParam(_) => (None, vec![]),
+            _ => (None, vec![]),
         };
 
         if let Some(tn) = &type_name {
@@ -959,11 +1052,17 @@ impl<'hir> TypeChecker<'hir> {
                 crate::MethodResolution::Found(def_id) => {
                     if let Some(def) = self.hir.defs.get(&def_id) {
                         if let DefKind::Fn(fdef) = &def.kind {
-                            let ret_ty = fdef
+                            let raw_ret_ty = fdef
                                 .return_ty
                                 .as_ref()
                                 .map(tyref_to_ty)
                                 .unwrap_or_else(Ty::unit);
+                            let ret_ty = if !generic_args.is_empty() {
+                                let bindings = self.build_class_type_bindings(tn, &generic_args);
+                                substitute_ty(&raw_ret_ty, &bindings)
+                            } else {
+                                raw_ret_ty
+                            };
 
                             let non_self_params: Vec<_> =
                                 fdef.params.iter().filter(|p| !p.is_self).collect();
@@ -1084,6 +1183,44 @@ impl<'hir> TypeChecker<'hir> {
             ty: Ty::Error,
             span: mc.span,
         }
+    }
+
+    fn build_class_type_bindings(
+        &self,
+        class_name: &SmolStr,
+        type_args: &[Ty],
+    ) -> IndexMap<SmolStr, Ty> {
+        let mut param_names = Vec::new();
+        for def in self.hir.defs.values() {
+            if def.name == *class_name {
+                match &def.kind {
+                    DefKind::Class(c) => {
+                        for p in &c.ctor_params {
+                            if let TyRef::Unresolved(n) = &p.ty {
+                                if !param_names.contains(n) {
+                                    param_names.push(n.clone());
+                                }
+                            }
+                        }
+                    }
+                    DefKind::DataClass(dc) => {
+                        for p in &dc.ctor_params {
+                            if let TyRef::Unresolved(n) = &p.ty {
+                                if !param_names.contains(n) {
+                                    param_names.push(n.clone());
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+                break;
+            }
+        }
+        param_names
+            .into_iter()
+            .zip(type_args.iter().cloned())
+            .collect()
     }
 
     fn min_required_args_for_callee(&self, callee: &valen_ast::Expr, total: usize) -> usize {
@@ -1608,6 +1745,10 @@ fn is_subtype(sub: &Ty, sup: &Ty) -> bool {
     if sub == sup {
         return true;
     }
+    // Any concrete type is compatible with a TypeParam (at call site)
+    if matches!(sup, Ty::TypeParam(_)) {
+        return true;
+    }
     // T is subtype of T? (Nullable<T>)
     if let Ty::Nullable(inner) = sup {
         if sub == inner.as_ref() || is_subtype(sub, inner) {
@@ -1619,6 +1760,61 @@ fn is_subtype(sub: &Ty, sup: &Ty) -> bool {
         return true;
     }
     false
+}
+
+fn infer_type_bindings(param_tys: &[Ty], args: &[TypedExpr]) -> IndexMap<SmolStr, Ty> {
+    let mut bindings = IndexMap::new();
+    for (param_ty, arg) in param_tys.iter().zip(args.iter()) {
+        collect_bindings(param_ty, &arg.ty, &mut bindings);
+    }
+    bindings
+}
+
+fn collect_bindings(param_ty: &Ty, arg_ty: &Ty, bindings: &mut IndexMap<SmolStr, Ty>) {
+    match param_ty {
+        Ty::TypeParam(name) if !arg_ty.is_error() => {
+            bindings
+                .entry(name.clone())
+                .or_insert_with(|| arg_ty.clone());
+        }
+        Ty::Generic(_, param_args) => {
+            if let Ty::Generic(_, arg_args) = arg_ty {
+                for (p, a) in param_args.iter().zip(arg_args.iter()) {
+                    collect_bindings(p, a, bindings);
+                }
+            }
+        }
+        Ty::Nullable(inner) => {
+            if let Ty::Nullable(arg_inner) = arg_ty {
+                collect_bindings(inner, arg_inner, bindings);
+            }
+        }
+        Ty::Fn(p_params, p_ret) => {
+            if let Ty::Fn(a_params, a_ret) = arg_ty {
+                for (p, a) in p_params.iter().zip(a_params.iter()) {
+                    collect_bindings(p, a, bindings);
+                }
+                collect_bindings(p_ret, a_ret, bindings);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn substitute_ty(ty: &Ty, bindings: &IndexMap<SmolStr, Ty>) -> Ty {
+    match ty {
+        Ty::TypeParam(name) => bindings.get(name).cloned().unwrap_or_else(|| ty.clone()),
+        Ty::Generic(name, args) => Ty::Generic(
+            name.clone(),
+            args.iter().map(|a| substitute_ty(a, bindings)).collect(),
+        ),
+        Ty::Nullable(inner) => Ty::Nullable(Box::new(substitute_ty(inner, bindings))),
+        Ty::Fn(params, ret) => Ty::Fn(
+            params.iter().map(|p| substitute_ty(p, bindings)).collect(),
+            Box::new(substitute_ty(ret, bindings)),
+        ),
+        _ => ty.clone(),
+    }
 }
 
 #[cfg(test)]
@@ -1820,6 +2016,37 @@ mod tests {
             "fn add(a: Int, b: Int) -> Int { a + b }\nfn main() -> Int { add(1, true) }",
         );
         assert_has_error(&r, DiagCode::TYPE_MISMATCH);
+    }
+
+    // -- generics type checking -----------------------------------------------
+
+    #[test]
+    fn generic_identity() {
+        let r = check_source("fn identity<T>(x: T) -> T { x }\nfn main() -> Int { identity(42) }");
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn generic_two_same_params() {
+        let r =
+            check_source("fn first<T>(x: T, y: T) -> T { x }\nfn main() -> Int { first(1, 2) }");
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn generic_type_mismatch() {
+        let r = check_source(
+            "fn first<T>(x: T, y: T) -> T { x }\nfn main() -> Int { first(1, \"hi\") }",
+        );
+        assert_has_error(&r, DiagCode::TYPE_MISMATCH);
+    }
+
+    #[test]
+    fn generic_class_ctor_and_method() {
+        let r = check_source(
+            "class Box<T>(pub value: T) {\n    fn get(self) -> T { self.value }\n}\nfn main() -> Int {\n    let b = Box(42);\n    b.get()\n}",
+        );
+        assert_no_errors(&r);
     }
 
     // -- method call --------------------------------------------------------

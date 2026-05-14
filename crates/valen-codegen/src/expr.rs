@@ -262,8 +262,7 @@ impl<'a> ExprLowering<'a> {
                     None => inner_jvm,
                 }
             }
-            Ty::Fn(_, _) => JvmType::Object(JVM_OBJECT.to_string()),
-            Ty::Error => JvmType::Object(JVM_OBJECT.to_string()),
+            Ty::TypeParam(_) | Ty::Fn(_, _) | Ty::Error => JvmType::Object(JVM_OBJECT.to_string()),
         }
     }
 

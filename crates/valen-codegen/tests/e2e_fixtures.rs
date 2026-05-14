@@ -519,6 +519,20 @@ fn fixture_default_args() {
 }
 
 #[test]
+fn fixture_generics() {
+    let classes = compile_fixture("generics.vln");
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+    assert_eq!(c.class_name().unwrap(), "com/example/Box");
+    // <init> + get + identity
+    assert!(
+        c.methods.len() >= 2,
+        "Box should have at least <init> and get, got {}",
+        c.methods.len()
+    );
+}
+
+#[test]
 fn fixture_fn_assignment() {
     let classes = compile_fixture("fn_assignment.vln");
     assert_eq!(classes.len(), 1);
