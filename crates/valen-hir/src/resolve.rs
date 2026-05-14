@@ -227,6 +227,7 @@ impl Resolver {
                 }],
                 return_ty: Some(TyRef::Prim(crate::PrimTy::String)),
                 has_body: false,
+                generic_bounds: vec![],
             }),
             vis: Vis::Pub,
             span: valen_ast::Span::DUMMY,
@@ -281,6 +282,7 @@ impl Resolver {
                     vec![TyRef::Unresolved(SmolStr::from("T"))],
                 )),
                 has_body: false,
+                generic_bounds: vec![],
             }),
             vis: Vis::Pub,
             span: valen_ast::Span::DUMMY,
@@ -701,6 +703,26 @@ impl Resolver {
                 has_default: p.default.is_some(),
             })
             .collect();
+        let generic_bounds = f
+            .generics
+            .iter()
+            .filter(|g| !g.bounds.is_empty())
+            .map(|g| {
+                let bounds = g
+                    .bounds
+                    .iter()
+                    .filter_map(|b| {
+                        if let valen_ast::Type::Path(tp) = b {
+                            if tp.segments.len() == 1 {
+                                return Some(tp.segments[0].name.clone());
+                            }
+                        }
+                        None
+                    })
+                    .collect();
+                (g.name.clone(), bounds)
+            })
+            .collect();
         FnDef {
             params,
             return_ty: f
@@ -708,6 +730,7 @@ impl Resolver {
                 .as_ref()
                 .map(|t| lower_type_ref_with_params(t, &all_params)),
             has_body: f.body.is_some(),
+            generic_bounds,
         }
     }
 
