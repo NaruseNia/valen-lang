@@ -336,9 +336,15 @@ impl<'h> ExhaustivenessChecker<'h> {
     }
 
     fn is_sealed_class(&self, name: &str) -> bool {
-        self.hir.defs.values().any(|d| {
+        if self.hir.defs.values().any(|d| {
             d.name == name && matches!(&d.kind, DefKind::Class(c) if c.kind == ClassDefKind::Sealed)
-        })
+        }) {
+            return true;
+        }
+        self.hir
+            .foreign_types
+            .get(name)
+            .is_some_and(|f| f.has_valen_closed && !f.permitted_subclasses.is_empty())
     }
 
     fn find_sealed_subclasses(&self, sealed_name: &SmolStr) -> IndexSet<SmolStr> {
@@ -349,6 +355,14 @@ impl<'h> ExhaustivenessChecker<'h> {
                     if parent == sealed_name {
                         subs.insert(def.name.clone());
                     }
+                }
+            }
+        }
+        if let Some(foreign) = self.hir.foreign_types.get(sealed_name.as_str()) {
+            if foreign.has_valen_closed {
+                for sub in &foreign.permitted_subclasses {
+                    let short = sub.rsplit('/').next().unwrap_or(sub);
+                    subs.insert(SmolStr::from(short));
                 }
             }
         }

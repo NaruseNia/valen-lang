@@ -627,6 +627,10 @@ pub struct ForeignClassInfo {
     pub fields: Vec<ForeignFieldInfo>,
     pub super_class: Option<String>,
     pub interfaces: Vec<String>,
+    /// JVM internal names of permitted subclasses (from `PermittedSubclasses` attribute).
+    pub permitted_subclasses: Vec<String>,
+    /// Whether `@valen.Closed` annotation is present (enables exhaustive match).
+    pub has_valen_closed: bool,
 }
 
 /// A method on a foreign Java class.

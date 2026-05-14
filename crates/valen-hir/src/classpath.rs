@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use indexmap::IndexMap;
+use ristretto_classfile::attributes::Attribute;
 use ristretto_classfile::{ClassFile, MethodAccessFlags};
 use smol_str::SmolStr;
 
@@ -135,6 +136,33 @@ fn extract_class_info(cf: &ClassFile, internal_name: &str) -> ForeignClassInfo {
         })
         .collect();
 
+    let mut permitted_subclasses = Vec::new();
+    let mut has_valen_closed = false;
+
+    for attr in &cf.attributes {
+        match attr {
+            Attribute::PermittedSubclasses { class_indexes, .. } => {
+                for &idx in class_indexes {
+                    if let Ok(name) = cf.constant_pool.try_get_class(idx) {
+                        if let Some(s) = name.as_str() {
+                            permitted_subclasses.push(s.to_string());
+                        }
+                    }
+                }
+            }
+            Attribute::RuntimeVisibleAnnotations { annotations, .. } => {
+                for ann in annotations {
+                    if let Ok(type_name) = cf.constant_pool.try_get_utf8(ann.type_index) {
+                        if type_name.as_str() == Some("Lvalen/Closed;") {
+                            has_valen_closed = true;
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     ForeignClassInfo {
         internal_name: internal_name.to_string(),
         methods,
@@ -142,6 +170,8 @@ fn extract_class_info(cf: &ClassFile, internal_name: &str) -> ForeignClassInfo {
         fields,
         super_class,
         interfaces,
+        permitted_subclasses,
+        has_valen_closed,
     }
 }
 
