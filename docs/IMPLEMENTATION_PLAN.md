@@ -1,6 +1,6 @@
 # Valen 実装計画
 
-Last updated: 2026-05-12（Phase 0 完了、TASK-001〜008 完了、M2 達成、M3 着手中）
+Last updated: 2026-05-14（Phase 0 完了、TASK-001〜012,014,015,017 完了、M3 達成、M4 進行中）
 
 ---
 
