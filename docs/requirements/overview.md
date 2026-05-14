@@ -62,7 +62,7 @@ Valen は JVM をターゲットとする新規プログラミング言語。ADT
 | REQ-EMIT-002 | enum → sealed interface + record/singleton emit | Must | Done |
 | REQ-EMIT-003 | class → .class emit（default constructor） | Must | Done |
 | REQ-EMIT-004 | Java 25 opt-in サポート | Should | Draft |
-| REQ-TOOL-001 | valenc CLI（build / check / version） | Must | Done |
+| REQ-TOOL-001 | valenc CLI（compile / check / version） | Must | Done |
 | REQ-TOOL-002 | Gradle プラグイン（compileValen タスク） | Must | Draft |
 | REQ-TOOL-003 | LSP サーバー（syntax error + diagnostics + goto def） | Must | Draft |
 | REQ-TOOL-004 | valenfmt（最小版） | Should | Draft |

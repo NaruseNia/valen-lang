@@ -88,6 +88,6 @@ Phase 0（基盤整備）完了済み。Phase 1（MVP）に向けて、コンパ
 | M0: Phase 0 完了 | (完了済み) | `class Foo {}` → `Foo.class` PoC + enum ABI spike |
 | M1: Parser 完成 | TASK-001〜003 | 全 MVP 構文を parse し AST を生成 |
 | M2: 型チェック通過 | TASK-004〜007 | サンプルコードが HIR lowering まで通過 |
-| M3: Bytecode 生成 | TASK-008〜011 | `valenc build` で .class 出力、`java` で実行可能 |
+| M3: Bytecode 生成 | TASK-008〜011 | `valenc compile` で .class 出力、`java` で実行可能 |
 | M4: ツール統合 | TASK-012〜015 | Gradle build + LSP + fmt 動作 |
 | M5: MVP 出荷 | TASK-016〜017 | 3 サンプルプロジェクトが Gradle で build + 実行可能 |

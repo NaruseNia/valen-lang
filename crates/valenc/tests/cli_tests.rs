@@ -24,12 +24,12 @@ fn fixture(name: &str) -> String {
 }
 
 #[test]
-fn build_valid_file_succeeds() {
-    let tmp = std::env::temp_dir().join("valenc_test_build");
+fn compile_valid_file_succeeds() {
+    let tmp = std::env::temp_dir().join("valenc_test_compile");
     let _ = std::fs::remove_dir_all(&tmp);
 
     valenc()
-        .args(["build", &fixture("valid.vln"), "-o"])
+        .args(["compile", &fixture("valid.vln"), "-o"])
         .arg(&tmp)
         .assert()
         .success();
@@ -38,12 +38,12 @@ fn build_valid_file_succeeds() {
 }
 
 #[test]
-fn build_invalid_syntax_fails() {
-    let tmp = std::env::temp_dir().join("valenc_test_build_invalid");
+fn compile_invalid_syntax_fails() {
+    let tmp = std::env::temp_dir().join("valenc_test_compile_invalid");
     let _ = std::fs::remove_dir_all(&tmp);
 
     valenc()
-        .args(["build", &fixture("invalid_syntax.vln"), "-o"])
+        .args(["compile", &fixture("invalid_syntax.vln"), "-o"])
         .arg(&tmp)
         .assert()
         .failure();
@@ -79,6 +79,34 @@ fn version_subcommand() {
 #[test]
 fn no_args_shows_help() {
     valenc().assert().failure();
+}
+
+#[test]
+fn compile_with_classpath_flag_succeeds() {
+    let tmp = std::env::temp_dir().join("valenc_test_classpath");
+    let _ = std::fs::remove_dir_all(&tmp);
+
+    valenc()
+        .args(["compile", &fixture("valid.vln"), "-o"])
+        .arg(&tmp)
+        .args(["--classpath", "/nonexistent/but/accepted"])
+        .assert()
+        .success();
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn check_with_classpath_flag_succeeds() {
+    valenc()
+        .args([
+            "check",
+            &fixture("valid.vln"),
+            "--classpath",
+            "/nonexistent/but/accepted",
+        ])
+        .assert()
+        .success();
 }
 
 #[test]

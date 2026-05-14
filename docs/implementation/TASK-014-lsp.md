@@ -122,5 +122,5 @@ did_open / did_change
 - [ ] .vln ファイルを開くと parse/type エラーが diagnostics として表示される
 - [ ] エラー箇所の行・列が正確
 - [ ] 関数名・型名で goto definition が動作する
-- [ ] `valenc build` の診断コード (V0xxx) が LSP diagnostic code に反映される
+- [ ] `valenc compile` の診断コード (V0xxx) が LSP diagnostic code に反映される
 - [ ] VS Code + 汎用 LSP クライアントで動作確認

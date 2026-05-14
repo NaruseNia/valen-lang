@@ -13,7 +13,7 @@ MVP（Phase 1）完了後の補完フェーズ。codegen stub 解消・コンパ
 
 ### M6: Codegen 完成（stub 全潰し）
 
-MVP で StubBody だったコードパスを全て実装し、`valenc build` で生成した .class が JVM 上で実行可能になる。
+MVP で StubBody だったコードパスを全て実装し、`valenc compile` で生成した .class が JVM 上で実行可能になる。
 
 | タスク | 内容 | 依存 | 規模 |
 |--------|------|------|------|

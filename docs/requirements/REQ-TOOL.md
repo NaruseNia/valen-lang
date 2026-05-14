@@ -13,14 +13,14 @@ Valen の開発ツールチェーンに関する要件。コンパイラ CLI（v
 
 | ID | タイトル | 優先度 | ステータス |
 |----|---------|--------|-----------|
-| REQ-TOOL-001 | valenc CLI（build / check / version サブコマンド） | Must | Draft |
+| REQ-TOOL-001 | valenc CLI（compile / check / version サブコマンド） | Must | Draft |
 | REQ-TOOL-002 | Gradle プラグイン（compileValen タスク、標準 sourceSet） | Must | Draft |
 | REQ-TOOL-003 | LSP サーバー（syntax error・型診断・goto definition） | Must | Draft |
 | REQ-TOOL-004 | valenfmt 最小版（brace style・indent・trailing semicolon） | Should | Done |
 
 ---
 
-## REQ-TOOL-001: valenc CLI（build / check / version サブコマンド）
+## REQ-TOOL-001: valenc CLI（compile / check / version サブコマンド）
 
 | 項目 | 内容 |
 |------|------|
@@ -35,7 +35,7 @@ Valen コンパイラの CLI エントリポイント。Rust で実装し、以�
 
 | サブコマンド | 機能 |
 |-------------|------|
-| `valenc build <source>` | `.vln` ソースをコンパイルし .class ファイルを出力 |
+| `valenc compile <source>` | `.vln` ソースをコンパイルし .class ファイルを出力 |
 | `valenc check <source>` | 型チェック・lint のみ実行（.class 生成なし） |
 | `valenc version` | バージョン情報を表示 |
 
@@ -46,7 +46,7 @@ Valen コンパイラの CLI エントリポイント。Rust で実装し、以�
 
 ### 受入条件
 
-- [ ] `valenc build hello.vln` で .class ファイルが生成される
+- [ ] `valenc compile hello.vln` で .class ファイルが生成される
 - [ ] `valenc check hello.vln` で型チェックが実行され、.class が生成されない
 - [ ] `valenc version` でバージョン文字列が表示される
 - [ ] `--output` フラグで出力ディレクトリを変更できる
