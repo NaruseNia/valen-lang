@@ -504,6 +504,21 @@ fn fixture_annotation() {
 }
 
 #[test]
+fn fixture_default_args() {
+    let classes = compile_fixture("default_args.vln");
+    // Greeter class
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+    assert_eq!(c.class_name().unwrap(), "com/example/Greeter");
+    // <init> + greet + repeat (top-level fn goes into Greeter since it's the only class)
+    assert!(
+        c.methods.len() >= 2,
+        "Greeter should have at least <init> and greet, got {}",
+        c.methods.len()
+    );
+}
+
+#[test]
 fn fixture_fn_assignment() {
     let classes = compile_fixture("fn_assignment.vln");
     assert_eq!(classes.len(), 1);
