@@ -565,6 +565,28 @@ fn fixture_generics() {
 }
 
 #[test]
+fn fixture_generics_bounds() {
+    let outputs = compile_fixture_outputs("generics_bounds.vln");
+    // Dog class (with Show impl methods)
+    assert!(
+        !outputs.is_empty(),
+        "should generate at least 1 class for generics_bounds"
+    );
+
+    let dog_output = outputs
+        .iter()
+        .find(|o| o.internal_name == "com/example/Dog")
+        .expect("Dog class should be generated");
+    let dog = ClassFile::from_bytes(&dog_output.bytes).expect("parse Dog classfile");
+    // <init> + show (from impl) + display + describe (top-level fns)
+    assert!(
+        dog.methods.len() >= 2,
+        "Dog should have at least <init> and show, got {}",
+        dog.methods.len()
+    );
+}
+
+#[test]
 fn fixture_fn_assignment() {
     let classes = compile_fixture("fn_assignment.vln");
     assert_eq!(classes.len(), 1);

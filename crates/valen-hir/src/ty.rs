@@ -94,6 +94,7 @@ struct TypeChecker<'hir> {
     return_ty: Option<Ty>,
     in_loop: bool,
     type_params: IndexSet<SmolStr>,
+    type_param_bounds: IndexMap<SmolStr, Vec<SmolStr>>,
 }
 
 impl<'hir> TypeChecker<'hir> {
@@ -106,6 +107,7 @@ impl<'hir> TypeChecker<'hir> {
             return_ty: None,
             in_loop: false,
             type_params: IndexSet::new(),
+            type_param_bounds: IndexMap::new(),
         }
     }
 
@@ -317,8 +319,24 @@ impl<'hir> TypeChecker<'hir> {
         let Some(body) = &f.body else { return };
 
         let prev_type_params = self.type_params.clone();
+        let prev_bounds = std::mem::take(&mut self.type_param_bounds);
         for g in &f.generics {
             self.type_params.insert(g.name.clone());
+            let bounds: Vec<SmolStr> = g
+                .bounds
+                .iter()
+                .filter_map(|b| {
+                    if let valen_ast::Type::Path(tp) = b {
+                        if tp.segments.len() == 1 {
+                            return Some(tp.segments[0].name.clone());
+                        }
+                    }
+                    None
+                })
+                .collect();
+            if !bounds.is_empty() {
+                self.type_param_bounds.insert(g.name.clone(), bounds);
+            }
         }
 
         let ret_ty = f
@@ -365,6 +383,7 @@ impl<'hir> TypeChecker<'hir> {
         self.env.pop_scope();
         self.return_ty = prev_return;
         self.type_params = prev_type_params;
+        self.type_param_bounds = prev_bounds;
 
         if let Some(id) = def_id {
             self.bodies.insert(id, typed_body);
@@ -867,6 +886,9 @@ impl<'hir> TypeChecker<'hir> {
                     }
                 }
                 let bindings = infer_type_bindings(param_tys, &args);
+                if !bindings.is_empty() {
+                    self.check_call_site_bounds(&call.callee, &bindings, call.span);
+                }
                 let ret = substitute_ty(ret_ty, &bindings);
                 TypedExpr {
                     kind: TypedExprKind::Call {
@@ -1142,6 +1164,40 @@ impl<'hir> TypeChecker<'hir> {
                     );
                 }
             }
+        } else if let Ty::TypeParam(tp_name) = &receiver.ty {
+            // Object methods on type parameters
+            let obj_ret = match mc.method.as_str() {
+                "toString" if args.is_empty() => Some(Ty::Prim(PrimTy::String)),
+                "hashCode" if args.is_empty() => Some(Ty::Prim(PrimTy::Int)),
+                "equals" if args.len() == 1 => Some(Ty::Prim(PrimTy::Bool)),
+                _ => None,
+            };
+            // Try bounds-based method resolution
+            let bounds_ret = if obj_ret.is_none() {
+                self.resolve_type_param_method(tp_name, &mc.method, &args)
+            } else {
+                None
+            };
+            let ret_ty = obj_ret.or(bounds_ret).unwrap_or_else(|| {
+                self.diags.error(
+                    DiagCode::NO_SUCH_METHOD,
+                    mc.span,
+                    SmolStr::from(format!(
+                        "cannot call method `{}` on type parameter `{}`",
+                        mc.method, tp_name
+                    )),
+                );
+                Ty::Error
+            });
+            return TypedExpr {
+                kind: TypedExprKind::MethodCall {
+                    receiver: Box::new(receiver),
+                    method: mc.method.clone(),
+                    args,
+                },
+                ty: ret_ty,
+                span: mc.span,
+            };
         } else if let Some(type_name) = self.ty_name(&receiver.ty) {
             if let Some(foreign_result) = self.resolve_foreign_method(&type_name, &mc.method, &args)
             {
@@ -1185,6 +1241,38 @@ impl<'hir> TypeChecker<'hir> {
         }
     }
 
+    fn resolve_type_param_method(
+        &self,
+        tp_name: &SmolStr,
+        method: &SmolStr,
+        _args: &[TypedExpr],
+    ) -> Option<Ty> {
+        let bounds = self.type_param_bounds.get(tp_name)?;
+        for bound_trait in bounds {
+            for def in self.hir.defs.values() {
+                if def.name == *bound_trait {
+                    if let DefKind::Trait(tdef) = &def.kind {
+                        for &mid in &tdef.methods {
+                            if let Some(mdef) = self.hir.defs.get(&mid) {
+                                if mdef.name == *method {
+                                    if let DefKind::Fn(fdef) = &mdef.kind {
+                                        return Some(
+                                            fdef.return_ty
+                                                .as_ref()
+                                                .map(tyref_to_ty)
+                                                .unwrap_or_else(Ty::unit),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
     fn build_class_type_bindings(
         &self,
         class_name: &SmolStr,
@@ -1221,6 +1309,60 @@ impl<'hir> TypeChecker<'hir> {
             .into_iter()
             .zip(type_args.iter().cloned())
             .collect()
+    }
+
+    fn check_call_site_bounds(
+        &mut self,
+        callee: &valen_ast::Expr,
+        bindings: &IndexMap<SmolStr, Ty>,
+        span: Span,
+    ) {
+        let fn_name = if let valen_ast::Expr::Path(path) = callee {
+            if path.segments.len() == 1 {
+                Some(path.segments[0].name.clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let Some(fn_name) = fn_name else { return };
+
+        for def in self.hir.defs.values() {
+            if def.name != fn_name {
+                continue;
+            }
+            if let DefKind::Fn(fn_def) = &def.kind {
+                for (tp_name, bounds) in &fn_def.generic_bounds {
+                    if let Some(actual_ty) = bindings.get(tp_name) {
+                        for bound_trait in bounds {
+                            if !self.type_satisfies_bound(actual_ty, bound_trait) {
+                                self.diags.error(
+                                    DiagCode::BOUND_NOT_SATISFIED,
+                                    span,
+                                    SmolStr::from(format!(
+                                        "type `{actual_ty}` does not satisfy bound `{bound_trait}` required by type parameter `{tp_name}`"
+                                    )),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            break;
+        }
+    }
+
+    fn type_satisfies_bound(&self, ty: &Ty, trait_name: &SmolStr) -> bool {
+        let type_name = match ty {
+            Ty::Named(n) => n.clone(),
+            Ty::Prim(p) => SmolStr::from(format!("{p}")),
+            _ => return false,
+        };
+        self.hir
+            .trait_impls
+            .iter()
+            .any(|entry| entry.trait_name == *trait_name && entry.target_name == type_name)
     }
 
     fn min_required_args_for_callee(&self, callee: &valen_ast::Expr, total: usize) -> usize {
@@ -2046,6 +2188,28 @@ mod tests {
         let r = check_source(
             "class Box<T>(pub value: T) {\n    fn get(self) -> T { self.value }\n}\nfn main() -> Int {\n    let b = Box(42);\n    b.get()\n}",
         );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn generic_bounds_satisfied() {
+        let r = check_source(
+            "trait Show { fn show(self) -> String; }\nclass Dog {}\nimpl Show for Dog { fn show(self) -> String { \"Dog\" } }\nfn display<T: Show>(x: T) -> String { x.show() }\nfn main() -> String { display(Dog()) }",
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn generic_bounds_not_satisfied() {
+        let r = check_source(
+            "trait Show { fn show(self) -> String; }\nclass Cat {}\nfn display<T: Show>(x: T) -> String { x.show() }\nfn main() -> String { display(Cat()) }",
+        );
+        assert_has_error(&r, DiagCode::BOUND_NOT_SATISFIED);
+    }
+
+    #[test]
+    fn type_param_object_method() {
+        let r = check_source("fn describe<T>(x: T) -> String { x.toString() }");
         assert_no_errors(&r);
     }
 

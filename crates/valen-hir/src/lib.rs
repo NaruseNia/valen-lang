@@ -194,6 +194,8 @@ pub struct FnDef {
     pub return_ty: Option<TyRef>,
     /// `false` for abstract/trait methods without a default body.
     pub has_body: bool,
+    /// Generic type parameter bounds (e.g. `T` → `["Comparable", "Display"]`).
+    pub generic_bounds: Vec<(SmolStr, Vec<SmolStr>)>,
 }
 
 /// A function parameter definition.

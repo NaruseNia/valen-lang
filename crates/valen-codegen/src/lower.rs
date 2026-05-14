@@ -1029,6 +1029,7 @@ mod tests {
                     }],
                     return_ty: Some(TyRef::Prim(PrimTy::String)),
                     has_body: true,
+                    generic_bounds: vec![],
                 }),
                 vis: Vis::Pub,
                 span: valen_ast::Span {
@@ -1097,6 +1098,7 @@ mod tests {
                     }],
                     return_ty: Some(TyRef::Prim(PrimTy::String)),
                     has_body: true,
+                    generic_bounds: vec![],
                 }),
                 vis: Vis::Pub,
                 span: valen_ast::Span {
