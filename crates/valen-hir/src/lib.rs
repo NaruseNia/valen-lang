@@ -28,6 +28,8 @@ pub struct Hir {
     pub trait_impls: Vec<ImplEntry>,
     /// Import path mappings: short name (or alias) → full path segments.
     pub imports: IndexMap<SmolStr, Vec<SmolStr>>,
+    /// DefIds of synthetic prelude types (should not be emitted by codegen).
+    pub prelude_ids: Vec<DefId>,
     next_id: DefId,
 }
 

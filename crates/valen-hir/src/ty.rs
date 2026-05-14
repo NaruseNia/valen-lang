@@ -1433,10 +1433,14 @@ impl<'hir> TypeChecker<'hir> {
 
     fn synth_safe(&mut self, s: &valen_ast::SafeExpr) -> TypedExpr {
         let body = self.check_block(&s.block, None);
-        let ty = body.ty.clone();
+        let inner_ty = body.ty.clone();
+        let result_ty = Ty::Generic(
+            SmolStr::from("Result"),
+            vec![inner_ty, Ty::Named(SmolStr::from("JavaException"))],
+        );
         TypedExpr {
             kind: TypedExprKind::Safe(body),
-            ty,
+            ty: result_ty,
             span: s.span,
         }
     }

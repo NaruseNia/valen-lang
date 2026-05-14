@@ -438,10 +438,12 @@ impl<'a> ExprLowering<'a> {
             TypedExprKind::Lambda { params, body } => {
                 self.lower_lambda(params, body, &expr.ty);
             }
-            TypedExprKind::Range { .. } => {
-                // Standalone Range expressions not yet supported (no Range class in stdlib).
-                // Range is handled inline when used as the iter of a for-loop.
-                self.ops.push(JvmOp::StubBody);
+            TypedExprKind::Range {
+                start,
+                end,
+                inclusive,
+            } => {
+                self.lower_range(start.as_deref(), end.as_deref(), *inclusive, &expr.ty);
             }
             TypedExprKind::StringInterp(parts) => {
                 self.lower_string_interp(parts);
@@ -1364,20 +1366,70 @@ impl<'a> ExprLowering<'a> {
         self.pop_scope();
     }
 
-    /// Lowers a `safe {}` block into a JVM try-catch.
-    ///
-    /// On success the block value remains on the stack.
-    /// On exception (java/lang/Exception) a type-appropriate default value
-    /// is pushed as a stub.  TASK-012 will replace this with proper
-    /// `Result<T, JavaException>` wrapping.
+    /// Constructs a `valen/core/Range` data class instance from a range expression.
+    fn lower_range(
+        &mut self,
+        start: Option<&TypedExpr>,
+        end: Option<&TypedExpr>,
+        inclusive: bool,
+        range_ty: &Ty,
+    ) {
+        let elem_ty = match range_ty {
+            Ty::Generic(_, args) if !args.is_empty() => self.ty_to_jvm(&args[0]),
+            _ => JvmType::Int,
+        };
+        let obj = JvmType::Object(JVM_OBJECT.to_string());
+        let range_class = "valen/core/Range";
+
+        self.ops.push(JvmOp::New(range_class.to_string()));
+        self.ops.push(JvmOp::Dup);
+
+        // start (boxed)
+        if let Some(s) = start {
+            self.lower_expr(s);
+        } else {
+            self.ops.push(JvmOp::PushInt(0));
+        }
+        self.emit_box(&elem_ty);
+
+        // end (boxed)
+        if let Some(e) = end {
+            self.lower_expr(e);
+        } else {
+            self.ops.push(JvmOp::PushInt(i32::MAX));
+        }
+        self.emit_box(&elem_ty);
+
+        // inclusive flag
+        self.ops.push(JvmOp::PushInt(if inclusive { 1 } else { 0 }));
+
+        self.ops.push(JvmOp::InvokeSpecial {
+            owner: range_class.to_string(),
+            name: INIT.to_string(),
+            params: vec![obj.clone(), obj, JvmType::Boolean],
+            ret: JvmType::Void,
+        });
+    }
+
+    /// Lowers a `safe {}` block into a JVM try-catch that produces
+    /// `Result<T, JavaException>`. Success wraps in `Result$Ok`,
+    /// exception wraps in `Result$Err(JavaException(message, className))`.
     fn lower_safe(&mut self, body: &TypedBody, result_ty: &Ty) {
         let try_start = self.alloc_label();
         let try_end = self.alloc_label();
         let handler_label = self.alloc_label();
         let end_label = self.alloc_label();
 
-        let jvm_result_ty = self.ty_to_jvm(result_ty);
-        let is_void = matches!(jvm_result_ty, JvmType::Void);
+        let result_jvm = self.ty_to_jvm(result_ty);
+        let inner_jvm = match result_ty {
+            Ty::Generic(_, args) if !args.is_empty() => self.ty_to_jvm(&args[0]),
+            _ => JvmType::Object(JVM_OBJECT.to_string()),
+        };
+        let obj = JvmType::Object(JVM_OBJECT.to_string());
+        let str_ty = JvmType::Object(JVM_STRING.to_string());
+
+        let result_slot = self.next_slot;
+        self.next_slot += 1;
 
         // --- try region ---
         self.ops.push(JvmOp::Label(try_start));
@@ -1386,80 +1438,128 @@ impl<'a> ExprLowering<'a> {
         self.lower_body(body);
         self.pop_scope();
 
-        // If the block produces a value, store it in a temp local so both
-        // paths converge with the same stack shape.
-        let result_slot = if !is_void {
-            let slot = self.next_slot;
-            self.next_slot += jvm_result_ty.slot_count();
-            self.ops
-                .push(JvmOp::StoreLocal(slot, jvm_result_ty.clone()));
-            Some(slot)
+        // Box primitive body value for erasure-safe storage in Ok(Object)
+        if matches!(inner_jvm, JvmType::Void) {
+            self.ops.push(JvmOp::PushNull);
         } else {
-            None
-        };
+            self.emit_box(&inner_jvm);
+        }
+        let val_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(val_slot, obj.clone()));
 
+        self.ops
+            .push(JvmOp::New("valen/core/Result$Ok".to_string()));
+        self.ops.push(JvmOp::Dup);
+        self.ops.push(JvmOp::LoadLocal(val_slot, obj.clone()));
+        self.ops.push(JvmOp::InvokeSpecial {
+            owner: "valen/core/Result$Ok".to_string(),
+            name: INIT.to_string(),
+            params: vec![obj.clone()],
+            ret: JvmType::Void,
+        });
+        self.ops
+            .push(JvmOp::StoreLocal(result_slot, result_jvm.clone()));
         self.ops.push(JvmOp::Goto(end_label));
 
-        // --- try_end / handler entry ---
+        // --- exception handler ---
         self.ops.push(JvmOp::Label(try_end));
         self.ops.push(JvmOp::Label(handler_label));
-        // The JVM pushes the caught exception reference onto the stack here.
-        // Emit a FullFrame with a single java/lang/Exception on the stack.
         self.emit_frame(vec![JvmType::Object("java/lang/Exception".to_string())]);
 
-        // Pop the exception reference (for MVP we discard it).
-        // TASK-012: replace with Result wrapping.
-        self.ops.push(JvmOp::Pop);
+        let exc_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            exc_slot,
+            JvmType::Object("java/lang/Exception".to_string()),
+        ));
 
-        // Push a type-appropriate default value as a stub result.
-        if !is_void {
-            self.push_default_value(&jvm_result_ty);
-            self.ops.push(JvmOp::StoreLocal(
-                result_slot.unwrap(),
-                jvm_result_ty.clone(),
-            ));
-        }
+        // exception.getMessage()
+        self.ops.push(JvmOp::LoadLocal(
+            exc_slot,
+            JvmType::Object("java/lang/Exception".to_string()),
+        ));
+        self.ops.push(JvmOp::InvokeVirtual {
+            owner: "java/lang/Exception".to_string(),
+            name: "getMessage".to_string(),
+            params: vec![],
+            ret: str_ty.clone(),
+        });
+        let msg_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(msg_slot, str_ty.clone()));
 
-        // --- end label ---
+        // exception.getClass().getName()
+        self.ops.push(JvmOp::LoadLocal(
+            exc_slot,
+            JvmType::Object("java/lang/Exception".to_string()),
+        ));
+        self.ops.push(JvmOp::InvokeVirtual {
+            owner: JVM_OBJECT.to_string(),
+            name: "getClass".to_string(),
+            params: vec![],
+            ret: JvmType::Object("java/lang/Class".to_string()),
+        });
+        self.ops.push(JvmOp::InvokeVirtual {
+            owner: "java/lang/Class".to_string(),
+            name: "getName".to_string(),
+            params: vec![],
+            ret: str_ty.clone(),
+        });
+        let cls_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(cls_slot, str_ty.clone()));
+
+        // new JavaException(message, class_name)
+        self.ops
+            .push(JvmOp::New("valen/core/JavaException".to_string()));
+        self.ops.push(JvmOp::Dup);
+        self.ops.push(JvmOp::LoadLocal(msg_slot, str_ty.clone()));
+        self.ops.push(JvmOp::LoadLocal(cls_slot, str_ty));
+        self.ops.push(JvmOp::InvokeSpecial {
+            owner: "valen/core/JavaException".to_string(),
+            name: INIT.to_string(),
+            params: vec![
+                JvmType::Object(JVM_STRING.to_string()),
+                JvmType::Object(JVM_STRING.to_string()),
+            ],
+            ret: JvmType::Void,
+        });
+        let je_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            je_slot,
+            JvmType::Object("valen/core/JavaException".to_string()),
+        ));
+
+        // new Result$Err(javaException)
+        self.ops
+            .push(JvmOp::New("valen/core/Result$Err".to_string()));
+        self.ops.push(JvmOp::Dup);
+        self.ops.push(JvmOp::LoadLocal(
+            je_slot,
+            JvmType::Object("valen/core/JavaException".to_string()),
+        ));
+        self.ops.push(JvmOp::InvokeSpecial {
+            owner: "valen/core/Result$Err".to_string(),
+            name: INIT.to_string(),
+            params: vec![obj],
+            ret: JvmType::Void,
+        });
+        self.ops
+            .push(JvmOp::StoreLocal(result_slot, result_jvm.clone()));
+
+        // --- end ---
         self.ops.push(JvmOp::Label(end_label));
-        if !is_void {
-            let end_stack = vec![jvm_result_ty.clone()];
-            self.emit_frame(end_stack);
-            self.ops
-                .push(JvmOp::LoadLocal(result_slot.unwrap(), jvm_result_ty));
-        } else {
-            self.emit_frame(vec![]);
-        }
+        self.emit_frame(vec![result_jvm.clone()]);
+        self.ops.push(JvmOp::LoadLocal(result_slot, result_jvm));
 
-        // Register the exception handler
         self.exception_handlers.push(ExceptionHandler {
             start: try_start,
             end: try_end,
             handler: handler_label,
             catch_type: Some("java/lang/Exception".to_string()),
         });
-    }
-
-    /// Pushes a type-appropriate default/zero value onto the stack.
-    fn push_default_value(&mut self, ty: &JvmType) {
-        match ty {
-            JvmType::Int | JvmType::Byte | JvmType::Short | JvmType::Char | JvmType::Boolean => {
-                self.ops.push(JvmOp::PushInt(0));
-            }
-            JvmType::Long => {
-                self.ops.push(JvmOp::PushLong(0));
-            }
-            JvmType::Float => {
-                self.ops.push(JvmOp::PushFloat(0.0));
-            }
-            JvmType::Double => {
-                self.ops.push(JvmOp::PushDouble(0.0));
-            }
-            JvmType::Object(_) | JvmType::Array(_) => {
-                self.ops.push(JvmOp::PushNull);
-            }
-            JvmType::Void => {}
-        }
     }
 
     fn lower_string_interp(&mut self, parts: &[TypedStringPart]) {

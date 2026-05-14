@@ -97,8 +97,290 @@ impl Resolver {
             self.register_item(item);
         }
 
+        // Inject prelude types for names not already defined by user/stdlib code
+        self.inject_prelude();
+
         // Second pass: build method indexes and validate
         self.build_method_index();
+    }
+
+    fn inject_prelude(&mut self) {
+        let prelude_pkg = Some(vec![SmolStr::from("valen"), SmolStr::from("core")]);
+
+        self.inject_prelude_option(&prelude_pkg);
+        self.inject_prelude_result(&prelude_pkg);
+        self.inject_prelude_error_trait(&prelude_pkg);
+        self.inject_prelude_iterator_trait(&prelude_pkg);
+        self.inject_prelude_range(&prelude_pkg);
+        self.inject_prelude_java_exception(&prelude_pkg);
+    }
+
+    fn inject_prelude_option(&mut self, pkg: &Option<Vec<SmolStr>>) {
+        if self.scope.lookup("Option").is_some() {
+            return;
+        }
+        let id = self.hir.alloc_id();
+        let def = Def {
+            id,
+            name: SmolStr::from("Option"),
+            kind: DefKind::Enum(EnumDef {
+                variants: vec![
+                    EnumVariantDef {
+                        name: SmolStr::from("Some"),
+                        fields: vec![(
+                            SmolStr::from("value"),
+                            TyRef::Unresolved(SmolStr::from("T")),
+                        )],
+                    },
+                    EnumVariantDef {
+                        name: SmolStr::from("None"),
+                        fields: vec![],
+                    },
+                ],
+            }),
+            vis: Vis::Pub,
+            span: valen_ast::Span::DUMMY,
+            package: pkg.clone(),
+        };
+        self.hir.defs.insert(id, def);
+        self.hir.prelude_ids.push(id);
+        self.scope.names.insert(SmolStr::from("Option"), id);
+        self.hir.imports.insert(
+            SmolStr::from("Option"),
+            vec![
+                SmolStr::from("valen"),
+                SmolStr::from("core"),
+                SmolStr::from("Option"),
+            ],
+        );
+    }
+
+    fn inject_prelude_result(&mut self, pkg: &Option<Vec<SmolStr>>) {
+        if self.scope.lookup("Result").is_some() {
+            return;
+        }
+        let id = self.hir.alloc_id();
+        let def = Def {
+            id,
+            name: SmolStr::from("Result"),
+            kind: DefKind::Enum(EnumDef {
+                variants: vec![
+                    EnumVariantDef {
+                        name: SmolStr::from("Ok"),
+                        fields: vec![(
+                            SmolStr::from("value"),
+                            TyRef::Unresolved(SmolStr::from("T")),
+                        )],
+                    },
+                    EnumVariantDef {
+                        name: SmolStr::from("Err"),
+                        fields: vec![(
+                            SmolStr::from("error"),
+                            TyRef::Unresolved(SmolStr::from("E")),
+                        )],
+                    },
+                ],
+            }),
+            vis: Vis::Pub,
+            span: valen_ast::Span::DUMMY,
+            package: pkg.clone(),
+        };
+        self.hir.defs.insert(id, def);
+        self.hir.prelude_ids.push(id);
+        self.scope.names.insert(SmolStr::from("Result"), id);
+        self.hir.imports.insert(
+            SmolStr::from("Result"),
+            vec![
+                SmolStr::from("valen"),
+                SmolStr::from("core"),
+                SmolStr::from("Result"),
+            ],
+        );
+    }
+
+    fn inject_prelude_error_trait(&mut self, pkg: &Option<Vec<SmolStr>>) {
+        if self.scope.lookup("Error").is_some() {
+            return;
+        }
+        let mid = self.hir.alloc_id();
+        let mdef = Def {
+            id: mid,
+            name: SmolStr::from("message"),
+            kind: DefKind::Fn(FnDef {
+                params: vec![ParamDef {
+                    name: SmolStr::from("self"),
+                    ty: TyRef::SelfTy,
+                    mutable: false,
+                    is_self: true,
+                }],
+                return_ty: Some(TyRef::Prim(crate::PrimTy::String)),
+                has_body: false,
+            }),
+            vis: Vis::Pub,
+            span: valen_ast::Span::DUMMY,
+            package: pkg.clone(),
+        };
+        self.hir.defs.insert(mid, mdef);
+        self.hir.prelude_ids.push(mid);
+
+        let id = self.hir.alloc_id();
+        let def = Def {
+            id,
+            name: SmolStr::from("Error"),
+            kind: DefKind::Trait(TraitDef { methods: vec![mid] }),
+            vis: Vis::Pub,
+            span: valen_ast::Span::DUMMY,
+            package: pkg.clone(),
+        };
+        self.hir.defs.insert(id, def);
+        self.hir.prelude_ids.push(id);
+        self.scope.names.insert(SmolStr::from("Error"), id);
+        self.hir.imports.insert(
+            SmolStr::from("Error"),
+            vec![
+                SmolStr::from("valen"),
+                SmolStr::from("core"),
+                SmolStr::from("Error"),
+            ],
+        );
+    }
+
+    fn inject_prelude_iterator_trait(&mut self, pkg: &Option<Vec<SmolStr>>) {
+        if self.scope.lookup("Iterator").is_some() {
+            return;
+        }
+        let mid = self.hir.alloc_id();
+        let mdef = Def {
+            id: mid,
+            name: SmolStr::from("next"),
+            kind: DefKind::Fn(FnDef {
+                params: vec![ParamDef {
+                    name: SmolStr::from("self"),
+                    ty: TyRef::SelfTy,
+                    mutable: true,
+                    is_self: true,
+                }],
+                return_ty: Some(TyRef::Generic(
+                    SmolStr::from("Option"),
+                    vec![TyRef::Unresolved(SmolStr::from("T"))],
+                )),
+                has_body: false,
+            }),
+            vis: Vis::Pub,
+            span: valen_ast::Span::DUMMY,
+            package: pkg.clone(),
+        };
+        self.hir.defs.insert(mid, mdef);
+        self.hir.prelude_ids.push(mid);
+
+        let id = self.hir.alloc_id();
+        let def = Def {
+            id,
+            name: SmolStr::from("Iterator"),
+            kind: DefKind::Trait(TraitDef { methods: vec![mid] }),
+            vis: Vis::Pub,
+            span: valen_ast::Span::DUMMY,
+            package: pkg.clone(),
+        };
+        self.hir.defs.insert(id, def);
+        self.hir.prelude_ids.push(id);
+        self.scope.names.insert(SmolStr::from("Iterator"), id);
+        self.hir.imports.insert(
+            SmolStr::from("Iterator"),
+            vec![
+                SmolStr::from("valen"),
+                SmolStr::from("core"),
+                SmolStr::from("Iterator"),
+            ],
+        );
+    }
+
+    fn inject_prelude_range(&mut self, pkg: &Option<Vec<SmolStr>>) {
+        if self.scope.lookup("Range").is_some() {
+            return;
+        }
+        let id = self.hir.alloc_id();
+        let def = Def {
+            id,
+            name: SmolStr::from("Range"),
+            kind: DefKind::DataClass(DataClassDef {
+                ctor_params: vec![
+                    CtorParamDef {
+                        vis: Vis::Pub,
+                        name: SmolStr::from("start"),
+                        ty: TyRef::Unresolved(SmolStr::from("T")),
+                        mutable: false,
+                    },
+                    CtorParamDef {
+                        vis: Vis::Pub,
+                        name: SmolStr::from("end"),
+                        ty: TyRef::Unresolved(SmolStr::from("T")),
+                        mutable: false,
+                    },
+                    CtorParamDef {
+                        vis: Vis::Pub,
+                        name: SmolStr::from("inclusive"),
+                        ty: TyRef::Prim(crate::PrimTy::Bool),
+                        mutable: false,
+                    },
+                ],
+            }),
+            vis: Vis::Pub,
+            span: valen_ast::Span::DUMMY,
+            package: pkg.clone(),
+        };
+        self.hir.defs.insert(id, def);
+        self.hir.prelude_ids.push(id);
+        self.scope.names.insert(SmolStr::from("Range"), id);
+        self.hir.imports.insert(
+            SmolStr::from("Range"),
+            vec![
+                SmolStr::from("valen"),
+                SmolStr::from("core"),
+                SmolStr::from("Range"),
+            ],
+        );
+    }
+
+    fn inject_prelude_java_exception(&mut self, pkg: &Option<Vec<SmolStr>>) {
+        if self.scope.lookup("JavaException").is_some() {
+            return;
+        }
+        let id = self.hir.alloc_id();
+        let def = Def {
+            id,
+            name: SmolStr::from("JavaException"),
+            kind: DefKind::DataClass(DataClassDef {
+                ctor_params: vec![
+                    CtorParamDef {
+                        vis: Vis::Pub,
+                        name: SmolStr::from("message"),
+                        ty: TyRef::Prim(crate::PrimTy::String),
+                        mutable: false,
+                    },
+                    CtorParamDef {
+                        vis: Vis::Pub,
+                        name: SmolStr::from("class_name"),
+                        ty: TyRef::Prim(crate::PrimTy::String),
+                        mutable: false,
+                    },
+                ],
+            }),
+            vis: Vis::Pub,
+            span: valen_ast::Span::DUMMY,
+            package: pkg.clone(),
+        };
+        self.hir.defs.insert(id, def);
+        self.hir.prelude_ids.push(id);
+        self.scope.names.insert(SmolStr::from("JavaException"), id);
+        self.hir.imports.insert(
+            SmolStr::from("JavaException"),
+            vec![
+                SmolStr::from("valen"),
+                SmolStr::from("core"),
+                SmolStr::from("JavaException"),
+            ],
+        );
     }
 
     fn build_method_index(&mut self) {
@@ -469,9 +751,7 @@ mod tests {
     fn resolve_simple_fn() {
         let r = resolve_source("fn main() { 42 }");
         assert!(!r.diagnostics.has_errors());
-        assert_eq!(r.hir.defs.len(), 1);
-        let (_, def) = r.hir.defs.iter().next().unwrap();
-        assert_eq!(def.name, "main");
+        let def = r.hir.defs.values().find(|d| d.name == "main").unwrap();
         assert!(matches!(def.kind, DefKind::Fn(_)));
     }
 
@@ -601,7 +881,13 @@ mod tests {
     #[test]
     fn scope_lookup() {
         let r = resolve_source("fn foo() { 1 }\nfn bar() { 2 }");
-        assert_eq!(r.hir.defs.len(), 2);
+        let user_defs: Vec<_> = r
+            .hir
+            .defs
+            .values()
+            .filter(|d| !r.hir.prelude_ids.contains(&d.id))
+            .collect();
+        assert_eq!(user_defs.len(), 2);
     }
 
     // --- TASK-004 後半: method resolution + visibility ---

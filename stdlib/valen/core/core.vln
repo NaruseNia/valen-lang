@@ -26,6 +26,14 @@ pub trait Iterator<T> {
     fn next(mut self) -> Option<T>;
 }
 
+// --- Range ---
+
+pub data class Range<T>(
+    pub start: T,
+    pub end: T,
+    pub inclusive: Bool,
+);
+
 // --- JavaException ---
 
 pub data class JavaException(
