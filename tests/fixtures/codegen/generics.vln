@@ -9,3 +9,23 @@ pub class Box<T>(pub value: T) {
 pub fn identity<T>(x: T) -> T {
     x
 }
+
+pub fn first<T>(a: T, b: T) -> T {
+    a
+}
+
+pub class Pair<A, B>(pub left: A, pub right: B) {
+    fn getLeft(self) -> A {
+        self.left
+    }
+
+    fn getRight(self) -> B {
+        self.right
+    }
+}
+
+pub data class Wrapper<T>(pub inner: T);
+
+pub fn apply<T>(value: T, count: Int) -> T {
+    value
+}
