@@ -28,6 +28,32 @@ pub struct ClassFileOutput {
     pub bytes: Vec<u8>,
 }
 
+/// Generates the `valen/Closed` annotation class for marking Java sealed
+/// hierarchies as exhaustive in Valen match expressions.
+pub fn generate_closed_annotation() -> Result<ClassFileOutput, emit::CodegenError> {
+    use jvm_ir::*;
+    let jvm_class = JvmClass {
+        version: JvmVersion::Java21,
+        access: JvmClassAccess {
+            is_public: true,
+            is_interface: true,
+            is_abstract: true,
+            ..Default::default()
+        },
+        name: "valen/Closed".to_string(),
+        super_class: "java/lang/Object".to_string(),
+        interfaces: vec!["java/lang/annotation/Annotation".to_string()],
+        fields: vec![],
+        methods: vec![],
+        source_file: Some("Closed.java".to_string()),
+        permitted_subclasses: vec![],
+        is_record: false,
+        bootstrap_methods: vec![],
+        synthetic_methods: vec![],
+    };
+    emit::emit_class(&jvm_class)
+}
+
 /// Compiles a full HIR module into one or more classfile outputs.
 pub fn compile_hir(
     hir: &valen_hir::Hir,

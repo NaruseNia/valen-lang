@@ -6,7 +6,7 @@
 //!   3. emit HIR → JVM `.class` (valen-codegen)
 
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use valen_ast::FileId;
 
 #[derive(Parser)]
@@ -44,6 +44,12 @@ enum Command {
         /// Classpath entries (directories or JARs) for Java import resolution.
         #[arg(long)]
         classpath: Vec<PathBuf>,
+    },
+    /// Emit `valen-annotations.jar` (contains `@valen.Closed`).
+    EmitAnnotations {
+        /// Output directory.
+        #[arg(short, long, default_value = "build")]
+        out: PathBuf,
     },
     /// Print version info.
     Version,
@@ -198,6 +204,7 @@ fn main() -> anyhow::Result<()> {
         Command::Check {
             inputs, classpath, ..
         } => check(&inputs, &classpath),
+        Command::EmitAnnotations { out } => emit_annotations(&out),
         Command::Version => {
             println!("valenc {}", env!("CARGO_PKG_VERSION"));
             Ok(())
@@ -222,6 +229,17 @@ fn compile(inputs: &[PathBuf], out_dir: &PathBuf, classpath: &[PathBuf]) -> anyh
         println!("  {} -> {}", input_display(inputs), class_path.display());
     }
 
+    Ok(())
+}
+
+fn emit_annotations(out_dir: &Path) -> anyhow::Result<()> {
+    let output = valen_codegen::generate_closed_annotation()?;
+    let class_path = out_dir.join(format!("{}.class", output.internal_name));
+    if let Some(parent) = class_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&class_path, &output.bytes)?;
+    println!("  {}", class_path.display());
     Ok(())
 }
 
