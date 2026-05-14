@@ -532,8 +532,7 @@ fn fixture_generics() {
         .iter()
         .find(|o| o.internal_name == "com/example/Box")
         .expect("Box class should be generated");
-    let box_class =
-        ClassFile::from_bytes(&box_output.bytes).expect("parse Box classfile");
+    let box_class = ClassFile::from_bytes(&box_output.bytes).expect("parse Box classfile");
     assert!(
         box_class.methods.len() >= 2,
         "Box should have at least <init> and get, got {}",
@@ -544,8 +543,7 @@ fn fixture_generics() {
         .iter()
         .find(|o| o.internal_name == "com/example/Pair")
         .expect("Pair class should be generated");
-    let pair_class =
-        ClassFile::from_bytes(&pair_output.bytes).expect("parse Pair classfile");
+    let pair_class = ClassFile::from_bytes(&pair_output.bytes).expect("parse Pair classfile");
     // <init> + getLeft + getRight
     assert!(
         pair_class.methods.len() >= 3,
