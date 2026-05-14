@@ -168,6 +168,7 @@ pub struct EnumField {
 #[derive(Debug, Clone)]
 pub struct TraitDecl {
     pub visibility: Visibility,
+    pub is_sealed: bool,
     pub name: SmolStr,
     pub generics: Vec<GenericParam>,
     pub items: Vec<TraitItem>,

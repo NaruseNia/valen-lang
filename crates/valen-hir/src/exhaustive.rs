@@ -180,6 +180,8 @@ impl<'h> ExhaustivenessChecker<'h> {
             self.check_enum_exhaustive(me, &type_name, &enum_def);
         } else if self.is_sealed_class(&type_name) {
             self.check_sealed_exhaustive(me, &type_name);
+        } else if self.is_sealed_trait(&type_name) {
+            self.check_sealed_trait_exhaustive(me, &type_name);
         } else if type_name == "Bool" {
             self.check_bool_exhaustive(me);
         }
@@ -258,6 +260,41 @@ impl<'h> ExhaustivenessChecker<'h> {
         }
     }
 
+    // -- sealed trait exhaustiveness -----------------------------------------
+
+    fn check_sealed_trait_exhaustive(&mut self, me: &valen_ast::MatchExpr, trait_name: &SmolStr) {
+        let implementors = self.find_sealed_trait_implementors(trait_name);
+        if implementors.is_empty() {
+            return;
+        }
+
+        if has_wildcard_or_binding_excluding(&me.arms, &implementors) {
+            return;
+        }
+
+        let mut covered = IndexSet::new();
+        for arm in &me.arms {
+            if arm.guard.is_some() {
+                continue;
+            }
+            collect_covered_type_names(&arm.pattern, &mut covered);
+            collect_binding_as_type(&arm.pattern, &implementors, &mut covered);
+        }
+
+        let missing: Vec<_> = implementors.difference(&covered).collect();
+        if !missing.is_empty() {
+            let names: Vec<&str> = missing.iter().map(|n| n.as_str()).collect();
+            self.diags.error(
+                DiagCode::MATCH_NOT_EXHAUSTIVE,
+                me.span,
+                SmolStr::from(format!(
+                    "non-exhaustive match on sealed trait `{trait_name}`: missing implementor(s) {}",
+                    names.join(", ")
+                )),
+            );
+        }
+    }
+
     // -- Bool exhaustiveness ------------------------------------------------
 
     fn check_bool_exhaustive(&mut self, me: &valen_ast::MatchExpr) {
@@ -312,7 +349,10 @@ impl<'h> ExhaustivenessChecker<'h> {
                 if let valen_ast::Expr::Path(path) = c.callee.as_ref() {
                     if path.segments.len() == 1 {
                         let name = &path.segments[0].name;
-                        if self.find_enum(name).is_some() || self.is_sealed_class(name) {
+                        if self.find_enum(name).is_some()
+                            || self.is_sealed_class(name)
+                            || self.is_sealed_trait(name)
+                        {
                             return Some(name.clone());
                         }
                     }
@@ -367,6 +407,23 @@ impl<'h> ExhaustivenessChecker<'h> {
             }
         }
         subs
+    }
+
+    fn is_sealed_trait(&self, name: &str) -> bool {
+        self.hir
+            .defs
+            .values()
+            .any(|d| d.name == name && matches!(&d.kind, DefKind::Trait(t) if t.is_sealed))
+    }
+
+    fn find_sealed_trait_implementors(&self, trait_name: &SmolStr) -> IndexSet<SmolStr> {
+        let mut impls = IndexSet::new();
+        for entry in &self.hir.trait_impls {
+            if entry.trait_name == *trait_name {
+                impls.insert(entry.target_name.clone());
+            }
+        }
+        impls
     }
 }
 
@@ -744,6 +801,87 @@ fn check(b: Bool) -> String {
     match b {
         true => "yes",
         _ => "no",
+    }
+}
+"#,
+        );
+        assert_no_errors(&r);
+    }
+
+    // -- sealed trait exhaustive ---------------------------------------------
+
+    #[test]
+    fn sealed_trait_all_implementors_covered() {
+        let r = check_source(
+            r#"
+sealed trait Expr { fn eval(self) -> Int; }
+class Lit {}
+class Add {}
+impl Expr for Lit { fn eval(self) -> Int { 0 } }
+impl Expr for Add { fn eval(self) -> Int { 1 } }
+fn process(e: Expr) -> Int {
+    match e {
+        Lit => 0,
+        Add => 1,
+    }
+}
+"#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn sealed_trait_missing_implementor() {
+        let r = check_source(
+            r#"
+sealed trait Expr { fn eval(self) -> Int; }
+class Lit {}
+class Add {}
+impl Expr for Lit { fn eval(self) -> Int { 0 } }
+impl Expr for Add { fn eval(self) -> Int { 1 } }
+fn process(e: Expr) -> Int {
+    match e {
+        Lit => 0,
+    }
+}
+"#,
+        );
+        assert_has_error(&r, DiagCode::MATCH_NOT_EXHAUSTIVE);
+    }
+
+    #[test]
+    fn sealed_trait_with_wildcard() {
+        let r = check_source(
+            r#"
+sealed trait Expr { fn eval(self) -> Int; }
+class Lit {}
+class Add {}
+impl Expr for Lit { fn eval(self) -> Int { 0 } }
+impl Expr for Add { fn eval(self) -> Int { 1 } }
+fn process(e: Expr) -> Int {
+    match e {
+        Lit => 0,
+        _ => 1,
+    }
+}
+"#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn sealed_trait_marker_exhaustive() {
+        let r = check_source(
+            r#"
+sealed trait Marker {}
+class A {}
+class B {}
+impl Marker for A {}
+impl Marker for B {}
+fn check(m: Marker) -> String {
+    match m {
+        A => "a",
+        B => "b",
     }
 }
 "#,

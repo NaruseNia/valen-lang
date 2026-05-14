@@ -297,6 +297,16 @@ fn trait_with_default_method() {
 }
 
 #[test]
+fn sealed_trait() {
+    assert_snapshot!(check("sealed trait Expr { fn eval(self) -> Int; }"));
+}
+
+#[test]
+fn sealed_trait_marker() {
+    assert_snapshot!(check("sealed trait Marker {}"));
+}
+
+#[test]
 fn impl_block() {
     assert_snapshot!(check(
         "impl Area for Circle { fn area(self) -> Float { self.r } }"

@@ -1,20 +1,20 @@
 ---
 source: crates/valen-parser/tests/parser.rs
-expression: "check(\"trait Area { fn area(self) -> Float; }\")"
+expression: "check(\"sealed trait Expr { fn eval(self) -> Int; }\")"
 ---
 === AST ===
 [
     Trait(
         TraitDecl {
             visibility: Internal,
-            is_sealed: false,
-            name: "Area",
+            is_sealed: true,
+            name: "Expr",
             generics: [],
             items: [
                 Fn(
                     FnDecl {
                         visibility: Pub,
-                        name: "area",
+                        name: "eval",
                         generics: [],
                         params: [
                             Param {
@@ -26,8 +26,8 @@ expression: "check(\"trait Area { fn area(self) -> Float; }\")"
                                                 name: "Self",
                                                 generics: [],
                                                 span: Span {
-                                                    start: 21,
-                                                    end: 25,
+                                                    start: 28,
+                                                    end: 32,
                                                     file_id: FileId(
                                                         0,
                                                     ),
@@ -35,8 +35,8 @@ expression: "check(\"trait Area { fn area(self) -> Float; }\")"
                                             },
                                         ],
                                         span: Span {
-                                            start: 21,
-                                            end: 25,
+                                            start: 28,
+                                            end: 32,
                                             file_id: FileId(
                                                 0,
                                             ),
@@ -45,8 +45,8 @@ expression: "check(\"trait Area { fn area(self) -> Float; }\")"
                                 ),
                                 mutable: false,
                                 span: Span {
-                                    start: 21,
-                                    end: 25,
+                                    start: 28,
+                                    end: 32,
                                     file_id: FileId(
                                         0,
                                     ),
@@ -58,11 +58,11 @@ expression: "check(\"trait Area { fn area(self) -> Float; }\")"
                                 TypePath {
                                     segments: [
                                         TypePathSegment {
-                                            name: "Float",
+                                            name: "Int",
                                             generics: [],
                                             span: Span {
-                                                start: 30,
-                                                end: 35,
+                                                start: 37,
+                                                end: 40,
                                                 file_id: FileId(
                                                     0,
                                                 ),
@@ -70,8 +70,8 @@ expression: "check(\"trait Area { fn area(self) -> Float; }\")"
                                         },
                                     ],
                                     span: Span {
-                                        start: 30,
-                                        end: 35,
+                                        start: 37,
+                                        end: 40,
                                         file_id: FileId(
                                             0,
                                         ),
@@ -84,8 +84,8 @@ expression: "check(\"trait Area { fn area(self) -> Float; }\")"
                         is_override: false,
                         is_abstract: true,
                         span: Span {
-                            start: 13,
-                            end: 36,
+                            start: 20,
+                            end: 41,
                             file_id: FileId(
                                 0,
                             ),
@@ -95,7 +95,7 @@ expression: "check(\"trait Area { fn area(self) -> Float; }\")"
             ],
             span: Span {
                 start: 0,
-                end: 38,
+                end: 43,
                 file_id: FileId(
                     0,
                 ),

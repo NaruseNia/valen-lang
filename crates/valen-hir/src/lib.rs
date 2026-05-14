@@ -245,6 +245,7 @@ pub struct EnumVariantDef {
 /// Trait definition listing its method signatures.
 #[derive(Debug, Clone)]
 pub struct TraitDef {
+    pub is_sealed: bool,
     pub methods: Vec<DefId>,
 }
 

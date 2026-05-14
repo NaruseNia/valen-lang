@@ -387,6 +387,9 @@ impl<'a> Printer<'a> {
     fn print_trait(&mut self, t: &TraitDecl) {
         self.write_indent();
         self.print_visibility(&t.visibility);
+        if t.is_sealed {
+            self.w("sealed ");
+        }
         self.w("trait ");
         self.w(&t.name);
         self.print_generics(&t.generics);

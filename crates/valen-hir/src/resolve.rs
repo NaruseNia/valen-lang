@@ -238,7 +238,10 @@ impl Resolver {
         let def = Def {
             id,
             name: SmolStr::from("Error"),
-            kind: DefKind::Trait(TraitDef { methods: vec![mid] }),
+            kind: DefKind::Trait(TraitDef {
+                is_sealed: false,
+                methods: vec![mid],
+            }),
             vis: Vis::Pub,
             span: valen_ast::Span::DUMMY,
             package: pkg.clone(),
@@ -288,7 +291,10 @@ impl Resolver {
         let def = Def {
             id,
             name: SmolStr::from("Iterator"),
-            kind: DefKind::Trait(TraitDef { methods: vec![mid] }),
+            kind: DefKind::Trait(TraitDef {
+                is_sealed: false,
+                methods: vec![mid],
+            }),
             vis: Vis::Pub,
             span: valen_ast::Span::DUMMY,
             package: pkg.clone(),
@@ -568,6 +574,7 @@ impl Resolver {
                     id,
                     name: t.name.clone(),
                     kind: DefKind::Trait(TraitDef {
+                        is_sealed: t.is_sealed,
                         methods: method_ids,
                     }),
                     vis: lower_vis(t.visibility),

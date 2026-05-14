@@ -68,7 +68,46 @@ impl Area for Shape {
 - trait method の候補が複数で曖昧になる場合は UFCS `Trait::foo(value, args)` で解決
 - 詳細なメソッド解決規則は [§5.6](05-classes.md) を参照
 
-## 7.5 演算子オーバーロード
+## 7.5 sealed trait
+
+`sealed trait` は trait の実装集合を閉じ、exhaustive match を許す。
+
+```valen
+sealed trait Expr {
+    fn eval(self) -> Int;
+}
+
+class Lit {}
+class Add {}
+
+impl Expr for Lit {
+    fn eval(self) -> Int { 0 }
+}
+
+impl Expr for Add {
+    fn eval(self) -> Int { 1 }
+}
+
+fn process(e: Expr) -> Int {
+    match e {
+        Lit => 0,
+        Add => 1,
+    }
+}
+```
+
+**制約:**
+- 実装者は `class` と `data class` のみ（enum は不可）
+- 実装者の宣言は `impl SealedTrait for Type { ... }`（trait の一貫性を維持）
+- permit 範囲は同一コンパイル単位（将来的に module スコープへ移行）
+- default method は非対応（通常 trait と同じ制約）
+- supertrait は非対応
+
+**JVM ABI:** sealed interface（`ACC_INTERFACE | ACC_ABSTRACT` + `PermittedSubclasses` attribute）として emit。
+
+**exhaustive check:** enum / sealed class と同様に厳密 exhaustive。実装者が1つでも不足するとコンパイルエラー。wildcard `_` で回避可能。
+
+## 7.6 演算子オーバーロード
 
 Phase 1.5+。trait ベース：
 
