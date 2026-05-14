@@ -35,7 +35,14 @@ pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<DefId, TypedBody>) -> Vec<Jv
                 ));
             }
             DefKind::DataClass(data_def) => {
-                classes.push(lower_data_class(hir, def, data_def, pkg, source_file));
+                classes.push(lower_data_class(
+                    hir,
+                    def,
+                    data_def,
+                    typed_bodies,
+                    pkg,
+                    source_file,
+                ));
             }
             DefKind::Enum(enum_def) => {
                 classes.extend(lower_enum(def, enum_def, pkg, source_file, &hir.imports));
@@ -141,6 +148,7 @@ fn lower_data_class(
     hir: &Hir,
     def: &Def,
     data_def: &valen_hir::DataClassDef,
+    typed_bodies: &IndexMap<DefId, TypedBody>,
     pkg: Option<&[SmolStr]>,
     source_file: Option<String>,
 ) -> JvmClass {
@@ -158,13 +166,42 @@ fn lower_data_class(
         .map(|f| (f.name.clone(), f.ty.clone()))
         .collect();
 
-    let methods = vec![
+    let mut methods = vec![
         generate_ctor(&internal, &super_class, &fields),
         data_class_methods::generate_equals(&internal, &field_info),
         data_class_methods::generate_hash_code(&internal, &field_info),
         data_class_methods::generate_to_string(&internal, &def.name, &field_info),
         data_class_methods::generate_copy(&internal, &field_info),
     ];
+
+    let mut all_synthetic_lambdas = Vec::new();
+    let mut all_bootstrap_methods = Vec::new();
+    let mut interfaces = Vec::new();
+
+    for impl_entry in &hir.trait_impls {
+        if impl_entry.target_name == def.name {
+            if let Some(trait_internal) = hir
+                .imports
+                .get(&impl_entry.trait_name)
+                .map(|p| p.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("/"))
+            {
+                interfaces.push(trait_internal);
+            }
+            for &mid in &impl_entry.methods {
+                if let Some(method_def) = hir.defs.get(&mid) {
+                    if let DefKind::Fn(fn_def) = &method_def.kind {
+                        let body = typed_bodies.get(&mid);
+                        let result = lower_method(hir, method_def, fn_def, body, &internal, pkg);
+                        methods.push(result.method);
+                        all_synthetic_lambdas.extend(result.synthetic_lambdas);
+                        all_bootstrap_methods.extend(result.bootstrap_methods);
+                    }
+                }
+            }
+        }
+    }
+
+    let synthetic_methods = synthetic_lambdas_to_methods(all_synthetic_lambdas);
 
     JvmClass {
         version: JvmVersion::Java21,
@@ -176,14 +213,14 @@ fn lower_data_class(
         },
         name: internal,
         super_class,
-        interfaces: vec![],
+        interfaces,
         fields,
         methods,
         source_file,
         permitted_subclasses: vec![],
         is_record: false,
-        bootstrap_methods: vec![],
-        synthetic_methods: vec![],
+        bootstrap_methods: all_bootstrap_methods,
+        synthetic_methods,
     }
 }
 
