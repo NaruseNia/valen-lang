@@ -92,8 +92,10 @@ struct FrontendResult {
     bodies: indexmap::IndexMap<valen_hir::DefId, valen_hir::TypedBody>,
 }
 
-/// Parse all input files, merge AST items, then run resolve → type_check → coherence.
-fn run_multi_file_pipeline(inputs: &[PathBuf]) -> anyhow::Result<FrontendResult> {
+fn run_pipeline_with_classpath(
+    inputs: &[PathBuf],
+    classpath: &[PathBuf],
+) -> anyhow::Result<FrontendResult> {
     let mut all_items: Vec<valen_ast::Item> = Vec::new();
     let mut line_indexes: Vec<LineIndex> = Vec::new();
     let mut had_parse_errors = false;
@@ -121,7 +123,7 @@ fn run_multi_file_pipeline(inputs: &[PathBuf]) -> anyhow::Result<FrontendResult>
     let first_line_idx = line_indexes.first();
 
     // --- Resolve (merged) ---
-    let resolve_result = valen_hir::resolve::resolve(&all_items);
+    let resolve_result = valen_hir::resolve::resolve_with_classpath(&all_items, classpath);
     if let Some(li) = first_line_idx {
         emit_diagnostics(&resolve_result.diagnostics, first_path, li);
     }
@@ -203,10 +205,10 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
-fn compile(inputs: &[PathBuf], out_dir: &PathBuf, _classpath: &[PathBuf]) -> anyhow::Result<()> {
+fn compile(inputs: &[PathBuf], out_dir: &PathBuf, classpath: &[PathBuf]) -> anyhow::Result<()> {
     std::fs::create_dir_all(out_dir)?;
 
-    let frontend = run_multi_file_pipeline(inputs)?;
+    let frontend = run_pipeline_with_classpath(inputs, classpath)?;
 
     let outputs = valen_codegen::compile_hir(&frontend.hir, &frontend.bodies)?;
     for output in &outputs {
@@ -223,8 +225,8 @@ fn compile(inputs: &[PathBuf], out_dir: &PathBuf, _classpath: &[PathBuf]) -> any
     Ok(())
 }
 
-fn check(inputs: &[PathBuf], _classpath: &[PathBuf]) -> anyhow::Result<()> {
-    run_multi_file_pipeline(inputs)?;
+fn check(inputs: &[PathBuf], classpath: &[PathBuf]) -> anyhow::Result<()> {
+    run_pipeline_with_classpath(inputs, classpath)?;
     for input in inputs {
         println!("  {} OK", input.display());
     }

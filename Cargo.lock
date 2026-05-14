@@ -1374,6 +1374,7 @@ name = "valen-hir"
 version = "0.1.0-dev"
 dependencies = [
  "indexmap",
+ "ristretto_classfile",
  "smol_str",
  "valen-ast",
  "valen-diagnostics",
