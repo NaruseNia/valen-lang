@@ -45,6 +45,11 @@ pub struct ResolveResult {
 
 /// Run name resolution on a list of AST items, producing an HIR with definitions and method indexes.
 pub fn resolve(items: &[Item]) -> ResolveResult {
+    resolve_with_classpath(items, &[])
+}
+
+/// Run name resolution with classpath entries for Java interop type checking.
+pub fn resolve_with_classpath(items: &[Item], classpath: &[std::path::PathBuf]) -> ResolveResult {
     let mut resolver = Resolver {
         hir: Hir::default(),
         scope: Scope::default(),
@@ -52,6 +57,12 @@ pub fn resolve(items: &[Item]) -> ResolveResult {
         current_package: None,
     };
     resolver.resolve_items(items);
+
+    if !classpath.is_empty() {
+        resolver.hir.foreign_types =
+            crate::classpath::scan_classpath(classpath, &resolver.hir.imports);
+    }
+
     ResolveResult {
         hir: resolver.hir,
         diagnostics: resolver.diagnostics,

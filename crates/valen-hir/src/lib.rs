@@ -3,6 +3,7 @@
 //! This crate defines the core HIR types and provides name resolution, type
 //! checking, trait coherence verification, and match exhaustiveness checking.
 
+pub mod classpath;
 pub mod coherence;
 pub mod exhaustive;
 pub mod resolve;
@@ -28,6 +29,8 @@ pub struct Hir {
     pub trait_impls: Vec<ImplEntry>,
     /// Import path mappings: short name (or alias) → full path segments.
     pub imports: IndexMap<SmolStr, Vec<SmolStr>>,
+    /// Metadata for imported Java types loaded from classpath .class files.
+    pub foreign_types: IndexMap<SmolStr, ForeignClassInfo>,
     /// DefIds of synthetic prelude types (should not be emitted by codegen).
     pub prelude_ids: Vec<DefId>,
     next_id: DefId,
@@ -608,4 +611,42 @@ pub enum TypedStringPart {
     Text(SmolStr),
     /// An interpolated expression segment.
     Expr(TypedExpr),
+}
+
+// ---------------------------------------------------------------------------
+// Foreign (Java) type metadata loaded from classpath .class files
+// ---------------------------------------------------------------------------
+
+/// Metadata extracted from a Java .class file for type checking interop.
+#[derive(Debug, Clone, Default)]
+pub struct ForeignClassInfo {
+    /// JVM internal name (e.g. `java/util/ArrayList`).
+    pub internal_name: String,
+    pub methods: Vec<ForeignMethodInfo>,
+    pub constructors: Vec<ForeignCtorInfo>,
+    pub fields: Vec<ForeignFieldInfo>,
+    pub super_class: Option<String>,
+    pub interfaces: Vec<String>,
+}
+
+/// A method on a foreign Java class.
+#[derive(Debug, Clone)]
+pub struct ForeignMethodInfo {
+    pub name: SmolStr,
+    pub params: Vec<TyRef>,
+    pub return_ty: TyRef,
+    pub is_static: bool,
+}
+
+/// A constructor on a foreign Java class.
+#[derive(Debug, Clone)]
+pub struct ForeignCtorInfo {
+    pub params: Vec<TyRef>,
+}
+
+/// A field on a foreign Java class.
+#[derive(Debug, Clone)]
+pub struct ForeignFieldInfo {
+    pub name: SmolStr,
+    pub ty: TyRef,
 }

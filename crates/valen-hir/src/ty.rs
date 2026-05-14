@@ -909,6 +909,9 @@ impl<'hir> TypeChecker<'hir> {
                 _ => {}
             }
         }
+        if self.resolve_foreign_ctor(name).is_some() {
+            return Ty::Named(name.clone());
+        }
         Ty::Named(name.clone())
     }
 
@@ -1004,6 +1007,18 @@ impl<'hir> TypeChecker<'hir> {
                     );
                 }
                 crate::MethodResolution::NotFound => {
+                    if let Some(foreign_result) = self.resolve_foreign_method(tn, &mc.method, &args)
+                    {
+                        return TypedExpr {
+                            kind: TypedExprKind::MethodCall {
+                                receiver: Box::new(receiver),
+                                method: mc.method.clone(),
+                                args,
+                            },
+                            ty: foreign_result,
+                            span: mc.span,
+                        };
+                    }
                     self.diags.error(
                         DiagCode::NO_SUCH_METHOD,
                         mc.span,
@@ -1014,6 +1029,27 @@ impl<'hir> TypeChecker<'hir> {
                     );
                 }
             }
+        } else if let Some(type_name) = self.ty_name(&receiver.ty) {
+            if let Some(foreign_result) = self.resolve_foreign_method(&type_name, &mc.method, &args)
+            {
+                return TypedExpr {
+                    kind: TypedExprKind::MethodCall {
+                        receiver: Box::new(receiver),
+                        method: mc.method.clone(),
+                        args,
+                    },
+                    ty: foreign_result,
+                    span: mc.span,
+                };
+            }
+            self.diags.error(
+                DiagCode::NO_SUCH_METHOD,
+                mc.span,
+                SmolStr::from(format!(
+                    "cannot call method `{}` on type `{}`",
+                    mc.method, receiver.ty
+                )),
+            );
         } else {
             self.diags.error(
                 DiagCode::NO_SUCH_METHOD,
@@ -1034,6 +1070,35 @@ impl<'hir> TypeChecker<'hir> {
             ty: Ty::Error,
             span: mc.span,
         }
+    }
+
+    fn ty_name(&self, ty: &Ty) -> Option<SmolStr> {
+        match ty {
+            Ty::Named(n) => Some(n.clone()),
+            Ty::Generic(n, _) => Some(n.clone()),
+            _ => None,
+        }
+    }
+
+    fn resolve_foreign_method(
+        &self,
+        type_name: &str,
+        method_name: &str,
+        _args: &[TypedExpr],
+    ) -> Option<Ty> {
+        let info = self.hir.foreign_types.get(type_name)?;
+        let matching: Vec<_> = info
+            .methods
+            .iter()
+            .filter(|m| m.name == method_name)
+            .collect();
+        let m = matching.first()?;
+        Some(tyref_to_ty(&m.return_ty))
+    }
+
+    fn resolve_foreign_ctor(&self, type_name: &str) -> Option<Ty> {
+        let _info = self.hir.foreign_types.get(type_name)?;
+        Some(Ty::Named(SmolStr::from(type_name)))
     }
 
     // -- field access -------------------------------------------------------
