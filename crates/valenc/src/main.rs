@@ -19,7 +19,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Compile one or more `.vln` files to `.class`.
-    Build {
+    Compile {
         /// Source files or directories.
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
@@ -31,11 +31,19 @@ enum Command {
         /// Target JVM version (21 = baseline, 25 = opt-in).
         #[arg(long, default_value = "21")]
         target: String,
+
+        /// Classpath entries (directories or JARs) for Java import resolution.
+        #[arg(long)]
+        classpath: Vec<PathBuf>,
     },
     /// Check without emitting bytecode.
     Check {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
+
+        /// Classpath entries (directories or JARs) for Java import resolution.
+        #[arg(long)]
+        classpath: Vec<PathBuf>,
     },
     /// Print version info.
     Version,
@@ -179,8 +187,15 @@ fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
     match cli.command {
-        Command::Build { inputs, out, .. } => compile(&inputs, &out),
-        Command::Check { inputs } => check(&inputs),
+        Command::Compile {
+            inputs,
+            out,
+            classpath,
+            ..
+        } => compile(&inputs, &out, &classpath),
+        Command::Check {
+            inputs, classpath, ..
+        } => check(&inputs, &classpath),
         Command::Version => {
             println!("valenc {}", env!("CARGO_PKG_VERSION"));
             Ok(())
@@ -188,7 +203,7 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
-fn compile(inputs: &[PathBuf], out_dir: &PathBuf) -> anyhow::Result<()> {
+fn compile(inputs: &[PathBuf], out_dir: &PathBuf, _classpath: &[PathBuf]) -> anyhow::Result<()> {
     std::fs::create_dir_all(out_dir)?;
 
     let frontend = run_multi_file_pipeline(inputs)?;
@@ -208,7 +223,7 @@ fn compile(inputs: &[PathBuf], out_dir: &PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn check(inputs: &[PathBuf]) -> anyhow::Result<()> {
+fn check(inputs: &[PathBuf], _classpath: &[PathBuf]) -> anyhow::Result<()> {
     run_multi_file_pipeline(inputs)?;
     for input in inputs {
         println!("  {} OK", input.display());

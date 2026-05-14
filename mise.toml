@@ -73,7 +73,7 @@ run = "cargo run -p valen-lsp --"
 description = "Build Valen stdlib to .class files"
 run = """
 mkdir -p build/stdlib
-cargo run -q -p valenc -- build \
+cargo run -q -p valenc -- compile \
   stdlib/valen/core/core.vln \
   stdlib/valen/io/io.vln \
   -o build/stdlib

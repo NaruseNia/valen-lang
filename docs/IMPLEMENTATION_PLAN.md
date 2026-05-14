@@ -18,7 +18,7 @@ Last updated: 2026-05-14（Phase 0 完了、TASK-001〜012,014,015,017 完了、
 - [x] AST の設計（`valen-ast` に Item / Expr / Pattern / Type / Literal の骨格を定義）
 - [x] テストインフラ（`insta` snapshot 基盤、integration テスト稼働）
 - [x] parser 拡張：top-level `class NAME {}` の parse + 全キーワード lexer 登録
-- [x] `class Foo {}` → `Foo.class` emit PoC（`valenc build` で動作確認済み）
+- [x] `class Foo {}` → `Foo.class` emit PoC（`valenc compile` で動作確認済み）
 
 ### Phase 1 進捗
 - [x] **TASK-001:** Parser 拡張 — fn params/return type, if/else, match（フルパターン）, call/method call/field/try, paths, return（PR #18）

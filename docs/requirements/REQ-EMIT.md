@@ -166,7 +166,7 @@ class Greeter(pub name: String) {
 
 ### 受入条件
 
-- [ ] `valenc build --target 25` で class file バージョン 69.0 が生成される
+- [ ] `valenc compile --target 25` で class file バージョン 69.0 が生成される
 - [ ] `--target 25` 未指定時はデフォルトで Java 21（65.0）が生成される
 - [ ] 不正なターゲット指定（`--target 20` 等）でエラーメッセージが表示される
 - [ ] Java 25 固有機能を使用した .class が JVM 25 で正常に動作する
