@@ -17,7 +17,10 @@ use crate::JvmVersion;
 pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<DefId, TypedBody>) -> Vec<JvmClass> {
     let mut classes = Vec::new();
 
-    for (_id, def) in &hir.defs {
+    for (id, def) in &hir.defs {
+        if hir.prelude_ids.contains(id) {
+            continue;
+        }
         let pkg = def.package.as_deref().or(hir.package.as_deref());
         let source_file = Some(format!("{}.vln", def.name));
         match &def.kind {
