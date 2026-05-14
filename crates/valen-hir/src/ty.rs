@@ -1275,9 +1275,19 @@ impl<'hir> TypeChecker<'hir> {
     fn synth_for(&mut self, f: &valen_ast::ForExpr) -> TypedExpr {
         let iter = self.infer_expr(&f.iter);
         self.env.push_scope();
-        // For now, the loop variable type is inferred as Int for ranges
         let var_ty = match &iter.ty {
-            Ty::Generic(name, args) if name == "Range" && !args.is_empty() => args[0].clone(),
+            Ty::Generic(name, args) if name == "Range" && !args.is_empty() => {
+                if matches!(args[0], Ty::Prim(PrimTy::Float) | Ty::Prim(PrimTy::Double)) {
+                    self.diags.warning(
+                        DiagCode::TYPE_MISMATCH,
+                        f.span,
+                        SmolStr::from(
+                            "floating-point range loop may produce unexpected results due to precision",
+                        ),
+                    );
+                }
+                args[0].clone()
+            }
             _ => Ty::Prim(PrimTy::Int),
         };
         self.env.define(f.var.clone(), var_ty, false);

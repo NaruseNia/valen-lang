@@ -1250,8 +1250,7 @@ impl<'a> ExprLowering<'a> {
                 body,
             );
         } else {
-            // General iterable: needs Iterator protocol (TASK-023 prelude)
-            self.ops.push(JvmOp::StubBody);
+            self.lower_for_iterator(var, iter, body);
         }
     }
 
@@ -1269,26 +1268,18 @@ impl<'a> ExprLowering<'a> {
             _ => JvmType::Int,
         };
 
-        let is_int = matches!(
-            elem_ty,
-            JvmType::Int | JvmType::Byte | JvmType::Short | JvmType::Char
-        );
-        let is_long = matches!(elem_ty, JvmType::Long);
-
-        if !is_int && !is_long {
-            self.ops.push(JvmOp::StubBody);
-            return;
-        }
-
         self.push_scope();
 
         // Store start value into loop variable
         if let Some(s) = start {
             self.lower_expr(s);
-        } else if is_long {
-            self.ops.push(JvmOp::PushLong(0));
         } else {
-            self.ops.push(JvmOp::PushInt(0));
+            match &elem_ty {
+                JvmType::Long => self.ops.push(JvmOp::PushLong(0)),
+                JvmType::Float => self.ops.push(JvmOp::PushFloat(0.0)),
+                JvmType::Double => self.ops.push(JvmOp::PushDouble(0.0)),
+                _ => self.ops.push(JvmOp::PushInt(0)),
+            }
         }
         let var_slot = self.alloc_local(var.clone(), elem_ty.clone());
         self.ops.push(JvmOp::StoreLocal(var_slot, elem_ty.clone()));
@@ -1296,10 +1287,13 @@ impl<'a> ExprLowering<'a> {
         // Store end value into limit variable
         if let Some(e) = end {
             self.lower_expr(e);
-        } else if is_long {
-            self.ops.push(JvmOp::PushLong(i64::MAX));
         } else {
-            self.ops.push(JvmOp::PushInt(i32::MAX));
+            match &elem_ty {
+                JvmType::Long => self.ops.push(JvmOp::PushLong(i64::MAX)),
+                JvmType::Float => self.ops.push(JvmOp::PushFloat(f32::MAX)),
+                JvmType::Double => self.ops.push(JvmOp::PushDouble(f64::MAX)),
+                _ => self.ops.push(JvmOp::PushInt(i32::MAX)),
+            }
         }
         let limit_slot = self.next_slot;
         self.next_slot += elem_ty.slot_count();
@@ -1328,13 +1322,27 @@ impl<'a> ExprLowering<'a> {
         self.ops.push(JvmOp::Label(continue_label));
         self.emit_frame(vec![]);
 
-        if is_int {
-            self.ops.push(JvmOp::IInc(var_slot, 1));
-        } else {
-            self.ops.push(JvmOp::LoadLocal(var_slot, JvmType::Long));
-            self.ops.push(JvmOp::PushLong(1));
-            self.ops.push(JvmOp::Arith(ArithOp::Add, JvmType::Long));
-            self.ops.push(JvmOp::StoreLocal(var_slot, JvmType::Long));
+        match &elem_ty {
+            JvmType::Int | JvmType::Byte | JvmType::Short | JvmType::Char => {
+                self.ops.push(JvmOp::IInc(var_slot, 1));
+            }
+            JvmType::Long => {
+                self.ops.push(JvmOp::LoadLocal(var_slot, JvmType::Long));
+                self.ops.push(JvmOp::PushLong(1));
+                self.ops.push(JvmOp::Arith(ArithOp::Add, JvmType::Long));
+                self.ops.push(JvmOp::StoreLocal(var_slot, JvmType::Long));
+            }
+            ty @ (JvmType::Float | JvmType::Double) => {
+                self.ops.push(JvmOp::LoadLocal(var_slot, ty.clone()));
+                if matches!(ty, JvmType::Float) {
+                    self.ops.push(JvmOp::PushFloat(1.0));
+                } else {
+                    self.ops.push(JvmOp::PushDouble(1.0));
+                }
+                self.ops.push(JvmOp::Arith(ArithOp::Add, ty.clone()));
+                self.ops.push(JvmOp::StoreLocal(var_slot, ty.clone()));
+            }
+            _ => {}
         }
 
         // Condition check
@@ -1344,22 +1352,139 @@ impl<'a> ExprLowering<'a> {
         self.ops.push(JvmOp::LoadLocal(var_slot, elem_ty.clone()));
         self.ops.push(JvmOp::LoadLocal(limit_slot, elem_ty.clone()));
 
-        if is_int {
-            if inclusive {
-                self.ops.push(JvmOp::IfICmpLe(loop_label));
-            } else {
-                self.ops.push(JvmOp::IfICmpLt(loop_label));
+        match &elem_ty {
+            JvmType::Int | JvmType::Byte | JvmType::Short | JvmType::Char => {
+                if inclusive {
+                    self.ops.push(JvmOp::IfICmpLe(loop_label));
+                } else {
+                    self.ops.push(JvmOp::IfICmpLt(loop_label));
+                }
             }
-        } else {
-            self.ops.push(JvmOp::Cmp(CmpKind::LCmp));
-            if inclusive {
-                self.ops.push(JvmOp::IfLe(loop_label));
-            } else {
-                self.ops.push(JvmOp::IfLt(loop_label));
+            JvmType::Long => {
+                self.ops.push(JvmOp::Cmp(CmpKind::LCmp));
+                if inclusive {
+                    self.ops.push(JvmOp::IfLe(loop_label));
+                } else {
+                    self.ops.push(JvmOp::IfLt(loop_label));
+                }
             }
+            JvmType::Float => {
+                self.ops.push(JvmOp::Cmp(CmpKind::FCmpG));
+                if inclusive {
+                    self.ops.push(JvmOp::IfLe(loop_label));
+                } else {
+                    self.ops.push(JvmOp::IfLt(loop_label));
+                }
+            }
+            JvmType::Double => {
+                self.ops.push(JvmOp::Cmp(CmpKind::DCmpG));
+                if inclusive {
+                    self.ops.push(JvmOp::IfLe(loop_label));
+                } else {
+                    self.ops.push(JvmOp::IfLt(loop_label));
+                }
+            }
+            _ => {}
         }
 
         // Loop exit
+        self.ops.push(JvmOp::Label(break_label));
+        self.emit_frame(vec![]);
+
+        self.pop_scope();
+    }
+
+    /// Emits a general for-loop over an Iterator: calls next() in a loop,
+    /// checks for Option$Some vs Option$None via instanceof.
+    fn lower_for_iterator(&mut self, var: &SmolStr, iter: &TypedExpr, body: &TypedBody) {
+        let elem_ty = match &iter.ty {
+            Ty::Generic(_, args) if !args.is_empty() => self.ty_to_jvm(&args[0]),
+            _ => JvmType::Object(JVM_OBJECT.to_string()),
+        };
+
+        let obj = JvmType::Object(JVM_OBJECT.to_string());
+        let option_iface = "valen/core/Option";
+        let some_class = "valen/core/Option$Some";
+
+        self.push_scope();
+
+        // Evaluate iterator and store
+        self.lower_expr(iter);
+        let iter_slot = self.next_slot;
+        self.next_slot += 1;
+        let iter_jvm = self.ty_to_jvm(&iter.ty);
+        self.ops
+            .push(JvmOp::StoreLocal(iter_slot, iter_jvm.clone()));
+
+        let loop_label = self.alloc_label();
+        let continue_label = self.alloc_label();
+        let break_label = self.alloc_label();
+
+        // Loop head (also continue target)
+        self.ops.push(JvmOp::Label(loop_label));
+        self.emit_frame(vec![]);
+        self.ops.push(JvmOp::Label(continue_label));
+
+        // Call next() → Option<T>
+        self.ops.push(JvmOp::LoadLocal(iter_slot, iter_jvm.clone()));
+        self.ops.push(JvmOp::InvokeInterface {
+            owner: "valen/core/Iterator".to_string(),
+            name: "next".to_string(),
+            params: vec![],
+            ret: JvmType::Object(option_iface.to_string()),
+        });
+
+        // Store the Option result
+        let opt_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            opt_slot,
+            JvmType::Object(option_iface.to_string()),
+        ));
+
+        // Check if Some (instanceof Option$Some)
+        self.ops.push(JvmOp::LoadLocal(
+            opt_slot,
+            JvmType::Object(option_iface.to_string()),
+        ));
+        self.ops.push(JvmOp::Instanceof(some_class.to_string()));
+        self.ops.push(JvmOp::IfEq(break_label));
+
+        // Extract value: cast to Some, get `value` field
+        self.ops.push(JvmOp::LoadLocal(
+            opt_slot,
+            JvmType::Object(option_iface.to_string()),
+        ));
+        self.ops.push(JvmOp::Checkcast(some_class.to_string()));
+        self.ops.push(JvmOp::GetField {
+            owner: some_class.to_string(),
+            name: "value".to_string(),
+            descriptor: obj,
+        });
+
+        // Unbox if the element type is a primitive
+        if JvmType::boxed_name(&elem_ty).is_some() {
+            self.emit_unbox(&elem_ty);
+        } else if let JvmType::Object(ref name) = elem_ty {
+            if name != JVM_OBJECT {
+                self.ops.push(JvmOp::Checkcast(name.clone()));
+            }
+        }
+
+        let var_slot = self.alloc_local(var.clone(), elem_ty.clone());
+        self.ops.push(JvmOp::StoreLocal(var_slot, elem_ty));
+
+        // Body
+        self.loop_stack.push(LoopContext {
+            break_label,
+            continue_label,
+        });
+        self.lower_body(body);
+        self.loop_stack.pop();
+
+        self.ops.push(JvmOp::Goto(loop_label));
+
+        // Exit
         self.ops.push(JvmOp::Label(break_label));
         self.emit_frame(vec![]);
 
