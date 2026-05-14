@@ -16,7 +16,7 @@ Valen の開発ツールチェーンに関する要件。コンパイラ CLI（v
 | REQ-TOOL-001 | valenc CLI（build / check / version サブコマンド） | Must | Draft |
 | REQ-TOOL-002 | Gradle プラグイン（compileValen タスク、標準 sourceSet） | Must | Draft |
 | REQ-TOOL-003 | LSP サーバー（syntax error・型診断・goto definition） | Must | Draft |
-| REQ-TOOL-004 | valenfmt 最小版（brace style・indent・trailing semicolon） | Should | Draft |
+| REQ-TOOL-004 | valenfmt 最小版（brace style・indent・trailing semicolon） | Should | Done |
 
 ---
 
@@ -165,7 +165,7 @@ Rust で実装する Language Server Protocol サーバー。MVP では以下の
 |------|------|
 | **ID** | REQ-TOOL-004 |
 | **優先度** | Should |
-| **ステータス** | Draft |
+| **ステータス** | Done |
 | **Phase** | MVP / Phase 1.5 拡張 |
 
 ### 説明
@@ -185,14 +185,14 @@ Rust で実装するコードフォーマッタの最小版。MVP では以下�
 
 ### 受入条件
 
-- [ ] `valenfmt hello.vln` でファイルが整形される
-- [ ] brace style が K&R に統一される
-- [ ] インデントがスペース 4 つに統一される
-- [ ] 不要な trailing semicolon が除去される
-- [ ] `--check` フラグで差分がある場合に非ゼロ終了コードが返される
-- [ ] stdin からの入力を受け付け、stdout に整形結果を出力できる
-- [ ] 整形がコードの意味を変えないことが保証される
-- [ ] コメントが保持される
+- [x] `valenfmt hello.vln` でファイルが整形される
+- [x] brace style が K&R に統一される
+- [x] インデントがスペース 4 つに統一される
+- [x] 不要な trailing semicolon が除去される
+- [x] `--check` フラグで差分がある場合に非ゼロ終了コードが返される
+- [x] stdin からの入力を受け付け、stdout に整形結果を出力できる
+- [x] 整形がコードの意味を変えないことが保証される
+- [x] コメントが保持される
 
 ### 依存
 
