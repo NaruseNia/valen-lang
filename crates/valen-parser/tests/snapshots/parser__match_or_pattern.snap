@@ -38,6 +38,7 @@ expression: "check(\"fn f(x: Int) -> Bool { match x { 1 | 2 | 3 => true, _ => fa
                         },
                     ),
                     mutable: false,
+                    default: None,
                     span: Span {
                         start: 5,
                         end: 11,

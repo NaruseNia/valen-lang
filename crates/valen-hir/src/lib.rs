@@ -204,6 +204,8 @@ pub struct ParamDef {
     pub mutable: bool,
     /// `true` when this is the implicit `self` receiver parameter.
     pub is_self: bool,
+    /// `true` when the parameter has a default value expression.
+    pub has_default: bool,
 }
 
 /// Class definition including constructor parameters, inheritance, and methods.
@@ -236,6 +238,7 @@ pub struct CtorParamDef {
     pub name: SmolStr,
     pub ty: TyRef,
     pub mutable: bool,
+    pub has_default: bool,
 }
 
 /// Data class definition with auto-derived equality, hashing, and accessors.

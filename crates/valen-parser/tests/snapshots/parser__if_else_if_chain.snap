@@ -38,6 +38,7 @@ expression: "check(\"fn f(x: Int) -> Int { if x { 1 } else if y { 2 } else { 3 }
                         },
                     ),
                     mutable: false,
+                    default: None,
                     span: Span {
                         start: 5,
                         end: 11,

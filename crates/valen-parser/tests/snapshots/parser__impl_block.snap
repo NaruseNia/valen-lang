@@ -92,6 +92,7 @@ expression: "check(\"impl Area for Circle { fn area(self) -> Float { self.r } }\
                                     },
                                 ),
                                 mutable: false,
+                                default: None,
                                 span: Span {
                                     start: 31,
                                     end: 35,

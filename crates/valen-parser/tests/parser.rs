@@ -332,6 +332,18 @@ fn annotation_meta_target() {
 }
 
 #[test]
+fn fn_with_default_args() {
+    assert_snapshot!(check(
+        "fn greet(msg: String = \"hi\", count: Int = 1) -> String { msg }"
+    ));
+}
+
+#[test]
+fn ctor_with_default_args() {
+    assert_snapshot!(check("class User(pub name: String, pub age: Int = 0) {}"));
+}
+
+#[test]
 fn impl_block() {
     assert_snapshot!(check(
         "impl Area for Circle { fn area(self) -> Float { self.r } }"

@@ -40,6 +40,7 @@ expression: "check(\"data class Point(x: Float, y: Float);\")"
                         },
                     ),
                     mutable: false,
+                    default: None,
                     span: Span {
                         start: 17,
                         end: 25,
@@ -77,6 +78,7 @@ expression: "check(\"data class Point(x: Float, y: Float);\")"
                         },
                     ),
                     mutable: false,
+                    default: None,
                     span: Span {
                         start: 27,
                         end: 35,

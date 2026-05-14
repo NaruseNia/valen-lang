@@ -93,12 +93,13 @@ pub struct FnDecl {
     pub span: Span,
 }
 
-/// A function parameter with name, type, and mutability.
+/// A function parameter with name, type, mutability, and optional default value.
 #[derive(Debug, Clone)]
 pub struct Param {
     pub name: SmolStr,
     pub ty: Type,
     pub mutable: bool,
+    pub default: Option<Expr>,
     pub span: Span,
 }
 
@@ -138,6 +139,7 @@ pub struct CtorParam {
     pub name: SmolStr,
     pub ty: Type,
     pub mutable: bool,
+    pub default: Option<Expr>,
     pub span: Span,
 }
 
