@@ -1,13 +1,13 @@
 package com.example;
 
 pub class SafeDemo {
-    fn safe_call(self) -> Int {
+    fn safe_call(self) -> Result<Int, JavaException> {
         safe {
             42
         }
     }
 
-    fn safe_string(self) -> String {
+    fn safe_string(self) -> Result<String, JavaException> {
         safe {
             "hello"
         }
