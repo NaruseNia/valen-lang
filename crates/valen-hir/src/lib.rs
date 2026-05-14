@@ -336,6 +336,8 @@ pub enum Ty {
     Prim(PrimTy),
     /// A resolved named type.
     Named(SmolStr),
+    /// A type parameter (e.g. `T` in `fn foo<T>(x: T)`).
+    TypeParam(SmolStr),
     /// A generic type with resolved type arguments.
     Generic(SmolStr, Vec<Ty>),
     /// A nullable type (`T?`).
@@ -391,6 +393,7 @@ impl std::fmt::Display for Ty {
         match self {
             Ty::Prim(p) => write!(f, "{p}"),
             Ty::Named(n) => write!(f, "{n}"),
+            Ty::TypeParam(n) => write!(f, "{n}"),
             Ty::Generic(n, args) => {
                 write!(f, "{n}<")?;
                 for (i, a) in args.iter().enumerate() {
@@ -479,7 +482,8 @@ pub fn tyref_to_ty(tyref: &TyRef) -> Ty {
             params.iter().map(tyref_to_ty).collect(),
             Box::new(tyref_to_ty(ret)),
         ),
-        TyRef::SelfTy | TyRef::Unresolved(_) | TyRef::Error => Ty::Error,
+        TyRef::Unresolved(n) => Ty::TypeParam(n.clone()),
+        TyRef::SelfTy | TyRef::Error => Ty::Error,
     }
 }
 

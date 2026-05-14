@@ -519,6 +519,52 @@ fn fixture_default_args() {
 }
 
 #[test]
+fn fixture_generics() {
+    let outputs = compile_fixture_outputs("generics.vln");
+    // Box + Pair + Wrapper = 3 classes (top-level fns go into one of the classes)
+    assert!(
+        outputs.len() >= 3,
+        "expected at least 3 classes (Box, Pair, Wrapper), got {}",
+        outputs.len()
+    );
+
+    let box_output = outputs
+        .iter()
+        .find(|o| o.internal_name == "com/example/Box")
+        .expect("Box class should be generated");
+    let box_class = ClassFile::from_bytes(&box_output.bytes).expect("parse Box classfile");
+    assert!(
+        box_class.methods.len() >= 2,
+        "Box should have at least <init> and get, got {}",
+        box_class.methods.len()
+    );
+
+    let pair_output = outputs
+        .iter()
+        .find(|o| o.internal_name == "com/example/Pair")
+        .expect("Pair class should be generated");
+    let pair_class = ClassFile::from_bytes(&pair_output.bytes).expect("parse Pair classfile");
+    // <init> + getLeft + getRight
+    assert!(
+        pair_class.methods.len() >= 3,
+        "Pair should have at least <init>, getLeft, getRight, got {}",
+        pair_class.methods.len()
+    );
+    // Pair has 2 fields (left, right)
+    assert_eq!(pair_class.fields.len(), 2);
+
+    let wrapper_output = outputs
+        .iter()
+        .find(|o| o.internal_name == "com/example/Wrapper")
+        .expect("Wrapper data class should be generated");
+    let wrapper_class =
+        ClassFile::from_bytes(&wrapper_output.bytes).expect("parse Wrapper classfile");
+    // data class: <init> + equals + hashCode + toString + copy
+    assert_eq!(wrapper_class.methods.len(), 5);
+    assert_eq!(wrapper_class.fields.len(), 1);
+}
+
+#[test]
 fn fixture_fn_assignment() {
     let classes = compile_fixture("fn_assignment.vln");
     assert_eq!(classes.len(), 1);
