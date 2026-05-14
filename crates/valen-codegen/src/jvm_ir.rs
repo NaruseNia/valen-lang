@@ -82,6 +82,60 @@ pub struct JvmClass {
     pub permitted_subclasses: Vec<String>,
     /// Whether this class should carry the `Record` attribute.
     pub is_record: bool,
+    /// Bootstrap methods referenced by `invokedynamic` call sites.
+    pub bootstrap_methods: Vec<JvmBootstrapMethod>,
+    /// Synthetic lambda body methods to be emitted alongside regular methods.
+    pub synthetic_methods: Vec<JvmMethod>,
+}
+
+/// Bootstrap method entry for the class-level `BootstrapMethods` attribute.
+#[derive(Debug, Clone)]
+pub struct JvmBootstrapMethod {
+    /// Which well-known bootstrap method to reference.
+    pub method_ref: BootstrapMethodRef,
+    /// Static arguments passed to the bootstrap method.
+    pub arguments: Vec<BootstrapArg>,
+}
+
+/// Well-known bootstrap method references.
+#[derive(Debug, Clone)]
+pub enum BootstrapMethodRef {
+    /// `java/lang/invoke/LambdaMetafactory.metafactory`.
+    LambdaMetafactory,
+}
+
+/// A static argument to a bootstrap method, resolved to constant pool entries during emission.
+#[derive(Debug, Clone)]
+pub enum BootstrapArg {
+    /// A `CONSTANT_MethodType_info` descriptor string.
+    MethodType(String),
+    /// A `CONSTANT_MethodHandle_info` reference.
+    MethodHandle {
+        kind: MethodHandleKind,
+        owner: String,
+        name: String,
+        descriptor: String,
+    },
+}
+
+/// Reference kind for `CONSTANT_MethodHandle_info`.
+#[derive(Debug, Clone)]
+pub enum MethodHandleKind {
+    /// `REF_invokeStatic` (kind 6).
+    InvokeStatic,
+}
+
+/// A synthetic lambda method collected during expression lowering.
+#[derive(Debug, Clone)]
+pub struct SyntheticLambda {
+    /// Synthetic method name (e.g. `lambda$0`).
+    pub name: String,
+    /// Parameter types for the synthetic method.
+    pub params: Vec<JvmType>,
+    /// Return type of the synthetic method.
+    pub return_type: JvmType,
+    /// Lowered method body.
+    pub body: JvmMethodBody,
 }
 
 /// Access flags for a JVM class.
@@ -266,6 +320,16 @@ pub enum JvmOp {
         stack: Vec<JvmType>,
     },
 
+    /// `invokedynamic` call site for lambda creation via `LambdaMetafactory`.
+    InvokeDynamic {
+        /// Index into the class-level `bootstrap_methods` table.
+        bootstrap_index: u16,
+        /// SAM method name (e.g. `"apply"` for `java.util.function.Function`).
+        name: String,
+        /// Call-site descriptor (e.g. `"()Ljava/util/function/Function;"`).
+        descriptor: String,
+    },
+
     /// Placeholder body that emits `throw new UnsupportedOperationException`.
     StubBody,
 }
@@ -379,6 +443,8 @@ impl JvmOp {
             JvmOp::IfICmpLt(_) | JvmOp::IfICmpGe(_) | JvmOp::IfICmpGt(_) | JvmOp::IfICmpLe(_) => -2,
             JvmOp::AThrow => -1,
             JvmOp::Frame { .. } => 0,
+            // No-capture lambda: consumes 0, produces 1 functional interface reference.
+            JvmOp::InvokeDynamic { .. } => 1,
             JvmOp::StubBody => 0,
         }
     }

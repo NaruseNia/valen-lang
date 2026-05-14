@@ -8,8 +8,8 @@ use crate::data_class_methods;
 use crate::descriptor::{class_internal_name, tyref_to_jvm};
 use crate::jvm_const::*;
 use crate::jvm_ir::{
-    JvmClass, JvmClassAccess, JvmField, JvmFieldAccess, JvmMethod, JvmMethodAccess, JvmMethodBody,
-    JvmOp, JvmType,
+    JvmBootstrapMethod, JvmClass, JvmClassAccess, JvmField, JvmFieldAccess, JvmMethod,
+    JvmMethodAccess, JvmMethodBody, JvmOp, JvmType, SyntheticLambda,
 };
 use crate::JvmVersion;
 
@@ -79,6 +79,8 @@ fn lower_class(
         .collect();
 
     let mut methods = Vec::new();
+    let mut all_synthetic_lambdas = Vec::new();
+    let mut all_bootstrap_methods = Vec::new();
 
     methods.push(generate_ctor(&internal, &super_class, &fields));
 
@@ -86,7 +88,10 @@ fn lower_class(
         if let Some(method_def) = hir.defs.get(&mid) {
             if let DefKind::Fn(fn_def) = &method_def.kind {
                 let body = typed_bodies.get(&mid);
-                methods.push(lower_method(hir, method_def, fn_def, body, &internal, pkg));
+                let result = lower_method(hir, method_def, fn_def, body, &internal, pkg);
+                methods.push(result.method);
+                all_synthetic_lambdas.extend(result.synthetic_lambdas);
+                all_bootstrap_methods.extend(result.bootstrap_methods);
             }
         }
     }
@@ -98,7 +103,10 @@ fn lower_class(
                 if let Some(method_def) = hir.defs.get(&mid) {
                     if let DefKind::Fn(fn_def) = &method_def.kind {
                         let body = typed_bodies.get(&mid);
-                        methods.push(lower_method(hir, method_def, fn_def, body, &internal, pkg));
+                        let result = lower_method(hir, method_def, fn_def, body, &internal, pkg);
+                        methods.push(result.method);
+                        all_synthetic_lambdas.extend(result.synthetic_lambdas);
+                        all_bootstrap_methods.extend(result.bootstrap_methods);
                     }
                 }
             }
@@ -106,6 +114,9 @@ fn lower_class(
     }
 
     let permitted = collect_permitted_subclasses(hir, &def.name, pkg);
+
+    // Convert collected synthetic lambdas to JvmMethod entries.
+    let synthetic_methods = synthetic_lambdas_to_methods(all_synthetic_lambdas);
 
     JvmClass {
         version: JvmVersion::Java21,
@@ -118,6 +129,8 @@ fn lower_class(
         source_file,
         permitted_subclasses: permitted,
         is_record: false,
+        bootstrap_methods: all_bootstrap_methods,
+        synthetic_methods,
     }
 }
 
@@ -166,6 +179,8 @@ fn lower_data_class(
         source_file,
         permitted_subclasses: vec![],
         is_record: false,
+        bootstrap_methods: vec![],
+        synthetic_methods: vec![],
     }
 }
 
@@ -258,6 +273,13 @@ fn generate_getter(class_internal: &str, field_name: &str, field_ty: &JvmType) -
     }
 }
 
+/// Result of lowering a single method, including any lambda artifacts.
+struct LowerMethodResult {
+    method: JvmMethod,
+    synthetic_lambdas: Vec<SyntheticLambda>,
+    bootstrap_methods: Vec<JvmBootstrapMethod>,
+}
+
 fn lower_method(
     hir: &Hir,
     def: &Def,
@@ -265,7 +287,7 @@ fn lower_method(
     typed_body: Option<&TypedBody>,
     class_internal: &str,
     pkg: Option<&[SmolStr]>,
-) -> JvmMethod {
+) -> LowerMethodResult {
     let params: Vec<JvmType> = fn_def
         .params
         .iter()
@@ -281,6 +303,9 @@ fn lower_method(
 
     let has_self = fn_def.params.iter().any(|p| p.is_self);
 
+    let mut synthetic_lambdas = Vec::new();
+    let mut bootstrap_methods = Vec::new();
+
     let body = if !fn_def.has_body {
         None
     } else if let Some(tb) = typed_body {
@@ -290,7 +315,7 @@ fn lower_method(
             .filter(|p| !p.is_self)
             .map(|p| (p.name.clone(), tyref_to_jvm(&p.ty, pkg, &hir.imports)))
             .collect();
-        Some(crate::expr::lower_body(
+        let result = crate::expr::lower_body(
             tb,
             class_internal,
             &param_pairs,
@@ -298,7 +323,10 @@ fn lower_method(
             has_self,
             pkg,
             hir,
-        ))
+        );
+        synthetic_lambdas = result.synthetic_lambdas;
+        bootstrap_methods = result.bootstrap_methods;
+        Some(result.body)
     } else {
         let max_locals =
             (if has_self { 1u16 } else { 0 }) + params.iter().map(|t| t.slot_count()).sum::<u16>();
@@ -309,19 +337,42 @@ fn lower_method(
         })
     };
 
-    JvmMethod {
-        access: JvmMethodAccess {
-            is_public: matches!(def.vis, Vis::Pub),
-            is_private: matches!(def.vis, Vis::Private),
-            is_static: !has_self,
-            is_abstract: !fn_def.has_body,
-            ..Default::default()
+    LowerMethodResult {
+        method: JvmMethod {
+            access: JvmMethodAccess {
+                is_public: matches!(def.vis, Vis::Pub),
+                is_private: matches!(def.vis, Vis::Private),
+                is_static: !has_self,
+                is_abstract: !fn_def.has_body,
+                ..Default::default()
+            },
+            name: def.name.to_string(),
+            params,
+            return_type,
+            body,
         },
-        name: def.name.to_string(),
-        params,
-        return_type,
-        body,
+        synthetic_lambdas,
+        bootstrap_methods,
     }
+}
+
+/// Converts collected `SyntheticLambda` entries into `JvmMethod` definitions.
+fn synthetic_lambdas_to_methods(lambdas: Vec<SyntheticLambda>) -> Vec<JvmMethod> {
+    lambdas
+        .into_iter()
+        .map(|lam| JvmMethod {
+            access: JvmMethodAccess {
+                is_private: true,
+                is_static: true,
+                is_synthetic: true,
+                ..Default::default()
+            },
+            name: lam.name,
+            params: lam.params,
+            return_type: lam.return_type,
+            body: Some(lam.body),
+        })
+        .collect()
 }
 
 fn class_access(vis: &Vis, kind: &ClassDefKind) -> JvmClassAccess {
@@ -399,6 +450,8 @@ fn lower_enum(
         source_file: source_file.clone(),
         permitted_subclasses: variant_internals.clone(),
         is_record: false,
+        bootstrap_methods: vec![],
+        synthetic_methods: vec![],
     });
 
     for (variant, variant_internal) in enum_def.variants.iter().zip(variant_internals.iter()) {
@@ -467,6 +520,8 @@ fn lower_record_variant(
         source_file,
         permitted_subclasses: vec![],
         is_record: true,
+        bootstrap_methods: vec![],
+        synthetic_methods: vec![],
     }
 }
 
@@ -558,6 +613,8 @@ fn lower_unit_variant(
         source_file,
         permitted_subclasses: vec![],
         is_record: false,
+        bootstrap_methods: vec![],
+        synthetic_methods: vec![],
     }
 }
 
