@@ -1,0 +1,11 @@
+package com.example;
+
+pub class Ranges {
+    fn make_range(self) -> Range<Int> {
+        0..10
+    }
+
+    fn make_inclusive(self) -> Range<Int> {
+        1..=9
+    }
+}

@@ -111,6 +111,7 @@ impl Resolver {
         self.inject_prelude_result(&prelude_pkg);
         self.inject_prelude_error_trait(&prelude_pkg);
         self.inject_prelude_iterator_trait(&prelude_pkg);
+        self.inject_prelude_range(&prelude_pkg);
         self.inject_prelude_java_exception(&prelude_pkg);
     }
 
@@ -290,6 +291,53 @@ impl Resolver {
                 SmolStr::from("valen"),
                 SmolStr::from("core"),
                 SmolStr::from("Iterator"),
+            ],
+        );
+    }
+
+    fn inject_prelude_range(&mut self, pkg: &Option<Vec<SmolStr>>) {
+        if self.scope.lookup("Range").is_some() {
+            return;
+        }
+        let id = self.hir.alloc_id();
+        let def = Def {
+            id,
+            name: SmolStr::from("Range"),
+            kind: DefKind::DataClass(DataClassDef {
+                ctor_params: vec![
+                    CtorParamDef {
+                        vis: Vis::Pub,
+                        name: SmolStr::from("start"),
+                        ty: TyRef::Unresolved(SmolStr::from("T")),
+                        mutable: false,
+                    },
+                    CtorParamDef {
+                        vis: Vis::Pub,
+                        name: SmolStr::from("end"),
+                        ty: TyRef::Unresolved(SmolStr::from("T")),
+                        mutable: false,
+                    },
+                    CtorParamDef {
+                        vis: Vis::Pub,
+                        name: SmolStr::from("inclusive"),
+                        ty: TyRef::Prim(crate::PrimTy::Bool),
+                        mutable: false,
+                    },
+                ],
+            }),
+            vis: Vis::Pub,
+            span: valen_ast::Span::DUMMY,
+            package: pkg.clone(),
+        };
+        self.hir.defs.insert(id, def);
+        self.hir.prelude_ids.push(id);
+        self.scope.names.insert(SmolStr::from("Range"), id);
+        self.hir.imports.insert(
+            SmolStr::from("Range"),
+            vec![
+                SmolStr::from("valen"),
+                SmolStr::from("core"),
+                SmolStr::from("Range"),
             ],
         );
     }

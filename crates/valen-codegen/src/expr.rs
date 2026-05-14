@@ -438,10 +438,12 @@ impl<'a> ExprLowering<'a> {
             TypedExprKind::Lambda { params, body } => {
                 self.lower_lambda(params, body, &expr.ty);
             }
-            TypedExprKind::Range { .. } => {
-                // Standalone Range expressions not yet supported (no Range class in stdlib).
-                // Range is handled inline when used as the iter of a for-loop.
-                self.ops.push(JvmOp::StubBody);
+            TypedExprKind::Range {
+                start,
+                end,
+                inclusive,
+            } => {
+                self.lower_range(start.as_deref(), end.as_deref(), *inclusive, &expr.ty);
             }
             TypedExprKind::StringInterp(parts) => {
                 self.lower_string_interp(parts);
@@ -1362,6 +1364,51 @@ impl<'a> ExprLowering<'a> {
         self.emit_frame(vec![]);
 
         self.pop_scope();
+    }
+
+    /// Constructs a `valen/core/Range` data class instance from a range expression.
+    fn lower_range(
+        &mut self,
+        start: Option<&TypedExpr>,
+        end: Option<&TypedExpr>,
+        inclusive: bool,
+        range_ty: &Ty,
+    ) {
+        let elem_ty = match range_ty {
+            Ty::Generic(_, args) if !args.is_empty() => self.ty_to_jvm(&args[0]),
+            _ => JvmType::Int,
+        };
+        let obj = JvmType::Object(JVM_OBJECT.to_string());
+        let range_class = "valen/core/Range";
+
+        self.ops.push(JvmOp::New(range_class.to_string()));
+        self.ops.push(JvmOp::Dup);
+
+        // start (boxed)
+        if let Some(s) = start {
+            self.lower_expr(s);
+        } else {
+            self.ops.push(JvmOp::PushInt(0));
+        }
+        self.emit_box(&elem_ty);
+
+        // end (boxed)
+        if let Some(e) = end {
+            self.lower_expr(e);
+        } else {
+            self.ops.push(JvmOp::PushInt(i32::MAX));
+        }
+        self.emit_box(&elem_ty);
+
+        // inclusive flag
+        self.ops.push(JvmOp::PushInt(if inclusive { 1 } else { 0 }));
+
+        self.ops.push(JvmOp::InvokeSpecial {
+            owner: range_class.to_string(),
+            name: INIT.to_string(),
+            params: vec![obj.clone(), obj, JvmType::Boolean],
+            ret: JvmType::Void,
+        });
     }
 
     /// Lowers a `safe {}` block into a JVM try-catch that produces

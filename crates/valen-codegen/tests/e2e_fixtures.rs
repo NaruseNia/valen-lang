@@ -374,6 +374,16 @@ fn fixture_fn_lambda() {
 }
 
 #[test]
+fn fixture_fn_range_standalone() {
+    let classes = compile_fixture("fn_range_standalone.vln");
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+    assert_eq!(c.class_name().unwrap(), "com/example/Ranges");
+    // <init> + make_range + make_inclusive
+    assert_eq!(c.methods.len(), 3);
+}
+
+#[test]
 fn fixture_fn_nested_control() {
     let classes = compile_fixture("fn_nested_control.vln");
     assert_eq!(classes.len(), 1);
