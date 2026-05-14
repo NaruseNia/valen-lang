@@ -170,7 +170,21 @@ pub enum DefKind {
     /// A type alias (`typealias Name<T> = Target<T>;`).
     TypeAlias(TypeAliasDef),
     /// An annotation class declaration.
-    AnnotationClass,
+    AnnotationClass(AnnotationClassDef),
+}
+
+/// Annotation class definition with parameter info and target metadata.
+#[derive(Debug, Clone)]
+pub struct AnnotationClassDef {
+    pub params: Vec<AnnotationParamDef>,
+    pub targets: Vec<SmolStr>,
+}
+
+/// A parameter of an annotation class.
+#[derive(Debug, Clone)]
+pub struct AnnotationParamDef {
+    pub name: SmolStr,
+    pub ty: TyRef,
 }
 
 /// Function or method definition.

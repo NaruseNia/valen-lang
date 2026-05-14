@@ -50,6 +50,9 @@ pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<DefId, TypedBody>) -> Vec<Jv
             DefKind::Trait(trait_def) if trait_def.is_sealed => {
                 classes.push(lower_sealed_trait(hir, def, pkg, source_file));
             }
+            DefKind::AnnotationClass(ann_def) => {
+                classes.push(lower_annotation_class(def, ann_def, pkg, source_file));
+            }
             _ => {}
         }
     }
@@ -192,6 +195,119 @@ fn lower_sealed_trait(
         bootstrap_methods: vec![],
         synthetic_methods: vec![],
         annotations: vec![],
+    }
+}
+
+fn lower_annotation_class(
+    def: &Def,
+    ann_def: &valen_hir::AnnotationClassDef,
+    pkg: Option<&[SmolStr]>,
+    source_file: Option<String>,
+) -> JvmClass {
+    let internal = class_internal_name(&def.name, pkg);
+
+    let methods: Vec<JvmMethod> = ann_def
+        .params
+        .iter()
+        .map(|p| {
+            let return_type = tyref_to_jvm(&p.ty, pkg, &Default::default());
+            JvmMethod {
+                access: JvmMethodAccess {
+                    is_public: true,
+                    is_abstract: true,
+                    ..Default::default()
+                },
+                name: p.name.to_string(),
+                params: vec![],
+                return_type,
+                body: None,
+            }
+        })
+        .collect();
+
+    let mut annotations = Vec::new();
+
+    // @Retention(RUNTIME)
+    annotations.push(crate::jvm_ir::JvmAnnotation {
+        type_descriptor: "Ljava/lang/annotation/Retention;".to_string(),
+        values: vec![(
+            "value".to_string(),
+            crate::jvm_ir::JvmAnnotationValue::Enum {
+                type_name: "Ljava/lang/annotation/RetentionPolicy;".to_string(),
+                const_name: "RUNTIME".to_string(),
+            },
+        )],
+    });
+
+    // @Target(...)
+    if !ann_def.targets.is_empty() {
+        let target_values: Vec<crate::jvm_ir::JvmAnnotationValue> = ann_def
+            .targets
+            .iter()
+            .map(|t| {
+                let element_type = match t.as_str() {
+                    "type" => "TYPE",
+                    "field" => "FIELD",
+                    "method" => "METHOD",
+                    other => other,
+                };
+                crate::jvm_ir::JvmAnnotationValue::Enum {
+                    type_name: "Ljava/lang/annotation/ElementType;".to_string(),
+                    const_name: element_type.to_string(),
+                }
+            })
+            .collect();
+        annotations.push(crate::jvm_ir::JvmAnnotation {
+            type_descriptor: "Ljava/lang/annotation/Target;".to_string(),
+            values: vec![(
+                "value".to_string(),
+                crate::jvm_ir::JvmAnnotationValue::Array(target_values),
+            )],
+        });
+    } else {
+        // Default: TYPE + FIELD + METHOD
+        annotations.push(crate::jvm_ir::JvmAnnotation {
+            type_descriptor: "Ljava/lang/annotation/Target;".to_string(),
+            values: vec![(
+                "value".to_string(),
+                crate::jvm_ir::JvmAnnotationValue::Array(vec![
+                    crate::jvm_ir::JvmAnnotationValue::Enum {
+                        type_name: "Ljava/lang/annotation/ElementType;".to_string(),
+                        const_name: "TYPE".to_string(),
+                    },
+                    crate::jvm_ir::JvmAnnotationValue::Enum {
+                        type_name: "Ljava/lang/annotation/ElementType;".to_string(),
+                        const_name: "FIELD".to_string(),
+                    },
+                    crate::jvm_ir::JvmAnnotationValue::Enum {
+                        type_name: "Ljava/lang/annotation/ElementType;".to_string(),
+                        const_name: "METHOD".to_string(),
+                    },
+                ]),
+            )],
+        });
+    }
+
+    JvmClass {
+        version: JvmVersion::Java21,
+        access: JvmClassAccess {
+            is_public: matches!(def.vis, Vis::Pub),
+            is_interface: true,
+            is_abstract: true,
+            is_annotation: true,
+            ..Default::default()
+        },
+        name: internal,
+        super_class: JVM_OBJECT.to_string(),
+        interfaces: vec!["java/lang/annotation/Annotation".to_string()],
+        fields: vec![],
+        methods,
+        source_file,
+        permitted_subclasses: vec![],
+        is_record: false,
+        bootstrap_methods: vec![],
+        synthetic_methods: vec![],
+        annotations,
     }
 }
 

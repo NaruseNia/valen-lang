@@ -11,17 +11,45 @@
 
 `::` / `.` と並ぶ意味のある prefix 記号として `@` を予約する。
 
-## 20.2 MVP スコープ
+## 20.2 annotation class 宣言（Phase 1.5 実装済み）
 
-**MVP では Valen コード内に annotation を書けない**。`@` トークンは lexer で予約されるが、parser は annotation 付与位置で受け付けない。
+```valen
+annotation class Deprecated(pub message: String)
 
-唯一の例外は Valen が提供する Java 側 annotation の **読み取り** — `@valen.Closed` のみ。
+annotation class Serializable  // マーカー annotation（パラメータなし）
 
-**Phase 1.5+ で追加予定:**
+@Target("type", "field")
+annotation class JsonName(pub name: String)
+```
 
-- annotation 宣言構文（`annotation class` など）
-- annotation の読み取り API（reflection 以外）
-- Valen コード内での annotation 付与
+**構文:** `annotation class Name(params)` — `annotation` は予約キーワード。
+
+**パラメータ値:** リテラルのみ（String, Int, Float, Bool, Long, Double, Char）。
+
+**retention:** デフォルト RUNTIME。`@Retention(RUNTIME)` + `@Target(...)` が自動 emit される。
+
+**@Target 指定:** `@Target("type")` / `@Target("type", "field", "method")` で制限可能。未指定時は TYPE + FIELD + METHOD。
+
+**JVM ABI:** `@interface`（ACC_INTERFACE | ACC_ABSTRACT | ACC_ANNOTATION）として emit。
+
+## 20.2.1 annotation 適用
+
+```valen
+@Deprecated(message = "use NewApi")
+pub class OldApi {}
+
+@JsonName("user_name")     // 単一パラメータは名前省略可
+pub name: String
+
+@Serializable              // マーカーは () 不要
+data class User(pub name: String);
+```
+
+**適用対象:** トップレベル宣言（class, data class, enum, trait, fn）+ フィールド / ctor パラメータ。
+
+**引数構文:** named 引数基本（`key = value`）。パラメータが1つのみの場合は名前省略可（`@Foo("bar")`）。
+
+**Java annotation:** import した Java annotation も `@Foo(...)` で適用可能。パラメータ検証なし（信頼ベース emit）。
 
 ## 20.3 `@valen.Closed`
 

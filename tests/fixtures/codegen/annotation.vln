@@ -1,0 +1,9 @@
+package com.example;
+
+@Target("type")
+pub annotation class Deprecated(pub message: String)
+
+pub annotation class Serializable
+
+@Deprecated(message = "use NewApi")
+pub class OldApi {}

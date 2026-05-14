@@ -442,6 +442,68 @@ fn fixture_sealed_trait() {
 }
 
 #[test]
+fn fixture_annotation() {
+    let outputs = compile_fixture_outputs("annotation.vln");
+    // Deprecated (@interface) + Serializable (@interface) + OldApi (class)
+    assert_eq!(outputs.len(), 3);
+
+    let deprecated_output = outputs
+        .iter()
+        .find(|o| o.internal_name == "com/example/Deprecated")
+        .expect("Deprecated annotation class should be generated");
+    let deprecated =
+        ClassFile::from_bytes(&deprecated_output.bytes).expect("parse Deprecated classfile");
+    assert!(
+        deprecated
+            .access_flags
+            .contains(ClassAccessFlags::ANNOTATION),
+        "annotation class should have ACC_ANNOTATION"
+    );
+    assert!(
+        deprecated
+            .access_flags
+            .contains(ClassAccessFlags::INTERFACE),
+        "annotation class should have ACC_INTERFACE"
+    );
+    assert!(
+        deprecated.access_flags.contains(ClassAccessFlags::ABSTRACT),
+        "annotation class should have ACC_ABSTRACT"
+    );
+
+    // Should have RuntimeVisibleAnnotations (@Retention + @Target)
+    let has_rva = deprecated
+        .attributes
+        .iter()
+        .any(|a| matches!(a, Attribute::RuntimeVisibleAnnotations { .. }));
+    assert!(
+        has_rva,
+        "annotation class should have RuntimeVisibleAnnotations"
+    );
+
+    // Should have 1 abstract method: message()
+    // Should have 1 abstract method: message()
+    assert_eq!(
+        deprecated.methods.len(),
+        1,
+        "Deprecated should have 1 method (message)"
+    );
+
+    // Serializable should also be an annotation
+    let serializable_output = outputs
+        .iter()
+        .find(|o| o.internal_name == "com/example/Serializable")
+        .expect("Serializable annotation class should be generated");
+    let serializable =
+        ClassFile::from_bytes(&serializable_output.bytes).expect("parse Serializable classfile");
+    assert!(
+        serializable
+            .access_flags
+            .contains(ClassAccessFlags::ANNOTATION),
+        "marker annotation class should have ACC_ANNOTATION"
+    );
+}
+
+#[test]
 fn fixture_fn_assignment() {
     let classes = compile_fixture("fn_assignment.vln");
     assert_eq!(classes.len(), 1);
