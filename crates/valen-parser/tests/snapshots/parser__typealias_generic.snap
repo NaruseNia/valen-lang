@@ -1,0 +1,143 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"pub typealias Mapping<K, V> = java.util.Map<K, V>;\")"
+---
+=== AST ===
+[
+    TypeAlias(
+        TypeAliasDecl {
+            visibility: Pub,
+            name: "Mapping",
+            generics: [
+                GenericParam {
+                    name: "K",
+                    variance: Invariant,
+                    bounds: [],
+                    span: Span {
+                        start: 22,
+                        end: 23,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+                GenericParam {
+                    name: "V",
+                    variance: Invariant,
+                    bounds: [],
+                    span: Span {
+                        start: 25,
+                        end: 26,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ],
+            ty: Path(
+                TypePath {
+                    segments: [
+                        TypePathSegment {
+                            name: "java",
+                            generics: [],
+                            span: Span {
+                                start: 30,
+                                end: 34,
+                                file_id: FileId(
+                                    0,
+                                ),
+                            },
+                        },
+                        TypePathSegment {
+                            name: "util",
+                            generics: [],
+                            span: Span {
+                                start: 35,
+                                end: 39,
+                                file_id: FileId(
+                                    0,
+                                ),
+                            },
+                        },
+                        TypePathSegment {
+                            name: "Map",
+                            generics: [
+                                Path(
+                                    TypePath {
+                                        segments: [
+                                            TypePathSegment {
+                                                name: "K",
+                                                generics: [],
+                                                span: Span {
+                                                    start: 44,
+                                                    end: 45,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ],
+                                        span: Span {
+                                            start: 44,
+                                            end: 45,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                Path(
+                                    TypePath {
+                                        segments: [
+                                            TypePathSegment {
+                                                name: "V",
+                                                generics: [],
+                                                span: Span {
+                                                    start: 47,
+                                                    end: 48,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ],
+                                        span: Span {
+                                            start: 47,
+                                            end: 48,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                            ],
+                            span: Span {
+                                start: 40,
+                                end: 49,
+                                file_id: FileId(
+                                    0,
+                                ),
+                            },
+                        },
+                    ],
+                    span: Span {
+                        start: 30,
+                        end: 49,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            span: Span {
+                start: 0,
+                end: 50,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

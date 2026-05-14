@@ -1,0 +1,72 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"typealias StringList = List<String>;\")"
+---
+=== AST ===
+[
+    TypeAlias(
+        TypeAliasDecl {
+            visibility: Internal,
+            name: "StringList",
+            generics: [],
+            ty: Path(
+                TypePath {
+                    segments: [
+                        TypePathSegment {
+                            name: "List",
+                            generics: [
+                                Path(
+                                    TypePath {
+                                        segments: [
+                                            TypePathSegment {
+                                                name: "String",
+                                                generics: [],
+                                                span: Span {
+                                                    start: 28,
+                                                    end: 34,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ],
+                                        span: Span {
+                                            start: 28,
+                                            end: 34,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                            ],
+                            span: Span {
+                                start: 23,
+                                end: 35,
+                                file_id: FileId(
+                                    0,
+                                ),
+                            },
+                        },
+                    ],
+                    span: Span {
+                        start: 23,
+                        end: 35,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            span: Span {
+                start: 0,
+                end: 36,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

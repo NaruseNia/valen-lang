@@ -164,8 +164,8 @@ pub enum DefKind {
     Trait(TraitDef),
     /// A trait impl block (`impl Trait for Type`).
     Impl(ImplDef),
-    /// A type alias.
-    TypeAlias,
+    /// A type alias (`typealias Name<T> = Target<T>;`).
+    TypeAlias(TypeAliasDef),
 }
 
 /// Function or method definition.
@@ -243,6 +243,15 @@ pub struct EnumVariantDef {
 #[derive(Debug, Clone)]
 pub struct TraitDef {
     pub methods: Vec<DefId>,
+}
+
+/// A type alias mapping a name to another type.
+#[derive(Debug, Clone)]
+pub struct TypeAliasDef {
+    /// Generic parameter names (e.g. `T`, `K`, `V`).
+    pub generics: Vec<SmolStr>,
+    /// The target type this alias expands to.
+    pub target: TyRef,
 }
 
 /// An `impl Trait for Type` block.

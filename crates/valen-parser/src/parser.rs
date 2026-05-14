@@ -24,8 +24,8 @@ use valen_ast::{
     GenericParam, IfExpr, ImplBlock, ImplItem, ImportDecl, Item, LambdaExpr, LambdaParam, LetStmt,
     Literal, LoopExpr, MatchArm, MatchExpr, MethodCallExpr, PackageDecl, Param, Path, PathSegment,
     Pattern, RangeExpr, RangePattern, ReturnExpr, Span, Stmt, StructPattern, StructPatternField,
-    TraitDecl, TraitItem, TryExpr, Type, TypePath, TypePathSegment, UnaryExpr, UnaryOp, Variance,
-    Visibility, WhileExpr,
+    TraitDecl, TraitItem, TryExpr, Type, TypeAliasDecl, TypePath, TypePathSegment, UnaryExpr,
+    UnaryOp, Variance, Visibility, WhileExpr,
 };
 use valen_diagnostics::{DiagCode, Diagnostics};
 
@@ -99,6 +99,7 @@ impl Parser {
             TokenKind::Enum => self.parse_enum(vis, start).map(Item::Enum),
             TokenKind::Trait => self.parse_trait(vis, start).map(Item::Trait),
             TokenKind::Impl => self.parse_impl(start).map(Item::Impl),
+            TokenKind::TypeAlias => self.parse_type_alias(vis, start).map(Item::TypeAlias),
             _ => {
                 let span = self.peek_span();
                 self.diagnostics.error(
@@ -555,6 +556,22 @@ impl Parser {
             name,
             generics,
             items,
+            span: start.merge(end),
+        })
+    }
+
+    fn parse_type_alias(&mut self, visibility: Visibility, start: Span) -> Option<TypeAliasDecl> {
+        self.expect(TokenKind::TypeAlias)?;
+        let name = self.expect_ident()?;
+        let generics = self.parse_generic_params()?;
+        self.expect(TokenKind::Eq)?;
+        let ty = self.parse_type()?;
+        let end = self.expect(TokenKind::Semi)?;
+        Some(TypeAliasDecl {
+            visibility,
+            name,
+            generics,
+            ty,
             span: start.merge(end),
         })
     }

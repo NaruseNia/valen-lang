@@ -1,13 +1,5 @@
 package valen.collections;
 
-// typealias is not yet implemented in the parser.
-// Once implemented, this file will contain:
-//
-//   typealias List<T> = java.util.List<T>;
-//   typealias Map<K, V> = java.util.Map<K, V>;
-//   typealias Set<T> = java.util.Set<T>;
-//
-// For now, users should import java.util types directly:
-//   import java.util.ArrayList;
-//   import java.util.HashMap;
-//   import java.util.HashSet;
+pub typealias List<T> = java.util.List<T>;
+pub typealias Map<K, V> = java.util.Map<K, V>;
+pub typealias Set<T> = java.util.Set<T>;
