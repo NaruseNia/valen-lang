@@ -6,11 +6,13 @@ expression: "check(\"data class Point(x: Float, y: Float);\")"
 [
     DataClass(
         DataClassDecl {
+            annotations: [],
             visibility: Internal,
             name: "Point",
             generics: [],
             ctor_params: [
                 CtorParam {
+                    annotations: [],
                     visibility: Internal,
                     name: "x",
                     ty: Path(
@@ -47,6 +49,7 @@ expression: "check(\"data class Point(x: Float, y: Float);\")"
                     },
                 },
                 CtorParam {
+                    annotations: [],
                     visibility: Internal,
                     name: "y",
                     ty: Path(

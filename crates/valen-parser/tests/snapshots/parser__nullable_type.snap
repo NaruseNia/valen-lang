@@ -6,6 +6,7 @@ expression: "check(\"fn find(id: Int) -> String? { id }\")"
 [
     Fn(
         FnDecl {
+            annotations: [],
             visibility: Internal,
             name: "find",
             generics: [],

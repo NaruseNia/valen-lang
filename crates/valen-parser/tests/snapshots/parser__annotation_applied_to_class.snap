@@ -1,0 +1,63 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"@Deprecated(message = \\\"old\\\")\\npub class OldApi {}\")"
+---
+=== AST ===
+[
+    Class(
+        ClassDecl {
+            annotations: [
+                Annotation {
+                    name: "Deprecated",
+                    args: [
+                        AnnotationArg {
+                            name: Some(
+                                "message",
+                            ),
+                            value: String(
+                                "old",
+                                Span {
+                                    start: 22,
+                                    end: 27,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            ),
+                            span: Span {
+                                start: 12,
+                                end: 27,
+                                file_id: FileId(
+                                    0,
+                                ),
+                            },
+                        },
+                    ],
+                    span: Span {
+                        start: 0,
+                        end: 28,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ],
+            visibility: Pub,
+            kind: Final,
+            name: "OldApi",
+            generics: [],
+            ctor_params: [],
+            supertypes: [],
+            body: [],
+            span: Span {
+                start: 0,
+                end: 48,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

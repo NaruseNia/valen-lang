@@ -60,6 +60,7 @@ expression: "check(\"impl Area for Circle { fn area(self) -> Float { self.r } }\
             items: [
                 Fn(
                     FnDecl {
+                        annotations: [],
                         visibility: Pub,
                         name: "area",
                         generics: [],

@@ -6,6 +6,7 @@ expression: "check(\"fn main() { user.name }\")"
 [
     Fn(
         FnDecl {
+            annotations: [],
             visibility: Internal,
             name: "main",
             generics: [],

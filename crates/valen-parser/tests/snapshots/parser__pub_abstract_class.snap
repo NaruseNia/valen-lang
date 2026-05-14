@@ -6,6 +6,7 @@ expression: "check(\"pub abstract class Bar {}\")"
 [
     Class(
         ClassDecl {
+            annotations: [],
             visibility: Pub,
             kind: Abstract,
             name: "Bar",

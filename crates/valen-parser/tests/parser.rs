@@ -307,6 +307,31 @@ fn sealed_trait_marker() {
 }
 
 #[test]
+fn annotation_class_with_params() {
+    assert_snapshot!(check("annotation class Deprecated(pub message: String)"));
+}
+
+#[test]
+fn annotation_class_marker() {
+    assert_snapshot!(check("annotation class Serializable"));
+}
+
+#[test]
+fn annotation_applied_to_class() {
+    assert_snapshot!(check("@Deprecated(message = \"old\")\npub class OldApi {}"));
+}
+
+#[test]
+fn annotation_single_param_shorthand() {
+    assert_snapshot!(check("@JsonName(\"user_name\")\nclass User {}"));
+}
+
+#[test]
+fn annotation_meta_target() {
+    assert_snapshot!(check("@Target(\"type\")\nannotation class MyAnnotation"));
+}
+
+#[test]
 fn impl_block() {
     assert_snapshot!(check(
         "impl Area for Circle { fn area(self) -> Float { self.r } }"

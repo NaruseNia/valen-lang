@@ -18,14 +18,15 @@
 use smol_str::SmolStr;
 use valen_ast::token::TokenKind;
 use valen_ast::{
-    AssignExpr, AtPattern, BinaryExpr, BinaryOp, BindingPattern, Block, BreakExpr, CallArg,
-    CallExpr, ClassDecl, ClassKind, ClassMember, ContinueExpr, CtorParam, DataClassDecl, EnumDecl,
-    EnumField, EnumVariant, EnumVariantFields, Expr, FieldAccess, FileId, FnDecl, ForExpr,
-    GenericParam, IfExpr, ImplBlock, ImplItem, ImportDecl, Item, LambdaExpr, LambdaParam, LetStmt,
-    Literal, LoopExpr, MatchArm, MatchExpr, MethodCallExpr, PackageDecl, Param, Path, PathSegment,
-    Pattern, RangeExpr, RangePattern, ReturnExpr, Span, Stmt, StructPattern, StructPatternField,
-    TraitDecl, TraitItem, TryExpr, Type, TypeAliasDecl, TypePath, TypePathSegment, UnaryExpr,
-    UnaryOp, Variance, Visibility, WhileExpr,
+    Annotation, AnnotationArg, AnnotationClassDecl, AnnotationParam, AssignExpr, AtPattern,
+    BinaryExpr, BinaryOp, BindingPattern, Block, BreakExpr, CallArg, CallExpr, ClassDecl,
+    ClassKind, ClassMember, ContinueExpr, CtorParam, DataClassDecl, EnumDecl, EnumField,
+    EnumVariant, EnumVariantFields, Expr, FieldAccess, FileId, FnDecl, ForExpr, GenericParam,
+    IfExpr, ImplBlock, ImplItem, ImportDecl, Item, LambdaExpr, LambdaParam, LetStmt, Literal,
+    LoopExpr, MatchArm, MatchExpr, MethodCallExpr, PackageDecl, Param, Path, PathSegment, Pattern,
+    RangeExpr, RangePattern, ReturnExpr, Span, Stmt, StructPattern, StructPatternField, TraitDecl,
+    TraitItem, TryExpr, Type, TypeAliasDecl, TypePath, TypePathSegment, UnaryExpr, UnaryOp,
+    Variance, Visibility, WhileExpr,
 };
 use valen_diagnostics::{DiagCode, Diagnostics};
 
@@ -83,30 +84,40 @@ impl Parser {
         }
 
         let start = self.peek_span();
+        let annotations = self.parse_annotations();
         let vis = self.parse_visibility();
         match self.peek() {
+            TokenKind::Annotation => self
+                .parse_annotation_class(annotations, vis, start)
+                .map(Item::AnnotationClass),
             TokenKind::Fn => self
-                .parse_fn_decl(vis, start, false, false, false)
+                .parse_fn_decl(annotations, vis, start, false, false, false)
                 .map(Item::Fn),
             TokenKind::Class => self
-                .parse_class(vis, ClassKind::Final, start)
+                .parse_class(annotations, vis, ClassKind::Final, start)
                 .map(Item::Class),
             TokenKind::Open | TokenKind::Abstract => {
                 let kind = self.parse_class_kind();
-                self.parse_class(vis, kind, start).map(Item::Class)
+                self.parse_class(annotations, vis, kind, start)
+                    .map(Item::Class)
             }
             TokenKind::Sealed => {
                 self.bump();
                 if self.at(&TokenKind::Trait) {
-                    self.parse_trait(vis, true, start).map(Item::Trait)
+                    self.parse_trait(annotations, vis, true, start)
+                        .map(Item::Trait)
                 } else {
-                    self.parse_class(vis, ClassKind::Sealed, start)
+                    self.parse_class(annotations, vis, ClassKind::Sealed, start)
                         .map(Item::Class)
                 }
             }
-            TokenKind::Data => self.parse_data_class(vis, start).map(Item::DataClass),
-            TokenKind::Enum => self.parse_enum(vis, start).map(Item::Enum),
-            TokenKind::Trait => self.parse_trait(vis, false, start).map(Item::Trait),
+            TokenKind::Data => self
+                .parse_data_class(annotations, vis, start)
+                .map(Item::DataClass),
+            TokenKind::Enum => self.parse_enum(annotations, vis, start).map(Item::Enum),
+            TokenKind::Trait => self
+                .parse_trait(annotations, vis, false, start)
+                .map(Item::Trait),
             TokenKind::Impl => self.parse_impl(start).map(Item::Impl),
             TokenKind::TypeAlias => self.parse_type_alias(vis, start).map(Item::TypeAlias),
             _ => {
@@ -121,6 +132,63 @@ impl Parser {
                 None
             }
         }
+    }
+
+    fn parse_annotations(&mut self) -> Vec<Annotation> {
+        let mut annotations = Vec::new();
+        while self.at(&TokenKind::At) {
+            if let Some(ann) = self.parse_annotation() {
+                annotations.push(ann);
+            }
+        }
+        annotations
+    }
+
+    fn parse_annotation(&mut self) -> Option<Annotation> {
+        let start = self.expect(TokenKind::At)?;
+        let name = self.expect_ident()?;
+        let args = if self.at(&TokenKind::LParen) {
+            self.bump();
+            let mut args = Vec::new();
+            while !self.at(&TokenKind::RParen) && !self.at_eof() {
+                if !args.is_empty() {
+                    self.expect(TokenKind::Comma)?;
+                    if self.at(&TokenKind::RParen) {
+                        break;
+                    }
+                }
+                let arg_start = self.peek_span();
+                if self.peek_is_ident() && self.peek_ahead_is(&TokenKind::Eq) {
+                    let arg_name = self.expect_ident()?;
+                    self.expect(TokenKind::Eq)?;
+                    let value = self.parse_literal()?;
+                    let end = literal_span(&value);
+                    args.push(AnnotationArg {
+                        name: Some(arg_name),
+                        value,
+                        span: arg_start.merge(end),
+                    });
+                } else {
+                    let value = self.parse_literal()?;
+                    let end = literal_span(&value);
+                    args.push(AnnotationArg {
+                        name: None,
+                        value,
+                        span: arg_start.merge(end),
+                    });
+                }
+            }
+            self.expect(TokenKind::RParen)?;
+            args
+        } else {
+            Vec::new()
+        };
+        let end = self.prev_span();
+        Some(Annotation {
+            name,
+            args,
+            span: start.merge(end),
+        })
     }
 
     fn parse_visibility(&mut self) -> Visibility {
@@ -159,8 +227,60 @@ impl Parser {
         }
     }
 
+    fn parse_annotation_class(
+        &mut self,
+        annotations: Vec<Annotation>,
+        visibility: Visibility,
+        start: Span,
+    ) -> Option<AnnotationClassDecl> {
+        self.expect(TokenKind::Annotation)?;
+        self.expect(TokenKind::Class)?;
+        let name = self.expect_ident()?;
+        let params = if self.at(&TokenKind::LParen) {
+            self.parse_annotation_class_params()?
+        } else {
+            Vec::new()
+        };
+        let end = self.prev_span();
+        Some(AnnotationClassDecl {
+            visibility,
+            name,
+            annotations,
+            params,
+            span: start.merge(end),
+        })
+    }
+
+    fn parse_annotation_class_params(&mut self) -> Option<Vec<AnnotationParam>> {
+        self.expect(TokenKind::LParen)?;
+        let mut params = Vec::new();
+        while !self.at(&TokenKind::RParen) && !self.at_eof() {
+            if !params.is_empty() {
+                self.expect(TokenKind::Comma)?;
+                if self.at(&TokenKind::RParen) {
+                    break;
+                }
+            }
+            let param_start = self.peek_span();
+            let vis = self.parse_visibility();
+            let name = self.expect_ident()?;
+            self.expect(TokenKind::Colon)?;
+            let ty = self.parse_type()?;
+            let span = param_start.merge(type_span(&ty));
+            params.push(AnnotationParam {
+                visibility: vis,
+                name,
+                ty,
+                span,
+            });
+        }
+        self.expect(TokenKind::RParen)?;
+        Some(params)
+    }
+
     fn parse_fn_decl(
         &mut self,
+        annotations: Vec<Annotation>,
         visibility: Visibility,
         start: Span,
         is_open: bool,
@@ -183,6 +303,7 @@ impl Parser {
         let body = self.parse_block()?;
         let span = start.merge(body.span);
         Some(FnDecl {
+            annotations,
             visibility,
             name,
             generics,
@@ -302,6 +423,7 @@ impl Parser {
 
     fn parse_class(
         &mut self,
+        annotations: Vec<Annotation>,
         visibility: Visibility,
         kind: ClassKind,
         start: Span,
@@ -329,6 +451,7 @@ impl Parser {
         };
 
         Some(ClassDecl {
+            annotations,
             visibility,
             kind,
             name,
@@ -351,6 +474,7 @@ impl Parser {
                 }
             }
             let param_start = self.peek_span();
+            let param_annotations = self.parse_annotations();
             let vis = self.parse_visibility();
             let mutable = self.eat(&TokenKind::Mut).is_some();
             let name = self.expect_ident()?;
@@ -358,6 +482,7 @@ impl Parser {
             let ty = self.parse_type()?;
             let span = param_start.merge(type_span(&ty));
             params.push(CtorParam {
+                annotations: param_annotations,
                 visibility: vis,
                 name,
                 ty,
@@ -417,14 +542,21 @@ impl Parser {
         let mut members = Vec::new();
         while !self.at(&TokenKind::RBrace) && !self.at_eof() {
             let member_start = self.peek_span();
+            let member_annotations = self.parse_annotations();
             let vis = self.parse_visibility();
             match self.peek() {
                 TokenKind::Fn | TokenKind::Open | TokenKind::Override | TokenKind::Abstract => {
                     let is_open = self.eat(&TokenKind::Open).is_some();
                     let is_override = self.eat(&TokenKind::Override).is_some();
                     let is_abstract = self.eat(&TokenKind::Abstract).is_some();
-                    let method =
-                        self.parse_fn_decl(vis, member_start, is_open, is_override, is_abstract)?;
+                    let method = self.parse_fn_decl(
+                        member_annotations,
+                        vis,
+                        member_start,
+                        is_open,
+                        is_override,
+                        is_abstract,
+                    )?;
                     members.push(ClassMember::Method(method));
                 }
                 _ => {
@@ -441,7 +573,12 @@ impl Parser {
         Some(members)
     }
 
-    fn parse_data_class(&mut self, visibility: Visibility, start: Span) -> Option<DataClassDecl> {
+    fn parse_data_class(
+        &mut self,
+        annotations: Vec<Annotation>,
+        visibility: Visibility,
+        start: Span,
+    ) -> Option<DataClassDecl> {
         self.expect(TokenKind::Data)?;
         self.expect(TokenKind::Class)?;
         let name = self.expect_ident()?;
@@ -449,6 +586,7 @@ impl Parser {
         let ctor_params = self.parse_ctor_params()?;
         let end = self.expect(TokenKind::Semi)?;
         Some(DataClassDecl {
+            annotations,
             visibility,
             name,
             generics,
@@ -457,7 +595,12 @@ impl Parser {
         })
     }
 
-    fn parse_enum(&mut self, visibility: Visibility, start: Span) -> Option<EnumDecl> {
+    fn parse_enum(
+        &mut self,
+        annotations: Vec<Annotation>,
+        visibility: Visibility,
+        start: Span,
+    ) -> Option<EnumDecl> {
         self.expect(TokenKind::Enum)?;
         let name = self.expect_ident()?;
         let generics = self.parse_generic_params()?;
@@ -474,6 +617,7 @@ impl Parser {
         }
         let end = self.expect(TokenKind::RBrace)?;
         Some(EnumDecl {
+            annotations,
             visibility,
             name,
             generics,
@@ -521,6 +665,7 @@ impl Parser {
 
     fn parse_trait(
         &mut self,
+        annotations: Vec<Annotation>,
         visibility: Visibility,
         is_sealed: bool,
         start: Span,
@@ -552,6 +697,7 @@ impl Parser {
             let end = self.prev_span();
             let is_abstract = body.is_none();
             items.push(TraitItem::Fn(FnDecl {
+                annotations: vec![],
                 visibility: Visibility::Pub,
                 name: fn_name,
                 generics: fn_generics,
@@ -566,6 +712,7 @@ impl Parser {
         }
         let end = self.expect(TokenKind::RBrace)?;
         Some(TraitDecl {
+            annotations,
             visibility,
             is_sealed,
             name,
@@ -601,7 +748,8 @@ impl Parser {
         let mut items = Vec::new();
         while !self.at(&TokenKind::RBrace) && !self.at_eof() {
             let item_start = self.peek_span();
-            let fn_decl = self.parse_fn_decl(Visibility::Pub, item_start, false, false, false)?;
+            let fn_decl =
+                self.parse_fn_decl(vec![], Visibility::Pub, item_start, false, false, false)?;
             items.push(ImplItem::Fn(fn_decl));
         }
         let end = self.expect(TokenKind::RBrace)?;
@@ -1554,6 +1702,56 @@ impl Parser {
             SmolStr::from("expected identifier"),
         );
         None
+    }
+
+    fn peek_is_ident(&self) -> bool {
+        matches!(self.peek(), TokenKind::Ident(_))
+    }
+
+    fn peek_ahead_is(&self, kind: &TokenKind) -> bool {
+        self.lookahead(1) == kind
+    }
+
+    fn parse_literal(&mut self) -> Option<Literal> {
+        let span = self.peek_span();
+        match self.peek().clone() {
+            TokenKind::IntLit(v) => {
+                self.bump();
+                Some(Literal::Int(v, span))
+            }
+            TokenKind::LongLit(v) => {
+                self.bump();
+                Some(Literal::Long(v, span))
+            }
+            TokenKind::FloatLit(v) => {
+                self.bump();
+                Some(Literal::Float(v, span))
+            }
+            TokenKind::DoubleLit(v) => {
+                self.bump();
+                Some(Literal::Double(v, span))
+            }
+            TokenKind::StringLit(v) => {
+                self.bump();
+                Some(Literal::String(v, span))
+            }
+            TokenKind::CharLit(v) => {
+                self.bump();
+                Some(Literal::Char(v, span))
+            }
+            TokenKind::BoolLit(v) => {
+                self.bump();
+                Some(Literal::Bool(v, span))
+            }
+            _ => {
+                self.diagnostics.error(
+                    DiagCode::PARSE_EXPECTED_EXPR,
+                    span,
+                    SmolStr::from("expected literal value in annotation argument"),
+                );
+                None
+            }
+        }
     }
 
     fn recover_to_item_boundary(&mut self) {

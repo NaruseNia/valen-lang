@@ -6,6 +6,7 @@ expression: "check(\"class Foo {}\")"
 [
     Class(
         ClassDecl {
+            annotations: [],
             visibility: Internal,
             kind: Final,
             name: "Foo",

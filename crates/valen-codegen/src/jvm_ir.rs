@@ -86,6 +86,34 @@ pub struct JvmClass {
     pub bootstrap_methods: Vec<JvmBootstrapMethod>,
     /// Synthetic lambda body methods to be emitted alongside regular methods.
     pub synthetic_methods: Vec<JvmMethod>,
+    /// RuntimeVisibleAnnotations to emit on this class.
+    pub annotations: Vec<JvmAnnotation>,
+}
+
+/// An annotation to emit in RuntimeVisibleAnnotations.
+#[derive(Debug, Clone)]
+pub struct JvmAnnotation {
+    /// Annotation type descriptor (e.g. `Ljava/lang/Deprecated;`).
+    pub type_descriptor: String,
+    /// Named element-value pairs.
+    pub values: Vec<(String, JvmAnnotationValue)>,
+}
+
+/// A value in an annotation element-value pair.
+#[derive(Debug, Clone)]
+pub enum JvmAnnotationValue {
+    String(String),
+    Int(i32),
+    Long(i64),
+    Float(f32),
+    Double(f64),
+    Bool(bool),
+    Char(u16),
+    Enum {
+        type_name: String,
+        const_name: String,
+    },
+    Array(Vec<JvmAnnotationValue>),
 }
 
 /// Bootstrap method entry for the class-level `BootstrapMethods` attribute.
@@ -145,6 +173,7 @@ pub struct JvmClassAccess {
     pub is_final: bool,
     pub is_abstract: bool,
     pub is_interface: bool,
+    pub is_annotation: bool,
     pub is_super: bool,
 }
 

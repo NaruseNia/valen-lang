@@ -6,6 +6,7 @@ expression: "check(\"fn f() { xs.map(|x| x); }\")"
 [
     Fn(
         FnDecl {
+            annotations: [],
             visibility: Internal,
             name: "f",
             generics: [],

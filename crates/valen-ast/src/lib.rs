@@ -22,6 +22,43 @@ pub enum Item {
     Trait(TraitDecl),
     Impl(ImplBlock),
     TypeAlias(TypeAliasDecl),
+    AnnotationClass(AnnotationClassDecl),
+}
+
+/// An annotation applied to a declaration (e.g. `@Foo(x = 1)`).
+#[derive(Debug, Clone)]
+pub struct Annotation {
+    pub name: SmolStr,
+    pub args: Vec<AnnotationArg>,
+    pub span: Span,
+}
+
+/// A single argument in an annotation application.
+#[derive(Debug, Clone)]
+pub struct AnnotationArg {
+    /// `None` for single-parameter shorthand (e.g. `@Foo("bar")`).
+    pub name: Option<SmolStr>,
+    pub value: Literal,
+    pub span: Span,
+}
+
+/// Annotation class declaration (e.g. `annotation class Foo(pub x: Int)`).
+#[derive(Debug, Clone)]
+pub struct AnnotationClassDecl {
+    pub visibility: Visibility,
+    pub name: SmolStr,
+    pub annotations: Vec<Annotation>,
+    pub params: Vec<AnnotationParam>,
+    pub span: Span,
+}
+
+/// A parameter of an annotation class declaration.
+#[derive(Debug, Clone)]
+pub struct AnnotationParam {
+    pub visibility: Visibility,
+    pub name: SmolStr,
+    pub ty: Type,
+    pub span: Span,
 }
 
 /// Package declaration at the top of a source file (e.g. `package foo.bar`).
@@ -42,6 +79,7 @@ pub struct ImportDecl {
 /// Function declaration, used for top-level functions and methods.
 #[derive(Debug, Clone)]
 pub struct FnDecl {
+    pub annotations: Vec<Annotation>,
     pub visibility: Visibility,
     pub name: SmolStr,
     pub generics: Vec<GenericParam>,
@@ -67,6 +105,7 @@ pub struct Param {
 /// Class declaration with optional primary constructor and body members.
 #[derive(Debug, Clone)]
 pub struct ClassDecl {
+    pub annotations: Vec<Annotation>,
     pub visibility: Visibility,
     pub kind: ClassKind,
     pub name: SmolStr,
@@ -94,6 +133,7 @@ pub enum ClassKind {
 /// Parameter of a primary constructor; may also declare a field.
 #[derive(Debug, Clone)]
 pub struct CtorParam {
+    pub annotations: Vec<Annotation>,
     pub visibility: Visibility,
     pub name: SmolStr,
     pub ty: Type,
@@ -111,6 +151,7 @@ pub enum ClassMember {
 /// Field declaration inside a class body.
 #[derive(Debug, Clone)]
 pub struct FieldDecl {
+    pub annotations: Vec<Annotation>,
     pub visibility: Visibility,
     pub name: SmolStr,
     pub ty: Type,
@@ -122,6 +163,7 @@ pub struct FieldDecl {
 /// Data class declaration — value type with auto-generated `equals`/`hashCode`/`toString`.
 #[derive(Debug, Clone)]
 pub struct DataClassDecl {
+    pub annotations: Vec<Annotation>,
     pub visibility: Visibility,
     pub name: SmolStr,
     pub generics: Vec<GenericParam>,
@@ -132,6 +174,7 @@ pub struct DataClassDecl {
 /// Enum (algebraic data type) declaration.
 #[derive(Debug, Clone)]
 pub struct EnumDecl {
+    pub annotations: Vec<Annotation>,
     pub visibility: Visibility,
     pub name: SmolStr,
     pub generics: Vec<GenericParam>,
@@ -167,6 +210,7 @@ pub struct EnumField {
 /// Trait declaration — defines an interface with methods and associated types.
 #[derive(Debug, Clone)]
 pub struct TraitDecl {
+    pub annotations: Vec<Annotation>,
     pub visibility: Visibility,
     pub is_sealed: bool,
     pub name: SmolStr,

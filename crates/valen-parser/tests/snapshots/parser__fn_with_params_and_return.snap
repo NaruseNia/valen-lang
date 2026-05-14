@@ -6,6 +6,7 @@ expression: "check(\"fn add(a: Int, b: Int) -> Int { a }\")"
 [
     Fn(
         FnDecl {
+            annotations: [],
             visibility: Internal,
             name: "add",
             generics: [],

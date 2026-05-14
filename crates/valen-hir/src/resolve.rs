@@ -642,6 +642,41 @@ impl Resolver {
                 self.hir.defs.insert(id, def);
                 self.define_name(ta.name.clone(), id, ta.span);
             }
+            Item::AnnotationClass(ac) => {
+                let id = self.hir.alloc_id();
+                let params = ac
+                    .params
+                    .iter()
+                    .map(|p| crate::AnnotationParamDef {
+                        name: p.name.clone(),
+                        ty: lower_type_ref_with_params(&p.ty, &[]),
+                    })
+                    .collect();
+                let targets = ac
+                    .annotations
+                    .iter()
+                    .filter(|a| a.name == "Target")
+                    .flat_map(|a| {
+                        a.args.iter().filter_map(|arg| {
+                            if let valen_ast::Literal::String(s, _) = &arg.value {
+                                Some(s.clone())
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                    .collect();
+                let def = Def {
+                    id,
+                    name: ac.name.clone(),
+                    kind: DefKind::AnnotationClass(crate::AnnotationClassDef { params, targets }),
+                    vis: lower_vis(ac.visibility),
+                    span: ac.span,
+                    package: self.current_package.clone(),
+                };
+                self.hir.defs.insert(id, def);
+                self.define_name(ac.name.clone(), id, ac.span);
+            }
         }
     }
 

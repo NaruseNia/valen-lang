@@ -6,6 +6,7 @@ expression: "check(\"enum Shape { Circle(r: Float), Rectangle(w: Float, h: Float
 [
     Enum(
         EnumDecl {
+            annotations: [],
             visibility: Internal,
             name: "Shape",
             generics: [],

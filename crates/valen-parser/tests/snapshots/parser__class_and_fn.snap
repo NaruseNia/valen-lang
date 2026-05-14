@@ -6,6 +6,7 @@ expression: "check(\"class Foo {}\\nfn main() {}\")"
 [
     Class(
         ClassDecl {
+            annotations: [],
             visibility: Internal,
             kind: Final,
             name: "Foo",
@@ -24,6 +25,7 @@ expression: "check(\"class Foo {}\\nfn main() {}\")"
     ),
     Fn(
         FnDecl {
+            annotations: [],
             visibility: Internal,
             name: "main",
             generics: [],

@@ -6,6 +6,7 @@ expression: "check(\"fn main() { -1 + !false }\")"
 [
     Fn(
         FnDecl {
+            annotations: [],
             visibility: Internal,
             name: "main",
             generics: [],

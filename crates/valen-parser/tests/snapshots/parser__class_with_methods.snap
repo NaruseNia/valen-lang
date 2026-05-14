@@ -6,12 +6,14 @@ expression: "check(\"class Dog(pub name: String) { fn greet(self) -> String { se
 [
     Class(
         ClassDecl {
+            annotations: [],
             visibility: Internal,
             kind: Final,
             name: "Dog",
             generics: [],
             ctor_params: [
                 CtorParam {
+                    annotations: [],
                     visibility: Pub,
                     name: "name",
                     ty: Path(
@@ -52,6 +54,7 @@ expression: "check(\"class Dog(pub name: String) { fn greet(self) -> String { se
             body: [
                 Method(
                     FnDecl {
+                        annotations: [],
                         visibility: Internal,
                         name: "greet",
                         generics: [],

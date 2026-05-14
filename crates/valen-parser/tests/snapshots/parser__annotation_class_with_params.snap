@@ -1,0 +1,60 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"annotation class Deprecated(pub message: String)\")"
+---
+=== AST ===
+[
+    AnnotationClass(
+        AnnotationClassDecl {
+            visibility: Internal,
+            name: "Deprecated",
+            annotations: [],
+            params: [
+                AnnotationParam {
+                    visibility: Pub,
+                    name: "message",
+                    ty: Path(
+                        TypePath {
+                            segments: [
+                                TypePathSegment {
+                                    name: "String",
+                                    generics: [],
+                                    span: Span {
+                                        start: 41,
+                                        end: 47,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                            ],
+                            span: Span {
+                                start: 41,
+                                end: 47,
+                                file_id: FileId(
+                                    0,
+                                ),
+                            },
+                        },
+                    ),
+                    span: Span {
+                        start: 28,
+                        end: 47,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ],
+            span: Span {
+                start: 0,
+                end: 48,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

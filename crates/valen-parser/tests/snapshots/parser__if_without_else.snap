@@ -6,6 +6,7 @@ expression: "check(\"fn f() { if cond { do_thing(); } }\")"
 [
     Fn(
         FnDecl {
+            annotations: [],
             visibility: Internal,
             name: "f",
             generics: [],
