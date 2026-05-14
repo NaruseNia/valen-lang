@@ -30,10 +30,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: clippy
-      - uses: jdx/mise-action@v2
       - run: rustup component add clippy
       - run: mise run clippy
 
@@ -46,10 +46,10 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: v2-test-${{ matrix.os }}
-      - uses: jdx/mise-action@v2
+          shared-key: test-${{ matrix.os }}
       - run: mise run check
       - run: mise run test
       - run: mise run build
@@ -61,10 +61,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: docs
-      - uses: jdx/mise-action@v2
       - run: mise run doc
 
   ci:
