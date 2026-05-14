@@ -50,6 +50,7 @@ pub fn generate_closed_annotation() -> Result<ClassFileOutput, emit::CodegenErro
         is_record: false,
         bootstrap_methods: vec![],
         synthetic_methods: vec![],
+        annotations: vec![],
     };
     emit::emit_class(&jvm_class)
 }

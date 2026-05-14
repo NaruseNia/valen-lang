@@ -6,6 +6,7 @@ expression: "check(\"trait Display { fn display(self) -> String { self.name } }\
 [
     Trait(
         TraitDecl {
+            annotations: [],
             visibility: Internal,
             is_sealed: false,
             name: "Display",
@@ -13,6 +14,7 @@ expression: "check(\"trait Display { fn display(self) -> String { self.name } }\
             items: [
                 Fn(
                     FnDecl {
+                        annotations: [],
                         visibility: Pub,
                         name: "display",
                         generics: [],

@@ -6,12 +6,14 @@ expression: "check(\"class User(pub name: String, mut age: Int) {}\")"
 [
     Class(
         ClassDecl {
+            annotations: [],
             visibility: Internal,
             kind: Final,
             name: "User",
             generics: [],
             ctor_params: [
                 CtorParam {
+                    annotations: [],
                     visibility: Pub,
                     name: "name",
                     ty: Path(
@@ -48,6 +50,7 @@ expression: "check(\"class User(pub name: String, mut age: Int) {}\")"
                     },
                 },
                 CtorParam {
+                    annotations: [],
                     visibility: Internal,
                     name: "age",
                     ty: Path(

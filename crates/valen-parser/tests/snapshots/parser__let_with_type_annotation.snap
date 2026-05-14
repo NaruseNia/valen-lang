@@ -6,6 +6,7 @@ expression: "check(\"fn main() { let x: Int = 42; x }\")"
 [
     Fn(
         FnDecl {
+            annotations: [],
             visibility: Internal,
             name: "main",
             generics: [],

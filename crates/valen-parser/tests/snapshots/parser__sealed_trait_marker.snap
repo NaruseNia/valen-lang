@@ -6,6 +6,7 @@ expression: "check(\"sealed trait Marker {}\")"
 [
     Trait(
         TraitDecl {
+            annotations: [],
             visibility: Internal,
             is_sealed: true,
             name: "Marker",

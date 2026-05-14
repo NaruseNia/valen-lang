@@ -6,6 +6,7 @@ expression: "check(\"fn main() { let mut count = 0; count }\")"
 [
     Fn(
         FnDecl {
+            annotations: [],
             visibility: Internal,
             name: "main",
             generics: [],

@@ -6,6 +6,7 @@ expression: "check(\"fn first(xs: List<Int>) -> Option<Int> { xs }\")"
 [
     Fn(
         FnDecl {
+            annotations: [],
             visibility: Internal,
             name: "first",
             generics: [],

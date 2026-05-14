@@ -154,6 +154,7 @@ fn lower_class(
         is_record: false,
         bootstrap_methods: all_bootstrap_methods,
         synthetic_methods,
+        annotations: vec![],
     }
 }
 
@@ -190,6 +191,7 @@ fn lower_sealed_trait(
         is_record: false,
         bootstrap_methods: vec![],
         synthetic_methods: vec![],
+        annotations: vec![],
     }
 }
 
@@ -275,6 +277,7 @@ fn lower_data_class(
         is_record: false,
         bootstrap_methods: all_bootstrap_methods,
         synthetic_methods,
+        annotations: vec![],
     }
 }
 
@@ -552,6 +555,7 @@ fn lower_enum(
         is_record: false,
         bootstrap_methods: vec![],
         synthetic_methods: vec![],
+        annotations: vec![],
     });
 
     for (variant, variant_internal) in enum_def.variants.iter().zip(variant_internals.iter()) {
@@ -622,6 +626,7 @@ fn lower_record_variant(
         is_record: true,
         bootstrap_methods: vec![],
         synthetic_methods: vec![],
+        annotations: vec![],
     }
 }
 
@@ -715,6 +720,7 @@ fn lower_unit_variant(
         is_record: false,
         bootstrap_methods: vec![],
         synthetic_methods: vec![],
+        annotations: vec![],
     }
 }
 

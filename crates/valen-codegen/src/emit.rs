@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 
 use ristretto_classfile::attributes::{
-    Attribute, BootstrapMethod, ExceptionTableEntry, Instruction, Record, StackFrame,
-    VerificationType,
+    AnnotationElement, AnnotationValuePair, Attribute, BootstrapMethod, ExceptionTableEntry,
+    Instruction, Record, StackFrame, VerificationType,
 };
 use ristretto_classfile::{
     BaseType, ClassAccessFlags, ClassFile, ConstantPool, Field, FieldAccessFlags, FieldType,
@@ -85,6 +85,31 @@ pub fn emit_class(jvm_class: &JvmClass) -> Result<ClassFileOutput, CodegenError>
         });
     }
 
+    if !jvm_class.annotations.is_empty() {
+        let rva_name = cp.add_utf8("RuntimeVisibleAnnotations")?;
+        let mut annotations = Vec::new();
+        for ann in &jvm_class.annotations {
+            let type_idx = cp.add_utf8(&ann.type_descriptor)?;
+            let mut elements = Vec::new();
+            for (name, value) in &ann.values {
+                let name_idx = cp.add_utf8(name)?;
+                let element = emit_annotation_value(&mut cp, value)?;
+                elements.push(AnnotationValuePair {
+                    name_index: name_idx,
+                    value: element,
+                });
+            }
+            annotations.push(ristretto_classfile::attributes::Annotation {
+                type_index: type_idx,
+                elements,
+            });
+        }
+        attributes.push(Attribute::RuntimeVisibleAnnotations {
+            name_index: rva_name,
+            annotations,
+        });
+    }
+
     if let Some(ref sf) = jvm_class.source_file {
         let sf_name = cp.add_utf8("SourceFile")?;
         let sf_index = cp.add_utf8(sf)?;
@@ -124,6 +149,9 @@ pub fn emit_class(jvm_class: &JvmClass) -> Result<ClassFileOutput, CodegenError>
     }
     if jvm_class.access.is_interface {
         access_flags |= ClassAccessFlags::INTERFACE;
+    }
+    if jvm_class.access.is_annotation {
+        access_flags |= ClassAccessFlags::ANNOTATION;
     }
     if jvm_class.access.is_super {
         access_flags |= ClassAccessFlags::SUPER;
@@ -172,6 +200,75 @@ pub fn emit_class(jvm_class: &JvmClass) -> Result<ClassFileOutput, CodegenError>
 }
 
 /// Emits BootstrapMethod entries from the IR-level bootstrap method descriptors.
+fn emit_annotation_value(
+    cp: &mut ConstantPool,
+    value: &crate::jvm_ir::JvmAnnotationValue,
+) -> Result<AnnotationElement, CodegenError> {
+    use crate::jvm_ir::JvmAnnotationValue;
+    match value {
+        JvmAnnotationValue::String(s) => {
+            let idx = cp.add_utf8(s)?;
+            Ok(AnnotationElement::String {
+                const_value_index: idx,
+            })
+        }
+        JvmAnnotationValue::Int(v) => {
+            let idx = cp.add_integer(*v)?;
+            Ok(AnnotationElement::Int {
+                const_value_index: idx,
+            })
+        }
+        JvmAnnotationValue::Long(v) => {
+            let idx = cp.add_long(*v)?;
+            Ok(AnnotationElement::Long {
+                const_value_index: idx,
+            })
+        }
+        JvmAnnotationValue::Float(v) => {
+            let idx = cp.add_float(*v)?;
+            Ok(AnnotationElement::Float {
+                const_value_index: idx,
+            })
+        }
+        JvmAnnotationValue::Double(v) => {
+            let idx = cp.add_double(*v)?;
+            Ok(AnnotationElement::Double {
+                const_value_index: idx,
+            })
+        }
+        JvmAnnotationValue::Bool(v) => {
+            let idx = cp.add_integer(if *v { 1 } else { 0 })?;
+            Ok(AnnotationElement::Boolean {
+                const_value_index: idx,
+            })
+        }
+        JvmAnnotationValue::Char(v) => {
+            let idx = cp.add_integer(*v as i32)?;
+            Ok(AnnotationElement::Char {
+                const_value_index: idx,
+            })
+        }
+        JvmAnnotationValue::Enum {
+            type_name,
+            const_name,
+        } => {
+            let type_idx = cp.add_utf8(type_name)?;
+            let const_idx = cp.add_utf8(const_name)?;
+            Ok(AnnotationElement::Enum {
+                type_name_index: type_idx,
+                const_name_index: const_idx,
+            })
+        }
+        JvmAnnotationValue::Array(values) => {
+            let mut elements = Vec::new();
+            for v in values {
+                elements.push(emit_annotation_value(cp, v)?);
+            }
+            Ok(AnnotationElement::Array { values: elements })
+        }
+    }
+}
+
 fn emit_bootstrap_methods(
     cp: &mut ConstantPool,
     bsm_list: &[crate::jvm_ir::JvmBootstrapMethod],
@@ -1080,6 +1177,7 @@ mod tests {
             is_record: false,
             bootstrap_methods: vec![],
             synthetic_methods: vec![],
+            annotations: vec![],
         }
     }
 
@@ -1291,6 +1389,7 @@ mod tests {
             is_record: false,
             bootstrap_methods: vec![],
             synthetic_methods: vec![],
+            annotations: vec![],
         };
 
         let output = emit_class(&jvm_class).unwrap();

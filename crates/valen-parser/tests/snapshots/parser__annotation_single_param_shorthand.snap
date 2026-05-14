@@ -1,0 +1,61 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"@JsonName(\\\"user_name\\\")\\nclass User {}\")"
+---
+=== AST ===
+[
+    Class(
+        ClassDecl {
+            annotations: [
+                Annotation {
+                    name: "JsonName",
+                    args: [
+                        AnnotationArg {
+                            name: None,
+                            value: String(
+                                "user_name",
+                                Span {
+                                    start: 10,
+                                    end: 21,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            ),
+                            span: Span {
+                                start: 10,
+                                end: 21,
+                                file_id: FileId(
+                                    0,
+                                ),
+                            },
+                        },
+                    ],
+                    span: Span {
+                        start: 0,
+                        end: 22,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ],
+            visibility: Internal,
+            kind: Final,
+            name: "User",
+            generics: [],
+            ctor_params: [],
+            supertypes: [],
+            body: [],
+            span: Span {
+                start: 0,
+                end: 36,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

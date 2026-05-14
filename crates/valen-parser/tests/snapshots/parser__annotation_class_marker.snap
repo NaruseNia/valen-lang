@@ -1,22 +1,18 @@
 ---
 source: crates/valen-parser/tests/parser.rs
-expression: "check(\"pub class Foo {}\")"
+expression: "check(\"annotation class Serializable\")"
 ---
 === AST ===
 [
-    Class(
-        ClassDecl {
+    AnnotationClass(
+        AnnotationClassDecl {
+            visibility: Internal,
+            name: "Serializable",
             annotations: [],
-            visibility: Pub,
-            kind: Final,
-            name: "Foo",
-            generics: [],
-            ctor_params: [],
-            supertypes: [],
-            body: [],
+            params: [],
             span: Span {
                 start: 0,
-                end: 16,
+                end: 29,
                 file_id: FileId(
                     0,
                 ),

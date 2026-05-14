@@ -152,6 +152,7 @@ impl<'a> Printer<'a> {
             Item::Trait(t) => self.print_trait(t),
             Item::Impl(i) => self.print_impl_block(i),
             Item::TypeAlias(t) => self.print_type_alias(t),
+            Item::AnnotationClass(a) => self.print_annotation_class(a),
         }
     }
 
@@ -421,6 +422,51 @@ impl<'a> Printer<'a> {
                 self.newline();
             }
         }
+    }
+
+    fn print_annotations(&mut self, annotations: &[valen_ast::Annotation]) {
+        for ann in annotations {
+            self.write_indent();
+            self.w("@");
+            self.w(&ann.name);
+            if !ann.args.is_empty() {
+                self.w("(");
+                for (i, arg) in ann.args.iter().enumerate() {
+                    if i > 0 {
+                        self.w(", ");
+                    }
+                    if let Some(name) = &arg.name {
+                        self.w(name);
+                        self.w(" = ");
+                    }
+                    self.print_literal(&arg.value);
+                }
+                self.w(")");
+            }
+            self.newline();
+        }
+    }
+
+    fn print_annotation_class(&mut self, a: &valen_ast::AnnotationClassDecl) {
+        self.print_annotations(&a.annotations);
+        self.write_indent();
+        self.print_visibility(&a.visibility);
+        self.w("annotation class ");
+        self.w(&a.name);
+        if !a.params.is_empty() {
+            self.w("(");
+            for (i, p) in a.params.iter().enumerate() {
+                if i > 0 {
+                    self.w(", ");
+                }
+                self.print_visibility(&p.visibility);
+                self.w(&p.name);
+                self.w(": ");
+                self.print_type(&p.ty);
+            }
+            self.w(")");
+        }
+        self.newline();
     }
 
     fn print_impl_block(&mut self, i: &ImplBlock) {
@@ -1120,6 +1166,7 @@ fn item_span(item: &Item) -> Span {
         Item::Trait(t) => t.span,
         Item::Impl(i) => i.span,
         Item::TypeAlias(t) => t.span,
+        Item::AnnotationClass(a) => a.span,
     }
 }
 

@@ -6,6 +6,7 @@ expression: "check(\"sealed class Foo {}\")"
 [
     Class(
         ClassDecl {
+            annotations: [],
             visibility: Internal,
             kind: Sealed,
             name: "Foo",

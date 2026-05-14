@@ -169,6 +169,8 @@ pub enum DefKind {
     Impl(ImplDef),
     /// A type alias (`typealias Name<T> = Target<T>;`).
     TypeAlias(TypeAliasDef),
+    /// An annotation class declaration.
+    AnnotationClass,
 }
 
 /// Function or method definition.

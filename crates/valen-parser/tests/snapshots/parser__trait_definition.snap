@@ -6,6 +6,7 @@ expression: "check(\"trait Area { fn area(self) -> Float; }\")"
 [
     Trait(
         TraitDecl {
+            annotations: [],
             visibility: Internal,
             is_sealed: false,
             name: "Area",
@@ -13,6 +14,7 @@ expression: "check(\"trait Area { fn area(self) -> Float; }\")"
             items: [
                 Fn(
                     FnDecl {
+                        annotations: [],
                         visibility: Pub,
                         name: "area",
                         generics: [],

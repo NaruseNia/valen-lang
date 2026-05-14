@@ -6,6 +6,7 @@ expression: "check(\"sealed trait Expr { fn eval(self) -> Int; }\")"
 [
     Trait(
         TraitDecl {
+            annotations: [],
             visibility: Internal,
             is_sealed: true,
             name: "Expr",
@@ -13,6 +14,7 @@ expression: "check(\"sealed trait Expr { fn eval(self) -> Int; }\")"
             items: [
                 Fn(
                     FnDecl {
+                        annotations: [],
                         visibility: Pub,
                         name: "eval",
                         generics: [],

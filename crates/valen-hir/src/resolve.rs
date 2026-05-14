@@ -642,6 +642,19 @@ impl Resolver {
                 self.hir.defs.insert(id, def);
                 self.define_name(ta.name.clone(), id, ta.span);
             }
+            Item::AnnotationClass(ac) => {
+                let id = self.hir.alloc_id();
+                let def = Def {
+                    id,
+                    name: ac.name.clone(),
+                    kind: DefKind::AnnotationClass,
+                    vis: lower_vis(ac.visibility),
+                    span: ac.span,
+                    package: self.current_package.clone(),
+                };
+                self.hir.defs.insert(id, def);
+                self.define_name(ac.name.clone(), id, ac.span);
+            }
         }
     }
 

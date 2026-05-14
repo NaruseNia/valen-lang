@@ -38,6 +38,7 @@ expression: "check(\"package com.example;\\nimport java.util.List;\\n\\npub fn m
     ),
     Fn(
         FnDecl {
+            annotations: [],
             visibility: Pub,
             name: "main",
             generics: [],

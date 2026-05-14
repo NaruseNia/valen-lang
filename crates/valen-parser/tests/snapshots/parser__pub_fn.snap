@@ -6,6 +6,7 @@ expression: "check(\"pub fn main() {}\")"
 [
     Fn(
         FnDecl {
+            annotations: [],
             visibility: Pub,
             name: "main",
             generics: [],
