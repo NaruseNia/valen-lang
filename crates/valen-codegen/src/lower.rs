@@ -91,6 +91,20 @@ fn lower_class(
         }
     }
 
+    // Collect methods from trait impls targeting this class
+    for impl_entry in &hir.trait_impls {
+        if impl_entry.target_name == def.name {
+            for &mid in &impl_entry.methods {
+                if let Some(method_def) = hir.defs.get(&mid) {
+                    if let DefKind::Fn(fn_def) = &method_def.kind {
+                        let body = typed_bodies.get(&mid);
+                        methods.push(lower_method(hir, method_def, fn_def, body, &internal, pkg));
+                    }
+                }
+            }
+        }
+    }
+
     let permitted = collect_permitted_subclasses(hir, &def.name, pkg);
 
     JvmClass {
@@ -776,6 +790,75 @@ mod tests {
         // body is StubBody for now
         let body = greet.body.as_ref().unwrap();
         assert!(matches!(body.ops[0], JvmOp::StubBody));
+    }
+
+    #[test]
+    fn lower_class_with_trait_impl() {
+        let mut hir = Hir::default();
+        let class_id = hir.alloc_id();
+        let method_id = hir.alloc_id();
+
+        hir.defs.insert(
+            method_id,
+            Def {
+                id: method_id,
+                name: SmolStr::from("greet"),
+                kind: DefKind::Fn(FnDef {
+                    params: vec![ParamDef {
+                        name: "self".into(),
+                        ty: TyRef::SelfTy,
+                        mutable: false,
+                        is_self: true,
+                    }],
+                    return_ty: Some(TyRef::Prim(PrimTy::String)),
+                    has_body: true,
+                }),
+                vis: Vis::Pub,
+                span: valen_ast::Span {
+                    start: 0,
+                    end: 0,
+                    file_id: FileId(0),
+                },
+                package: None,
+            },
+        );
+
+        hir.defs.insert(
+            class_id,
+            Def {
+                id: class_id,
+                name: SmolStr::from("Dog"),
+                kind: DefKind::Class(ClassDef {
+                    kind: ClassDefKind::Final,
+                    ctor_params: vec![],
+                    superclass: None,
+                    trait_impls: vec![TyRef::Named("Greeter".into())],
+                    methods: vec![],
+                }),
+                vis: Vis::Pub,
+                span: valen_ast::Span {
+                    start: 0,
+                    end: 0,
+                    file_id: FileId(0),
+                },
+                package: None,
+            },
+        );
+
+        hir.trait_impls.push(ImplEntry {
+            trait_name: "Greeter".into(),
+            target_name: "Dog".into(),
+            methods: vec![method_id],
+        });
+
+        let classes = lower_hir(&hir, &IndexMap::new());
+        let c = &classes[0];
+        assert_eq!(c.name, "Dog");
+        assert_eq!(c.interfaces, vec!["Greeter"]);
+        assert_eq!(c.methods.len(), 2); // <init> + greet
+        let greet = c.methods.iter().find(|m| m.name == "greet").unwrap();
+        assert!(greet.access.is_public);
+        assert!(!greet.access.is_static);
     }
 
     #[test]
