@@ -795,6 +795,14 @@ fn emit_op(
             vec![Instruction::Invokedynamic(idx)]
         }
 
+        JvmOp::IInc(slot, inc) => {
+            if *slot <= 255 && (-128..=127).contains(inc) {
+                vec![Instruction::Iinc(*slot as u8, *inc as i8)]
+            } else {
+                vec![Instruction::Iinc_w(*slot, *inc as i16)]
+            }
+        }
+
         JvmOp::Label(_) | JvmOp::StubBody | JvmOp::Frame { .. } => vec![],
     })
 }

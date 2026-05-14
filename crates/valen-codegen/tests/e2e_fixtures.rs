@@ -1,4 +1,4 @@
-use ristretto_classfile::attributes::Attribute;
+use ristretto_classfile::attributes::{Attribute, Instruction};
 use ristretto_classfile::{ClassAccessFlags, ClassFile, FieldAccessFlags};
 use valen_ast::FileId;
 
@@ -303,9 +303,44 @@ fn fixture_sealed_class() {
 
 #[test]
 fn fixture_fn_for_loop() {
-    let outputs = compile_fixture_outputs("fn_for_loop.vln");
-    assert_eq!(outputs.len(), 1);
-    assert_eq!(outputs[0].internal_name, "com/example/Loops");
+    let classes = compile_fixture("fn_for_loop.vln");
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+    assert_eq!(c.class_name().unwrap(), "com/example/Loops");
+    // <init> + count
+    assert_eq!(c.methods.len(), 2);
+
+    // Verify iinc instruction is present in the count method
+    let count_method = &c.methods[1];
+    let has_iinc = count_method.attributes.iter().any(|attr| {
+        if let Attribute::Code { code, .. } = attr {
+            code.iter()
+                .any(|i| matches!(i, Instruction::Iinc(_, _) | Instruction::Iinc_w(_, _)))
+        } else {
+            false
+        }
+    });
+    assert!(has_iinc, "for-range loop should emit iinc instruction");
+}
+
+#[test]
+fn fixture_fn_for_range_inclusive() {
+    let classes = compile_fixture("fn_for_range_inclusive.vln");
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+    assert_eq!(c.class_name().unwrap(), "com/example/RangeTest");
+    // <init> + sum_inclusive
+    assert_eq!(c.methods.len(), 2);
+}
+
+#[test]
+fn fixture_fn_for_break_continue() {
+    let classes = compile_fixture("fn_for_break_continue.vln");
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+    assert_eq!(c.class_name().unwrap(), "com/example/BreakCont");
+    // <init> + find_first_even
+    assert_eq!(c.methods.len(), 2);
 }
 
 #[test]

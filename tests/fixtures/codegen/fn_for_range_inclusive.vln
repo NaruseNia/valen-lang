@@ -1,0 +1,11 @@
+package com.example;
+
+pub class RangeTest {
+    fn sum_inclusive(self) -> Int {
+        let mut total = 0;
+        for i in 1..=9 {
+            total = total + i;
+        }
+        total
+    }
+}

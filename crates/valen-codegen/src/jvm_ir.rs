@@ -330,6 +330,9 @@ pub enum JvmOp {
         descriptor: String,
     },
 
+    /// `iinc` — increment a local int variable by a constant.
+    IInc(u16, i32),
+
     /// Placeholder body that emits `throw new UnsupportedOperationException`.
     StubBody,
 }
@@ -445,6 +448,7 @@ impl JvmOp {
             JvmOp::Frame { .. } => 0,
             // No-capture lambda: consumes 0, produces 1 functional interface reference.
             JvmOp::InvokeDynamic { .. } => 1,
+            JvmOp::IInc(_, _) => 0,
             JvmOp::StubBody => 0,
         }
     }
