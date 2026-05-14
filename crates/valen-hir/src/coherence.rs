@@ -108,9 +108,34 @@ impl<'h> CoherenceChecker<'h> {
             }
             seen_pairs.push((tn.clone(), tgt.clone(), *span));
 
+            // Sealed trait: reject enum implementors
+            if self.is_sealed_trait(tn) && self.is_enum_type(tgt) {
+                self.diags.error(
+                    DiagCode::SEALED_TRAIT_IMPL_BY_ENUM,
+                    *span,
+                    SmolStr::from(format!(
+                        "enum `{tgt}` cannot implement sealed trait `{tn}`; only class and data class are permitted"
+                    )),
+                );
+            }
+
             // Trait satisfaction: check all required methods are implemented
             self.check_trait_satisfaction(tn, imp, *span);
         }
+    }
+
+    fn is_sealed_trait(&self, name: &SmolStr) -> bool {
+        self.hir
+            .defs
+            .values()
+            .any(|d| d.name == *name && matches!(&d.kind, DefKind::Trait(t) if t.is_sealed))
+    }
+
+    fn is_enum_type(&self, name: &SmolStr) -> bool {
+        self.hir
+            .defs
+            .values()
+            .any(|d| d.name == *name && matches!(&d.kind, DefKind::Enum(_)))
     }
 
     fn check_trait_satisfaction(
@@ -442,6 +467,24 @@ mod tests {
         let r = check_source(
             "trait Greet { fn greet(self) -> String { \"hello\" } }\nclass Dog {}\nimpl Greet for Dog { }",
         );
+        assert_no_errors(&r);
+    }
+
+    // -- multiple traits with different types -------------------------------
+
+    // -- sealed trait: enum impl rejection ----------------------------------
+
+    #[test]
+    fn sealed_trait_enum_impl_rejected() {
+        let r = check_source(
+            "sealed trait Marker {}\nenum Color { Red, Green }\nimpl Marker for Color {}",
+        );
+        assert_has_error(&r, DiagCode::SEALED_TRAIT_IMPL_BY_ENUM);
+    }
+
+    #[test]
+    fn sealed_trait_class_impl_ok() {
+        let r = check_source("sealed trait Marker {}\nclass Dog {}\nimpl Marker for Dog {}");
         assert_no_errors(&r);
     }
 

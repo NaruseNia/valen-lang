@@ -1,0 +1,25 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"sealed trait Marker {}\")"
+---
+=== AST ===
+[
+    Trait(
+        TraitDecl {
+            visibility: Internal,
+            is_sealed: true,
+            name: "Marker",
+            generics: [],
+            items: [],
+            span: Span {
+                start: 0,
+                end: 22,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

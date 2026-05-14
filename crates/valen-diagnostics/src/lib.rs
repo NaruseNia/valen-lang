@@ -102,6 +102,7 @@ impl DiagCode {
     pub const TRAIT_METHOD_SIG_MISMATCH: DiagCode = DiagCode(404);
     pub const UNKNOWN_TRAIT: DiagCode = DiagCode(405);
     pub const INHERENT_IMPL_NOT_ALLOWED: DiagCode = DiagCode(406);
+    pub const SEALED_TRAIT_IMPL_BY_ENUM: DiagCode = DiagCode(407);
     pub const MATCH_NOT_EXHAUSTIVE: DiagCode = DiagCode(500);
     pub const JAVA_EXCEPTION_NOT_WRAPPED: DiagCode = DiagCode(600);
 }

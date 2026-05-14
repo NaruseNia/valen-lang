@@ -91,13 +91,22 @@ impl Parser {
             TokenKind::Class => self
                 .parse_class(vis, ClassKind::Final, start)
                 .map(Item::Class),
-            TokenKind::Open | TokenKind::Abstract | TokenKind::Sealed => {
+            TokenKind::Open | TokenKind::Abstract => {
                 let kind = self.parse_class_kind();
                 self.parse_class(vis, kind, start).map(Item::Class)
             }
+            TokenKind::Sealed => {
+                self.bump();
+                if self.at(&TokenKind::Trait) {
+                    self.parse_trait(vis, true, start).map(Item::Trait)
+                } else {
+                    self.parse_class(vis, ClassKind::Sealed, start)
+                        .map(Item::Class)
+                }
+            }
             TokenKind::Data => self.parse_data_class(vis, start).map(Item::DataClass),
             TokenKind::Enum => self.parse_enum(vis, start).map(Item::Enum),
-            TokenKind::Trait => self.parse_trait(vis, start).map(Item::Trait),
+            TokenKind::Trait => self.parse_trait(vis, false, start).map(Item::Trait),
             TokenKind::Impl => self.parse_impl(start).map(Item::Impl),
             TokenKind::TypeAlias => self.parse_type_alias(vis, start).map(Item::TypeAlias),
             _ => {
@@ -510,7 +519,12 @@ impl Parser {
         })
     }
 
-    fn parse_trait(&mut self, visibility: Visibility, start: Span) -> Option<TraitDecl> {
+    fn parse_trait(
+        &mut self,
+        visibility: Visibility,
+        is_sealed: bool,
+        start: Span,
+    ) -> Option<TraitDecl> {
         self.expect(TokenKind::Trait)?;
         let name = self.expect_ident()?;
         let generics = self.parse_generic_params()?;
@@ -553,6 +567,7 @@ impl Parser {
         let end = self.expect(TokenKind::RBrace)?;
         Some(TraitDecl {
             visibility,
+            is_sealed,
             name,
             generics,
             items,

@@ -53,7 +53,7 @@ match n {
 
 ## 9.2 exhaustive check
 
-- Valen `enum` / `sealed class` hierarchy：**厳密 exhaustive**（非網羅はコンパイルエラー）
+- Valen `enum` / `sealed class` / `sealed trait` hierarchy：**厳密 exhaustive**（非網羅はコンパイルエラー）
 - Java 型：**`@valen.Closed` アノテーション付きのみ exhaustive**、他は常に open-world
 
 ```valen

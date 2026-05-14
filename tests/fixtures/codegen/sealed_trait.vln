@@ -1,0 +1,17 @@
+package com.example;
+
+pub sealed trait Expr {
+    fn eval(self) -> Int;
+}
+
+pub class Lit {}
+
+pub class Add {}
+
+impl Expr for Lit {
+    fn eval(self) -> Int { 0 }
+}
+
+impl Expr for Add {
+    fn eval(self) -> Int { 1 }
+}

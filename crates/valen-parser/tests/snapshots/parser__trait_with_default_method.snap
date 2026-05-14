@@ -7,6 +7,7 @@ expression: "check(\"trait Display { fn display(self) -> String { self.name } }\
     Trait(
         TraitDecl {
             visibility: Internal,
+            is_sealed: false,
             name: "Display",
             generics: [],
             items: [

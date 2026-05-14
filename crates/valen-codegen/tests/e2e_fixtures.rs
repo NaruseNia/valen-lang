@@ -404,6 +404,44 @@ fn fixture_fn_nested_control() {
 }
 
 #[test]
+fn fixture_sealed_trait() {
+    let outputs = compile_fixture_outputs("sealed_trait.vln");
+    // Expr (sealed interface) + Lit + Add
+    assert_eq!(outputs.len(), 3);
+
+    let expr_output = outputs
+        .iter()
+        .find(|o| o.internal_name == "com/example/Expr")
+        .expect("Expr interface should be generated");
+    let expr = ClassFile::from_bytes(&expr_output.bytes).expect("parse Expr classfile");
+    assert!(
+        expr.access_flags.contains(ClassAccessFlags::INTERFACE),
+        "sealed trait should emit as interface"
+    );
+    assert!(
+        expr.access_flags.contains(ClassAccessFlags::ABSTRACT),
+        "sealed trait should be abstract"
+    );
+    let has_permitted = expr.attributes.iter().any(|a| {
+        matches!(a, Attribute::PermittedSubclasses { class_indexes, .. } if class_indexes.len() == 2)
+    });
+    assert!(
+        has_permitted,
+        "sealed trait should have PermittedSubclasses with 2 entries"
+    );
+
+    let lit_output = outputs
+        .iter()
+        .find(|o| o.internal_name == "com/example/Lit")
+        .expect("Lit class should be generated");
+    let lit = ClassFile::from_bytes(&lit_output.bytes).expect("parse Lit classfile");
+    assert!(
+        !lit.interfaces.is_empty(),
+        "Lit should implement at least one interface (Expr)"
+    );
+}
+
+#[test]
 fn fixture_fn_assignment() {
     let classes = compile_fixture("fn_assignment.vln");
     assert_eq!(classes.len(), 1);

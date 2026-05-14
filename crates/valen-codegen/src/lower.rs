@@ -47,6 +47,9 @@ pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<DefId, TypedBody>) -> Vec<Jv
             DefKind::Enum(enum_def) => {
                 classes.extend(lower_enum(def, enum_def, pkg, source_file, &hir.imports));
             }
+            DefKind::Trait(trait_def) if trait_def.is_sealed => {
+                classes.push(lower_sealed_trait(hir, def, pkg, source_file));
+            }
             _ => {}
         }
     }
@@ -73,7 +76,7 @@ fn lower_class(
         })
         .unwrap_or_else(|| JVM_OBJECT.to_string());
 
-    let interfaces: Vec<String> = class_def
+    let mut interfaces: Vec<String> = class_def
         .trait_impls
         .iter()
         .filter_map(|t| match &tyref_to_jvm(t, pkg, &hir.imports) {
@@ -81,6 +84,16 @@ fn lower_class(
             _ => None,
         })
         .collect();
+
+    // Add sealed trait interfaces from impl blocks
+    for entry in &hir.trait_impls {
+        if entry.target_name == def.name && is_sealed_trait_def(hir, &entry.trait_name) {
+            let iface = class_internal_name(&entry.trait_name, pkg);
+            if !interfaces.contains(&iface) {
+                interfaces.push(iface);
+            }
+        }
+    }
 
     let fields: Vec<JvmField> = class_def
         .ctor_params
@@ -144,6 +157,42 @@ fn lower_class(
     }
 }
 
+fn lower_sealed_trait(
+    hir: &Hir,
+    def: &Def,
+    pkg: Option<&[SmolStr]>,
+    source_file: Option<String>,
+) -> JvmClass {
+    let internal = class_internal_name(&def.name, pkg);
+
+    let permitted: Vec<String> = hir
+        .trait_impls
+        .iter()
+        .filter(|entry| entry.trait_name == def.name)
+        .map(|entry| class_internal_name(&entry.target_name, pkg))
+        .collect();
+
+    JvmClass {
+        version: JvmVersion::Java21,
+        access: JvmClassAccess {
+            is_public: matches!(def.vis, Vis::Pub),
+            is_abstract: true,
+            is_interface: true,
+            ..Default::default()
+        },
+        name: internal,
+        super_class: JVM_OBJECT.to_string(),
+        interfaces: vec![],
+        fields: vec![],
+        methods: vec![],
+        source_file,
+        permitted_subclasses: permitted,
+        is_record: false,
+        bootstrap_methods: vec![],
+        synthetic_methods: vec![],
+    }
+}
+
 fn lower_data_class(
     hir: &Hir,
     def: &Def,
@@ -186,6 +235,11 @@ fn lower_data_class(
                 .map(|p| p.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("/"))
             {
                 interfaces.push(trait_internal);
+            } else if is_sealed_trait_def(hir, &impl_entry.trait_name) {
+                let iface = class_internal_name(&impl_entry.trait_name, pkg);
+                if !interfaces.contains(&iface) {
+                    interfaces.push(iface);
+                }
             }
             for &mid in &impl_entry.methods {
                 if let Some(method_def) = hir.defs.get(&mid) {
@@ -448,6 +502,12 @@ fn collect_permitted_subclasses(
         }
     }
     permitted
+}
+
+fn is_sealed_trait_def(hir: &Hir, name: &SmolStr) -> bool {
+    hir.defs
+        .values()
+        .any(|d| d.name == *name && matches!(&d.kind, DefKind::Trait(t) if t.is_sealed))
 }
 
 fn superclass_matches(tyref: &valen_hir::TyRef, name: &str) -> bool {
