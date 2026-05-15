@@ -363,12 +363,13 @@ impl ServerState {
         let mut items = Vec::new();
         let mut seen = std::collections::HashSet::new();
 
-        for ty in BUILTIN_TYPES {
+        for &(ty, desc) in BUILTIN_TYPES {
             let label = ty.to_string();
             if seen.insert(label.clone()) {
                 items.push(CompletionItem {
                     label,
                     kind: Some(CompletionItemKind::TYPE_PARAMETER),
+                    detail: Some(desc.to_string()),
                     ..Default::default()
                 });
             }
@@ -470,12 +471,13 @@ impl ServerState {
             seen.insert(kw.to_string());
         }
 
-        for ty in BUILTIN_TYPES {
+        for &(ty, desc) in BUILTIN_TYPES {
             let label = ty.to_string();
             if seen.insert(label.clone()) {
                 items.push(CompletionItem {
                     label,
                     kind: Some(CompletionItemKind::TYPE_PARAMETER),
+                    detail: Some(desc.to_string()),
                     ..Default::default()
                 });
             }
@@ -483,7 +485,11 @@ impl ServerState {
 
         if let Some(hir) = doc.hir.as_ref() {
             for def in hir.defs.values() {
-                if hir.prelude_ids.contains(&def.id) || def.name.is_empty() {
+                if def.name.is_empty() {
+                    continue;
+                }
+                // Skip prelude fn defs (operator trait methods) but keep types
+                if hir.prelude_ids.contains(&def.id) && matches!(&def.kind, DefKind::Fn(_)) {
                     continue;
                 }
                 let (label, kind, detail) = match &def.kind {
@@ -762,9 +768,20 @@ fn format_class_signature(name: &str, params: &[valen_hir::CtorParamDef]) -> Str
     format!("{}({})", name, ps.join(", "))
 }
 
-const BUILTIN_TYPES: &[&str] = &[
-    "Int", "Long", "Float", "Double", "Char", "Bool", "Byte", "Short", "String", "Unit", "Nothing",
-    "Option", "Result",
+const BUILTIN_TYPES: &[(&str, &str)] = &[
+    ("Int", "JVM integer (32-bit)"),
+    ("Long", "JVM long (64-bit)"),
+    ("Float", "JVM float (32-bit)"),
+    ("Double", "JVM double (64-bit)"),
+    ("Char", "Unicode character"),
+    ("Bool", "Boolean (true/false)"),
+    ("Byte", "JVM byte (8-bit)"),
+    ("Short", "JVM short (16-bit)"),
+    ("String", "UTF-16 string"),
+    ("Unit", "Unit type (void)"),
+    ("Nothing", "Bottom type (never returns)"),
+    ("Option", "Option<T> — Some(value) | None"),
+    ("Result", "Result<T, E> — Ok(value) | Err(error)"),
 ];
 
 fn find_enclosing_type_from_source(source: &str) -> Option<String> {
