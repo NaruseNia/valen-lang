@@ -156,6 +156,15 @@ fn run_pipeline_with_classpath(
         anyhow::bail!("coherence errors");
     }
 
+    // --- Exhaustiveness ---
+    let exhaustiveness_result = valen_hir::exhaustive::check_exhaustiveness(&hir, &all_items);
+    if let Some(li) = first_line_idx {
+        emit_diagnostics(&exhaustiveness_result.diagnostics, first_path, li);
+    }
+    if exhaustiveness_result.diagnostics.has_errors() {
+        anyhow::bail!("exhaustiveness errors");
+    }
+
     Ok(FrontendResult {
         hir,
         bodies: tc.bodies,
