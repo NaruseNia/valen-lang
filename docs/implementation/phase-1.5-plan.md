@@ -104,7 +104,7 @@ Kotlin/Java ユーザー向けの快適機能とツール充実。
 | ~~TASK-029~~ | ~~sealed trait~~ ✅ | — | S |
 | ~~TASK-030~~ | ~~annotation（宣言 + 付与 + ランタイム保持）~~ ✅ | — | L |
 | TASK-031 | valenfmt 最小実装（TASK-015） | — | M |
-| TASK-032 | LSP 拡充（#49: completion/hover/semantic tokens） | TASK-023 | L |
+| ~~TASK-032~~ | ~~LSP 拡充（completion/hover/semantic tokens/cross-file）~~ ✅ | TASK-023 | L |
 | TASK-033 | stdlib 二層化 + 強化 | TASK-023, TASK-028 | L |
 
 **詳細:**

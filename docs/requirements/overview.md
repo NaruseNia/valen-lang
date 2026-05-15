@@ -66,7 +66,7 @@ Valen は JVM をターゲットとする新規プログラミング言語。ADT
 | REQ-EMIT-004 | Java 25 opt-in サポート | Should | Draft |
 | REQ-TOOL-001 | valenc CLI（compile / check / version） | Must | Done |
 | REQ-TOOL-002 | Gradle プラグイン（compileValen タスク） | Must | Draft |
-| REQ-TOOL-003 | LSP サーバー（syntax error + diagnostics + goto def） | Must | Done |
+| REQ-TOOL-003 | LSP サーバー（diagnostics + goto def + completion + hover + semantic tokens + cross-file） | Must | Done |
 | REQ-TOOL-004 | valenfmt（最小版） | Should | Done |
 | REQ-INTEROP-001 | Java クラスの import と利用 | Must | Done |
 | REQ-INTEROP-002 | safe {} による例外変換 | Must | Done |
