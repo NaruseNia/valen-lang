@@ -1,0 +1,123 @@
+package ecs;
+
+import java.util.HashMap;
+import java.util.ArrayList;
+
+/// Component storage mapping entity IDs to component instances.
+/// Uses a HashMap internally for O(1) access by entity ID.
+pub class ComponentStorage(pub mut store: HashMap) {
+    fn create() -> ComponentStorage {
+        ComponentStorage(store = HashMap())
+    }
+
+    /// Insert a component for the given entity, replacing any existing one.
+    fn insert(mut self, entity: Entity, component: java.lang.Object) -> Unit {
+        self.store.put(entity.id, component);
+    }
+
+    /// Get the component for an entity, if it exists.
+    fn get(self, entity: Entity) -> Option<java.lang.Object> {
+        if self.store.containsKey(entity.id) {
+            Option::Some(self.store.get(entity.id))
+        } else {
+            Option::None
+        }
+    }
+
+    /// Remove the component for an entity.
+    fn remove(mut self, entity: Entity) -> Option<java.lang.Object> {
+        if self.store.containsKey(entity.id) {
+            Option::Some(self.store.remove(entity.id))
+        } else {
+            Option::None
+        }
+    }
+
+    /// Check whether an entity has this component.
+    fn contains(self, entity: Entity) -> Bool {
+        self.store.containsKey(entity.id)
+    }
+
+    /// Number of entities with this component.
+    fn count(self) -> Int {
+        self.store.size()
+    }
+
+    /// Get all entity IDs that have this component.
+    fn entities(self) -> ArrayList {
+        let result = ArrayList();
+        let keys = self.store.keySet();
+        let iter = keys.iterator();
+        while iter.hasNext() {
+            let key = iter.next();
+            result.add(key);
+        }
+        result
+    }
+}
+
+/// Manages multiple component storages, one per component type.
+/// Component types are identified by string keys.
+pub class ComponentRegistry(pub mut storages: HashMap) {
+    fn create() -> ComponentRegistry {
+        ComponentRegistry(storages = HashMap())
+    }
+
+    /// Get or create a storage for the given component type name.
+    fn getStorage(mut self, typeName: String) -> ComponentStorage {
+        if self.storages.containsKey(typeName) {
+            self.storages.get(typeName)
+        } else {
+            let storage = ComponentStorage::create();
+            self.storages.put(typeName, storage);
+            storage
+        }
+    }
+
+    /// Add a component to an entity.
+    fn addComponent(mut self, entity: Entity, typeName: String, component: java.lang.Object) -> Unit {
+        let storage = self.getStorage(typeName);
+        storage.insert(entity, component);
+    }
+
+    /// Get a component from an entity.
+    fn getComponent(self, entity: Entity, typeName: String) -> Option<java.lang.Object> {
+        if self.storages.containsKey(typeName) {
+            let storage = self.storages.get(typeName);
+            storage.get(entity)
+        } else {
+            Option::None
+        }
+    }
+
+    /// Remove a component from an entity.
+    fn removeComponent(mut self, entity: Entity, typeName: String) -> Option<java.lang.Object> {
+        if self.storages.containsKey(typeName) {
+            let storage = self.storages.get(typeName);
+            storage.remove(entity)
+        } else {
+            Option::None
+        }
+    }
+
+    /// Check if an entity has a specific component.
+    fn hasComponent(self, entity: Entity, typeName: String) -> Bool {
+        if self.storages.containsKey(typeName) {
+            let storage = self.storages.get(typeName);
+            storage.contains(entity)
+        } else {
+            false
+        }
+    }
+
+    /// Remove all components for an entity across all storages.
+    fn removeAll(mut self, entity: Entity) -> Unit {
+        let keys = self.storages.keySet();
+        let iter = keys.iterator();
+        while iter.hasNext() {
+            let key = iter.next();
+            let storage = self.storages.get(key);
+            storage.remove(entity);
+        }
+    }
+}

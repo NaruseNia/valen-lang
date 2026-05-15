@@ -1,0 +1,148 @@
+package ecs;
+
+import java.util.ArrayList;
+
+/// Specifies which components an entity must have to match a query.
+pub enum QueryFilter {
+    /// Entity must have all of the named components.
+    All(components: ArrayList),
+    /// Entity must have at least one of the named components.
+    Any(components: ArrayList),
+    /// Entity must not have any of the named components.
+    Exclude(components: ArrayList),
+}
+
+/// Result of a query: a matched entity and its component map.
+pub data class QueryResult(pub entity: Entity, pub components: java.util.HashMap);
+
+/// Executes queries against the component registry.
+pub class QueryEngine(pub registry: ComponentRegistry) {
+    /// Find all entities matching a filter.
+    fn query(self, filter: QueryFilter) -> ArrayList {
+        let results = ArrayList();
+        match filter {
+            QueryFilter::All(components) => {
+                self.queryAll(components, results);
+            },
+            QueryFilter::Any(components) => {
+                self.queryAny(components, results);
+            },
+            QueryFilter::Exclude(components) => {
+                self.queryExclude(components, results);
+            },
+        }
+        results
+    }
+
+    /// Find entities that have ALL specified components.
+    fn queryAll(self, componentNames: ArrayList, results: ArrayList) -> Unit {
+        if componentNames.size() == 0 {
+            let x = 0;
+        } else {
+            let firstName = componentNames.get(0);
+            let storage = self.registry.getStorage(firstName);
+            let candidates = storage.entities();
+
+            let mut i = 0;
+            while i < candidates.size() {
+                let entityId = candidates.get(i);
+                let entity = Entity(id = entityId);
+                let mut matches = true;
+                let mut j = 1;
+                while j < componentNames.size() {
+                    let name = componentNames.get(j);
+                    if !self.registry.hasComponent(entity, name) {
+                        matches = false;
+                    }
+                    j = j + 1;
+                }
+                if matches {
+                    let comps = java.util.HashMap();
+                    let mut k = 0;
+                    while k < componentNames.size() {
+                        let name = componentNames.get(k);
+                        match self.registry.getComponent(entity, name) {
+                            Option::Some(comp) => {
+                                comps.put(name, comp);
+                            },
+                            Option::None => {},
+                        }
+                        k = k + 1;
+                    }
+                    results.add(QueryResult(entity = entity, components = comps));
+                }
+                i = i + 1;
+            }
+        }
+    }
+
+    /// Find entities that have ANY of the specified components.
+    fn queryAny(self, componentNames: ArrayList, results: ArrayList) -> Unit {
+        let seen = java.util.HashSet();
+        let mut i = 0;
+        while i < componentNames.size() {
+            let name = componentNames.get(i);
+            let storage = self.registry.getStorage(name);
+            let entityIds = storage.entities();
+            let mut j = 0;
+            while j < entityIds.size() {
+                let entityId = entityIds.get(j);
+                if !seen.contains(entityId) {
+                    seen.add(entityId);
+                    let entity = Entity(id = entityId);
+                    let comps = java.util.HashMap();
+                    let mut k = 0;
+                    while k < componentNames.size() {
+                        let cn = componentNames.get(k);
+                        match self.registry.getComponent(entity, cn) {
+                            Option::Some(comp) => {
+                                comps.put(cn, comp);
+                            },
+                            Option::None => {},
+                        }
+                        k = k + 1;
+                    }
+                    results.add(QueryResult(entity = entity, components = comps));
+                }
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+    }
+
+    /// Find entities that have NONE of the excluded components.
+    fn queryExclude(self, excludedNames: ArrayList, results: ArrayList) -> Unit {
+        let allEntities = java.util.HashSet();
+        let keys = self.registry.storages.keySet();
+        let iter = keys.iterator();
+        while iter.hasNext() {
+            let key = iter.next();
+            let storage = self.registry.storages.get(key);
+            let entityIds = storage.entities();
+            let mut i = 0;
+            while i < entityIds.size() {
+                allEntities.add(entityIds.get(i));
+                i = i + 1;
+            }
+        }
+
+        let entityIter = allEntities.iterator();
+        while entityIter.hasNext() {
+            let entityId = entityIter.next();
+            let entity = Entity(id = entityId);
+            let mut excluded = false;
+            let mut i = 0;
+            while i < excludedNames.size() {
+                let name = excludedNames.get(i);
+                if self.registry.hasComponent(entity, name) {
+                    excluded = true;
+                }
+                i = i + 1;
+            }
+            if !excluded {
+                let comps = java.util.HashMap();
+                results.add(QueryResult(entity = entity, components = comps));
+            }
+        }
+    }
+}

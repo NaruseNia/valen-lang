@@ -1,0 +1,31 @@
+package ecs;
+
+import java.util.ArrayList;
+
+/// Unique identifier for an entity in the ECS world.
+pub data class Entity(pub id: Int);
+
+/// Generates unique entity IDs sequentially.
+pub class EntityAllocator(pub mut nextId: Int, pub mut freeIds: ArrayList) {
+    /// Create a fresh allocator starting from ID 0.
+    fn create() -> EntityAllocator {
+        EntityAllocator(nextId = 0, freeIds = ArrayList())
+    }
+
+    /// Allocate a new entity, reusing freed IDs when available.
+    fn allocate(mut self) -> Entity {
+        if self.freeIds.size() > 0 {
+            let id = self.freeIds.remove(self.freeIds.size() - 1);
+            Entity(id = id)
+        } else {
+            let id = self.nextId;
+            self.nextId = self.nextId + 1;
+            Entity(id = id)
+        }
+    }
+
+    /// Return an entity ID to the free pool.
+    fn deallocate(mut self, entity: Entity) -> Unit {
+        self.freeIds.add(entity.id);
+    }
+}
