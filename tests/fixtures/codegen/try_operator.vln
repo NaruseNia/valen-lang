@@ -1,0 +1,29 @@
+package test;
+
+pub class TryOperator {
+    fn find_value(x: Int) -> Option<Int> {
+        if x > 0 {
+            Some(x)
+        } else {
+            None
+        }
+    }
+
+    fn use_option(self, x: Int) -> Option<Int> {
+        let v = TryOperator::find_value(x)?;
+        Some(v)
+    }
+
+    fn divide(a: Int, b: Int) -> Result<Int, String> {
+        if b == 0 {
+            Err("division by zero")
+        } else {
+            Ok(a / b)
+        }
+    }
+
+    fn compute(self, a: Int, b: Int) -> Result<Int, String> {
+        let v = TryOperator::divide(a, b)?;
+        Ok(v)
+    }
+}

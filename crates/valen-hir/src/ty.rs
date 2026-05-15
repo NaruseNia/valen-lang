@@ -1849,16 +1849,20 @@ impl<'hir> TypeChecker<'hir> {
 
     fn synth_try(&mut self, t: &valen_ast::TryExpr) -> TypedExpr {
         let inner = self.infer_expr(&t.expr);
-        let ty = match &inner.ty {
-            Ty::Generic(name, args)
-                if (name == "Result" || name == "Option") && !args.is_empty() =>
-            {
-                args[0].clone()
+        let (ty, is_option) = match &inner.ty {
+            Ty::Generic(name, args) if name == "Option" && !args.is_empty() => {
+                (args[0].clone(), true)
             }
-            _ => inner.ty.clone(),
+            Ty::Generic(name, args) if name == "Result" && !args.is_empty() => {
+                (args[0].clone(), false)
+            }
+            _ => (inner.ty.clone(), false),
         };
         TypedExpr {
-            kind: TypedExprKind::Error,
+            kind: TypedExprKind::Try {
+                inner: Box::new(inner),
+                is_option,
+            },
             ty,
             span: t.span,
         }

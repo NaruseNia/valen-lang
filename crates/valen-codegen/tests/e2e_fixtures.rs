@@ -595,3 +595,35 @@ fn fixture_fn_assignment() {
     // <init> + accumulate
     assert_eq!(c.methods.len(), 2);
 }
+
+#[test]
+fn fixture_try_operator() {
+    let classes = compile_fixture("try_operator.vln");
+    assert!(!classes.is_empty());
+
+    let main_class = classes
+        .iter()
+        .find(|c| c.class_name().unwrap() == "test/TryOperator")
+        .expect("TryOperator class");
+    let methods: Vec<String> = main_class
+        .methods
+        .iter()
+        .filter_map(|m| {
+            main_class
+                .constant_pool
+                .try_get_utf8(m.name_index)
+                .ok()
+                .and_then(|n| n.as_str().map(|s| s.to_string()))
+        })
+        .collect();
+    assert!(
+        methods.contains(&"find_value".to_string()),
+        "missing find_value"
+    );
+    assert!(
+        methods.contains(&"use_option".to_string()),
+        "missing use_option"
+    );
+    assert!(methods.contains(&"divide".to_string()), "missing divide");
+    assert!(methods.contains(&"compute".to_string()), "missing compute");
+}
