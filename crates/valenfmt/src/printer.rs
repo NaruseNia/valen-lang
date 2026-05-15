@@ -203,6 +203,7 @@ impl<'a> Printer<'a> {
     }
 
     fn print_fn_decl(&mut self, f: &FnDecl, ctx: FnCtx) {
+        self.print_annotations(&f.annotations);
         self.write_indent();
         let show_vis = ctx == FnCtx::TopLevel || ctx == FnCtx::ClassMethod;
         if show_vis {
@@ -269,6 +270,7 @@ impl<'a> Printer<'a> {
     }
 
     fn print_class(&mut self, c: &ClassDecl) {
+        self.print_annotations(&c.annotations);
         self.write_indent();
         self.print_visibility(&c.visibility);
         match c.kind {
@@ -326,6 +328,25 @@ impl<'a> Printer<'a> {
             if i > 0 {
                 self.w(", ");
             }
+            for ann in &p.annotations {
+                self.w("@");
+                self.w(&ann.name);
+                if !ann.args.is_empty() {
+                    self.w("(");
+                    for (j, arg) in ann.args.iter().enumerate() {
+                        if j > 0 {
+                            self.w(", ");
+                        }
+                        if let Some(name) = &arg.name {
+                            self.w(name);
+                            self.w(" = ");
+                        }
+                        self.print_literal(&arg.value);
+                    }
+                    self.w(")");
+                }
+                self.w(" ");
+            }
             self.print_visibility(&p.visibility);
             if p.mutable {
                 self.w("mut ");
@@ -348,6 +369,7 @@ impl<'a> Printer<'a> {
     }
 
     fn print_field(&mut self, f: &FieldDecl) {
+        self.print_annotations(&f.annotations);
         self.write_indent();
         self.print_visibility(&f.visibility);
         if f.mutable {
@@ -367,6 +389,7 @@ impl<'a> Printer<'a> {
     }
 
     fn print_data_class(&mut self, d: &DataClassDecl) {
+        self.print_annotations(&d.annotations);
         self.write_indent();
         self.print_visibility(&d.visibility);
         self.w("data class ");
@@ -379,6 +402,7 @@ impl<'a> Printer<'a> {
     }
 
     fn print_enum(&mut self, e: &EnumDecl) {
+        self.print_annotations(&e.annotations);
         self.write_indent();
         self.print_visibility(&e.visibility);
         self.w("enum ");
@@ -420,6 +444,7 @@ impl<'a> Printer<'a> {
     }
 
     fn print_trait(&mut self, t: &TraitDecl) {
+        self.print_annotations(&t.annotations);
         self.write_indent();
         self.print_visibility(&t.visibility);
         if t.is_sealed {
