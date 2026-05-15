@@ -680,23 +680,11 @@ impl ServerState {
             }
         }
 
-        for kw in VALEN_KEYWORDS {
-            items.push(CompletionItem {
-                label: kw.to_string(),
-                kind: Some(CompletionItemKind::KEYWORD),
-                // No documentation for keywords
-                ..Default::default()
-            });
-            seen.insert(kw.to_string());
-        }
-
-        for &(ty, desc) in BUILTIN_TYPES {
-            let label = ty.to_string();
-            if seen.insert(label.clone()) {
+        for kw in EXPR_KEYWORDS {
+            if seen.insert(kw.to_string()) {
                 items.push(CompletionItem {
-                    label,
-                    kind: Some(CompletionItemKind::TYPE_PARAMETER),
-                    detail: Some(desc.to_string()),
+                    label: kw.to_string(),
+                    kind: Some(CompletionItemKind::KEYWORD),
                     ..Default::default()
                 });
             }
@@ -707,11 +695,10 @@ impl ServerState {
                 if def.name.is_empty() {
                     continue;
                 }
-                // Skip prelude fn defs (operator trait methods) but keep types
                 if hir.prelude_ids.contains(&def.id) && matches!(&def.kind, DefKind::Fn(_)) {
                     continue;
                 }
-                let (label, kind, detail, documentation) = match &def.kind {
+                let (label, kind, detail, documentation, sort_prefix) = match &def.kind {
                     DefKind::Fn(f) => {
                         let sig = format_fn_signature(&def.name, f);
                         let doc_md =
@@ -721,6 +708,7 @@ impl ServerState {
                             CompletionItemKind::FUNCTION,
                             Some(sig),
                             doc_md,
+                            "1",
                         )
                     }
                     DefKind::Class(c) => {
@@ -738,6 +726,7 @@ impl ServerState {
                             CompletionItemKind::CLASS,
                             Some(sig),
                             doc_md,
+                            "1",
                         )
                     }
                     DefKind::DataClass(dc) => {
@@ -755,6 +744,7 @@ impl ServerState {
                             CompletionItemKind::CLASS,
                             Some(sig),
                             doc_md,
+                            "1",
                         )
                     }
                     DefKind::Enum(e) => {
@@ -767,6 +757,7 @@ impl ServerState {
                             CompletionItemKind::ENUM,
                             Some(format!("{{ {} }}", variants.join(", "))),
                             doc_md,
+                            "1",
                         )
                     }
                     DefKind::Trait(t) => {
@@ -777,20 +768,11 @@ impl ServerState {
                             CompletionItemKind::INTERFACE,
                             Some(format!("trait {}", def.name)),
                             doc_md,
+                            "8",
                         )
                     }
-                    DefKind::TypeAlias(ta) => {
-                        let detail = format!("typealias {} = {}", def.name, ta.target);
-                        (
-                            def.name.to_string(),
-                            CompletionItemKind::CLASS,
-                            Some(detail),
-                            None,
-                        )
-                    }
-                    DefKind::AnnotationClass(_) => {
-                        (def.name.to_string(), CompletionItemKind::CLASS, None, None)
-                    }
+                    // typealias / annotation not usable as expressions
+                    DefKind::TypeAlias(_) | DefKind::AnnotationClass(_) => continue,
                     DefKind::Impl(_) => continue,
                 };
                 if seen.insert(label.clone()) {
@@ -799,6 +781,7 @@ impl ServerState {
                         kind: Some(kind),
                         detail,
                         documentation,
+                        sort_text: Some(format!("{sort_prefix}_{}", def.name)),
                         ..Default::default()
                     });
                 }
@@ -2571,35 +2554,10 @@ fn format_typed_expr_hover(expr: &TypedExpr) -> Option<String> {
 }
 
 /// Valen language keywords offered for completion.
-const VALEN_KEYWORDS: &[&str] = &[
-    "fn",
-    "let",
-    "mut",
-    "if",
-    "else",
-    "match",
-    "class",
-    "data",
-    "enum",
-    "trait",
-    "impl",
-    "pub",
-    "return",
-    "for",
-    "while",
-    "loop",
-    "break",
-    "continue",
-    "import",
-    "package",
-    "safe",
-    "sealed",
-    "open",
-    "abstract",
-    "override",
-    "annotation",
-    "typealias",
-    "type",
+/// Keywords shown in the General context (expression + statement start).
+const EXPR_KEYWORDS: &[&str] = &[
+    "if", "else", "match", "for", "while", "loop", "return", "break", "continue", "true", "false",
+    "safe", "let", "mut", "fn", "pub", "class", "data", "enum", "trait", "impl", "import",
 ];
 
 // ---------------------------------------------------------------------------
