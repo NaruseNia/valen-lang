@@ -627,3 +627,41 @@ fn fixture_try_operator() {
     assert!(methods.contains(&"divide".to_string()), "missing divide");
     assert!(methods.contains(&"compute".to_string()), "missing compute");
 }
+
+#[test]
+fn fixture_operator_overload() {
+    let classes = compile_fixture("operator_overload.vln");
+    assert!(
+        classes.len() >= 2,
+        "expected at least Vec2 + Calculator classes"
+    );
+
+    let calc = classes
+        .iter()
+        .find(|c| {
+            c.class_name()
+                .ok()
+                .and_then(|n| n.as_str().map(|s| s.contains("Calculator")))
+                .unwrap_or(false)
+        })
+        .expect("Calculator class not found");
+
+    let methods: Vec<String> = calc
+        .methods
+        .iter()
+        .filter_map(|m| {
+            calc.constant_pool
+                .try_get_utf8(m.name_index)
+                .ok()
+                .and_then(|n| n.as_str().map(|s| s.to_string()))
+        })
+        .collect();
+    assert!(
+        methods.contains(&"add_vectors".to_string()),
+        "missing add_vectors"
+    );
+    assert!(
+        methods.contains(&"sub_vectors".to_string()),
+        "missing sub_vectors"
+    );
+}

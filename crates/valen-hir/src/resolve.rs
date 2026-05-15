@@ -632,6 +632,7 @@ impl Resolver {
                     };
                     let trait_name = match &imp.trait_ref {
                         TyRef::Named(n) => n.clone(),
+                        TyRef::Generic(n, _) => n.clone(),
                         _ => continue,
                     };
                     self.hir.trait_impls.push(ImplEntry {

@@ -1,0 +1,27 @@
+package test;
+
+pub data class Vec2(pub x: Float, pub y: Float);
+
+impl Add<Vec2> for Vec2 {
+    type Output = Vec2;
+    fn add(self, rhs: Vec2) -> Vec2 {
+        Vec2(x = self.x + rhs.x, y = self.y + rhs.y)
+    }
+}
+
+impl Sub<Vec2> for Vec2 {
+    type Output = Vec2;
+    fn sub(self, rhs: Vec2) -> Vec2 {
+        Vec2(x = self.x - rhs.x, y = self.y - rhs.y)
+    }
+}
+
+pub class Calculator {
+    fn add_vectors(self, a: Vec2, b: Vec2) -> Vec2 {
+        a + b
+    }
+
+    fn sub_vectors(self, a: Vec2, b: Vec2) -> Vec2 {
+        a - b
+    }
+}
