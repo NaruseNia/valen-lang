@@ -307,7 +307,14 @@ impl<'src> Lexer<'src> {
     /// Create a new lexer for the given source text and file identifier.
     ///
     /// A leading UTF-8 BOM (U+FEFF) is silently stripped before lexing.
+    /// # Panics
+    /// Panics if `source.len() > u32::MAX` (use [`lex`] for a graceful error).
     pub fn new(source: &'src str, file_id: FileId) -> Self {
+        assert!(
+            source.len() <= u32::MAX as usize,
+            "source file too large for u32 byte offsets ({} bytes)",
+            source.len()
+        );
         let stripped = strip_bom(source);
         let bom_offset = (source.len() - stripped.len()) as u32;
         Self {
