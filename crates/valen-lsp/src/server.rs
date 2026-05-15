@@ -724,6 +724,19 @@ pub fn analyze_document(text: &str) -> (DocumentState, Vec<async_lsp::lsp_types:
         &line_index,
     ));
 
+    let coherence_result = valen_hir::coherence::check_coherence(&resolve_result.hir, &[]);
+    diags.extend(convert::to_lsp_diagnostics(
+        &coherence_result.diagnostics,
+        &line_index,
+    ));
+
+    let exhaustive_result =
+        valen_hir::exhaustive::check_exhaustiveness(&resolve_result.hir, &parse_result.items);
+    diags.extend(convert::to_lsp_diagnostics(
+        &exhaustive_result.diagnostics,
+        &line_index,
+    ));
+
     let hir = if !resolve_result.diagnostics.has_errors() {
         let tc = valen_hir::ty::type_check(&resolve_result.hir, &parse_result.items);
         diags.extend(convert::to_lsp_diagnostics(&tc.diagnostics, &line_index));
@@ -838,9 +851,7 @@ fn find_enclosing_type_from_source(source: &str) -> Option<String> {
         }
 
         // [pub] [open|abstract|sealed] class TypeName
-        let rest = trimmed
-            .strip_prefix("pub ")
-            .unwrap_or(trimmed);
+        let rest = trimmed.strip_prefix("pub ").unwrap_or(trimmed);
         let rest = rest
             .strip_prefix("open ")
             .or_else(|| rest.strip_prefix("abstract "))
@@ -949,7 +960,16 @@ fn detect_context(before: &str) -> CompletionContext {
     }
 
     // After keywords that expect a name — suppress completions
-    for kw in &["fn ", "let ", "let mut ", "class ", "data class ", "enum ", "trait ", "typealias "] {
+    for kw in &[
+        "fn ",
+        "let ",
+        "let mut ",
+        "class ",
+        "data class ",
+        "enum ",
+        "trait ",
+        "typealias ",
+    ] {
         if base.ends_with(kw) {
             return CompletionContext::NamingPosition;
         }
@@ -990,12 +1010,18 @@ fn extract_receiver_before_dot(before: &str) -> &str {
     &without_dot[start..]
 }
 
+const SKIP_DIRS: &[&str] = &[".git", "target", "build", "node_modules", ".gradle"];
+
 fn find_vln_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
     let mut files = Vec::new();
     if let Ok(entries) = std::fs::read_dir(root) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if SKIP_DIRS.contains(&name) {
+                    continue;
+                }
                 files.extend(find_vln_files(&path));
             } else if path.extension().is_some_and(|e| e == "vln") {
                 files.push(path);
