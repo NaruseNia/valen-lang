@@ -762,12 +762,28 @@ fn format_fn_signature(name: &str, f: &valen_hir::FnDef) -> String {
             }
         })
         .collect();
+    let generics = if f.generic_bounds.is_empty() {
+        String::new()
+    } else {
+        let gs: Vec<String> = f
+            .generic_bounds
+            .iter()
+            .map(|(name, bounds)| {
+                if bounds.is_empty() {
+                    name.to_string()
+                } else {
+                    format!("{}: {}", name, bounds.join(" + "))
+                }
+            })
+            .collect();
+        format!("<{}>", gs.join(", "))
+    };
     let ret = f
         .return_ty
         .as_ref()
         .map(|t| format!(" -> {t}"))
         .unwrap_or_default();
-    format!("fn {}({}){}", name, params.join(", "), ret)
+    format!("fn {}{generics}({}){}", name, params.join(", "), ret)
 }
 
 fn format_class_signature(name: &str, params: &[valen_hir::CtorParamDef]) -> String {
