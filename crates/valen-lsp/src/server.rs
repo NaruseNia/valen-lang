@@ -904,9 +904,7 @@ fn find_let_type_annotation(source: &str, var_name: &str) -> Option<String> {
             continue;
         }
         let ty_part = after_name[1..].trim_start();
-        let ty_end = ty_part
-            .find(['=', ';', '{'])
-            .unwrap_or(ty_part.len());
+        let ty_end = ty_part.find(['=', ';', '{']).unwrap_or(ty_part.len());
         let ty_str = ty_part[..ty_end].trim();
         // Strip generics for simple lookup
         let base = ty_str.split('<').next().unwrap_or(ty_str).trim();
