@@ -253,10 +253,28 @@ impl ServerState {
                                 .collect();
                             Some(format!("({})", fs.join(", ")))
                         };
+                        // Variant documentation: show which enum it belongs to
+                        let documentation = {
+                            let mut md = format!("```valen\n{name}::{}", variant.name);
+                            if !variant.fields.is_empty() {
+                                let fs: Vec<String> = variant
+                                    .fields
+                                    .iter()
+                                    .map(|(n, t)| format!("{n}: {t}"))
+                                    .collect();
+                                md.push_str(&format!("({})", fs.join(", ")));
+                            }
+                            md.push_str("\n```\n");
+                            Some(Documentation::MarkupContent(MarkupContent {
+                                kind: MarkupKind::Markdown,
+                                value: md,
+                            }))
+                        };
                         items.push(CompletionItem {
                             label: variant.name.to_string(),
                             kind: Some(CompletionItemKind::ENUM_MEMBER),
                             detail,
+                            documentation,
                             ..Default::default()
                         });
                     }
@@ -268,10 +286,17 @@ impl ServerState {
                             if let DefKind::Fn(f) = &mdef.kind {
                                 let has_self = f.params.first().is_some_and(|p| p.is_self);
                                 if !has_self {
+                                    let documentation = build_fn_documentation(
+                                        &mdef.name,
+                                        f,
+                                        &doc.text,
+                                        mdef.span.start,
+                                    );
                                     items.push(CompletionItem {
                                         label: mdef.name.to_string(),
                                         kind: Some(CompletionItemKind::FUNCTION),
                                         detail: Some(format_fn_signature(&mdef.name, f)),
+                                        documentation,
                                         ..Default::default()
                                     });
                                 }
@@ -284,10 +309,17 @@ impl ServerState {
                     for &mid in &t.methods {
                         if let Some(mdef) = hir.defs.get(&mid) {
                             if let DefKind::Fn(f) = &mdef.kind {
+                                let documentation = build_fn_documentation(
+                                    &mdef.name,
+                                    f,
+                                    &doc.text,
+                                    mdef.span.start,
+                                );
                                 items.push(CompletionItem {
                                     label: mdef.name.to_string(),
                                     kind: Some(CompletionItemKind::METHOD),
                                     detail: Some(format_fn_signature(&mdef.name, f)),
+                                    documentation,
                                     ..Default::default()
                                 });
                             }
@@ -317,20 +349,26 @@ impl ServerState {
                 match &def.kind {
                     DefKind::Class(c) if def.name.as_str() == tn => {
                         for param in &c.ctor_params {
+                            let documentation =
+                                build_variable_documentation(&param.name, &param.ty);
                             items.push(CompletionItem {
                                 label: param.name.to_string(),
                                 kind: Some(CompletionItemKind::FIELD),
                                 detail: Some(format!("{}", param.ty)),
+                                documentation,
                                 ..Default::default()
                             });
                         }
                     }
                     DefKind::DataClass(dc) if def.name.as_str() == tn => {
                         for param in &dc.ctor_params {
+                            let documentation =
+                                build_variable_documentation(&param.name, &param.ty);
                             items.push(CompletionItem {
                                 label: param.name.to_string(),
                                 kind: Some(CompletionItemKind::FIELD),
                                 detail: Some(format!("{}", param.ty)),
+                                documentation,
                                 ..Default::default()
                             });
                         }
@@ -343,15 +381,19 @@ impl ServerState {
             if let Some(methods) = hir.type_methods.get(tn.as_str()) {
                 for &mid in methods {
                     if let Some(mdef) = hir.defs.get(&mid) {
-                        let detail = if let DefKind::Fn(f) = &mdef.kind {
-                            Some(format_fn_signature(&mdef.name, f))
+                        let (detail, documentation) = if let DefKind::Fn(f) = &mdef.kind {
+                            (
+                                Some(format_fn_signature(&mdef.name, f)),
+                                build_fn_documentation(&mdef.name, f, &doc.text, mdef.span.start),
+                            )
                         } else {
-                            None
+                            (None, None)
                         };
                         items.push(CompletionItem {
                             label: mdef.name.to_string(),
                             kind: Some(CompletionItemKind::METHOD),
                             detail,
+                            documentation,
                             ..Default::default()
                         });
                     }
@@ -363,15 +405,24 @@ impl ServerState {
                 if entry.target_name.as_str() == tn {
                     for &mid in &entry.methods {
                         if let Some(mdef) = hir.defs.get(&mid) {
-                            let detail = if let DefKind::Fn(f) = &mdef.kind {
-                                Some(format_fn_signature(&mdef.name, f))
+                            let (detail, documentation) = if let DefKind::Fn(f) = &mdef.kind {
+                                (
+                                    Some(format_fn_signature(&mdef.name, f)),
+                                    build_fn_documentation(
+                                        &mdef.name,
+                                        f,
+                                        &doc.text,
+                                        mdef.span.start,
+                                    ),
+                                )
                             } else {
-                                None
+                                (None, None)
                             };
                             items.push(CompletionItem {
                                 label: mdef.name.to_string(),
                                 kind: Some(CompletionItemKind::METHOD),
                                 detail,
+                                documentation,
                                 ..Default::default()
                             });
                         }
@@ -453,11 +504,38 @@ impl ServerState {
                 if hir.prelude_ids.contains(&def.id) || def.name.is_empty() {
                     continue;
                 }
-                let kind = match &def.kind {
-                    DefKind::Class(_) | DefKind::DataClass(_) => CompletionItemKind::CLASS,
-                    DefKind::Enum(_) => CompletionItemKind::ENUM,
-                    DefKind::Trait(_) => CompletionItemKind::INTERFACE,
-                    DefKind::TypeAlias(_) => CompletionItemKind::CLASS,
+                let (kind, documentation) = match &def.kind {
+                    DefKind::Class(c) => (
+                        CompletionItemKind::CLASS,
+                        build_class_documentation(
+                            &def.name,
+                            &c.ctor_params,
+                            c.superclass.as_ref(),
+                            hir,
+                            &doc.text,
+                            def.span.start,
+                        ),
+                    ),
+                    DefKind::DataClass(dc) => (
+                        CompletionItemKind::CLASS,
+                        build_class_documentation(
+                            &def.name,
+                            &dc.ctor_params,
+                            None,
+                            hir,
+                            &doc.text,
+                            def.span.start,
+                        ),
+                    ),
+                    DefKind::Enum(e) => (
+                        CompletionItemKind::ENUM,
+                        build_enum_documentation(&def.name, e, &doc.text, def.span.start),
+                    ),
+                    DefKind::Trait(t) => (
+                        CompletionItemKind::INTERFACE,
+                        build_trait_documentation(&def.name, t, hir, &doc.text, def.span.start),
+                    ),
+                    DefKind::TypeAlias(_) => (CompletionItemKind::CLASS, None),
                     _ => continue,
                 };
                 let label = def.name.to_string();
@@ -465,6 +543,7 @@ impl ServerState {
                     items.push(CompletionItem {
                         label,
                         kind: Some(kind),
+                        documentation,
                         ..Default::default()
                     });
                 }
@@ -481,10 +560,13 @@ impl ServerState {
                             } else {
                                 Some(format!("{tp}: {}", bounds.join(" + ")))
                             };
+                            let bounds_str = bounds.join(" + ");
+                            let documentation = build_type_param_documentation(tp, &bounds_str);
                             items.push(CompletionItem {
                                 label,
                                 kind: Some(CompletionItemKind::TYPE_PARAMETER),
                                 detail,
+                                documentation,
                                 ..Default::default()
                             });
                         }
@@ -507,19 +589,37 @@ impl ServerState {
                 match &def.kind {
                     DefKind::Class(c) => {
                         let sig = format_class_signature(&def.name, &c.ctor_params);
+                        let documentation = build_class_documentation(
+                            &def.name,
+                            &c.ctor_params,
+                            c.superclass.as_ref(),
+                            hir,
+                            &doc.text,
+                            def.span.start,
+                        );
                         items.push(CompletionItem {
                             label: def.name.to_string(),
                             kind: Some(CompletionItemKind::CLASS),
                             detail: Some(sig),
+                            documentation,
                             ..Default::default()
                         });
                     }
                     DefKind::DataClass(dc) => {
                         let sig = format_class_signature(&def.name, &dc.ctor_params);
+                        let documentation = build_class_documentation(
+                            &def.name,
+                            &dc.ctor_params,
+                            None,
+                            hir,
+                            &doc.text,
+                            def.span.start,
+                        );
                         items.push(CompletionItem {
                             label: def.name.to_string(),
                             kind: Some(CompletionItemKind::CLASS),
                             detail: Some(sig),
+                            documentation,
                             ..Default::default()
                         });
                     }
@@ -540,11 +640,13 @@ impl ServerState {
             let locals = collect_local_variables(bodies, offset, doc.hir.as_ref());
             for (name, ty) in locals {
                 if seen.insert(name.clone()) {
+                    let documentation = build_variable_documentation(&name, &ty);
                     items.push(CompletionItem {
                         label: name,
                         kind: Some(CompletionItemKind::VARIABLE),
                         detail: Some(format!("{ty}")),
                         sort_text: Some(format!("0_{}", items.len())),
+                        documentation,
                         ..Default::default()
                     });
                 }
@@ -555,6 +657,7 @@ impl ServerState {
             items.push(CompletionItem {
                 label: kw.to_string(),
                 kind: Some(CompletionItemKind::KEYWORD),
+                // No documentation for keywords
                 ..Default::default()
             });
             seen.insert(kw.to_string());
@@ -581,42 +684,72 @@ impl ServerState {
                 if hir.prelude_ids.contains(&def.id) && matches!(&def.kind, DefKind::Fn(_)) {
                     continue;
                 }
-                let (label, kind, detail) = match &def.kind {
+                let (label, kind, detail, documentation) = match &def.kind {
                     DefKind::Fn(f) => {
                         let sig = format_fn_signature(&def.name, f);
+                        let doc_md =
+                            build_fn_documentation(&def.name, f, &doc.text, def.span.start);
                         (
                             def.name.to_string(),
                             CompletionItemKind::FUNCTION,
                             Some(sig),
+                            doc_md,
                         )
                     }
                     DefKind::Class(c) => {
                         let sig = format_class_signature(&def.name, &c.ctor_params);
-                        (def.name.to_string(), CompletionItemKind::CLASS, Some(sig))
+                        let doc_md = build_class_documentation(
+                            &def.name,
+                            &c.ctor_params,
+                            c.superclass.as_ref(),
+                            hir,
+                            &doc.text,
+                            def.span.start,
+                        );
+                        (
+                            def.name.to_string(),
+                            CompletionItemKind::CLASS,
+                            Some(sig),
+                            doc_md,
+                        )
                     }
                     DefKind::DataClass(dc) => {
                         let sig = format_class_signature(&def.name, &dc.ctor_params);
-                        (def.name.to_string(), CompletionItemKind::CLASS, Some(sig))
+                        let doc_md = build_class_documentation(
+                            &def.name,
+                            &dc.ctor_params,
+                            None,
+                            hir,
+                            &doc.text,
+                            def.span.start,
+                        );
+                        (
+                            def.name.to_string(),
+                            CompletionItemKind::CLASS,
+                            Some(sig),
+                            doc_md,
+                        )
                     }
                     DefKind::Enum(e) => {
                         let variants: Vec<&str> =
                             e.variants.iter().map(|v| v.name.as_str()).collect();
+                        let doc_md =
+                            build_enum_documentation(&def.name, e, &doc.text, def.span.start);
                         (
                             def.name.to_string(),
                             CompletionItemKind::ENUM,
                             Some(format!("{{ {} }}", variants.join(", "))),
+                            doc_md,
                         )
                     }
                     DefKind::Trait(t) => {
-                        let methods: Vec<String> = t
-                            .methods
-                            .iter()
-                            .filter_map(|&mid| hir.defs.get(&mid).map(|d| d.name.to_string()))
-                            .collect();
+                        let doc_md =
+                            build_trait_documentation(&def.name, t, hir, &doc.text, def.span.start);
                         (
                             def.name.to_string(),
                             CompletionItemKind::INTERFACE,
-                            Some(format!("trait {{ {} }}", methods.join(", "))),
+                            Some(format!("trait {}", def.name)),
+                            doc_md,
                         )
                     }
                     DefKind::TypeAlias(ta) => {
@@ -625,10 +758,11 @@ impl ServerState {
                             def.name.to_string(),
                             CompletionItemKind::CLASS,
                             Some(detail),
+                            None,
                         )
                     }
                     DefKind::AnnotationClass(_) => {
-                        (def.name.to_string(), CompletionItemKind::CLASS, None)
+                        (def.name.to_string(), CompletionItemKind::CLASS, None, None)
                     }
                     DefKind::Impl(_) => continue,
                 };
@@ -637,6 +771,7 @@ impl ServerState {
                         label,
                         kind: Some(kind),
                         detail,
+                        documentation,
                         ..Default::default()
                     });
                 }
@@ -668,19 +803,27 @@ impl ServerState {
                         let label = param.name.to_string();
                         if seen.insert(label.clone()) {
                             let mut ty_str = format!("{}", param.ty);
+                            let mut is_type_param = false;
                             // Annotate type params with bounds
                             if let valen_hir::TyRef::Unresolved(tp) = &param.ty {
                                 for (bn, bounds) in &f.generic_bounds {
                                     if bn == tp && !bounds.is_empty() {
                                         ty_str = format!("{tp}: {}", bounds.join(" + "));
+                                        is_type_param = true;
                                         break;
                                     }
                                 }
                             }
+                            let documentation = if is_type_param {
+                                None
+                            } else {
+                                build_variable_documentation(&label, &param.ty)
+                            };
                             items.push(CompletionItem {
                                 label,
                                 kind: Some(CompletionItemKind::VARIABLE),
                                 detail: Some(ty_str),
+                                documentation,
                                 ..Default::default()
                             });
                         }
@@ -709,17 +852,15 @@ impl ServerState {
                 for (param_name, bounds) in &f.generic_bounds {
                     if param_name.as_str() == name {
                         let value = if bounds.is_empty() {
-                            format!("type {name}")
+                            format!("```valen\ntype {name}\n```\n")
                         } else {
-                            format!("{name}: {}", bounds.join(" + "))
+                            format!("```valen\n{name}: {}\n```\n", bounds.join(" + "))
                         };
                         return Some(Hover {
-                            contents: HoverContents::Scalar(MarkedString::LanguageString(
-                                LanguageString {
-                                    language: "valen".to_string(),
-                                    value,
-                                },
-                            )),
+                            contents: HoverContents::Markup(MarkupContent {
+                                kind: MarkupKind::Markdown,
+                                value,
+                            }),
                             range: None,
                         });
                     }
@@ -731,12 +872,12 @@ impl ServerState {
             if def.name.as_str() != name {
                 continue;
             }
-            let value = format_def_hover(def, hir);
+            let value = format_def_hover_markdown(def, hir, &doc.text);
             return Some(Hover {
-                contents: HoverContents::Scalar(MarkedString::LanguageString(LanguageString {
-                    language: "valen".to_string(),
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
                     value,
-                })),
+                }),
                 range: Some(doc.line_index.span_to_range(def.span)),
             });
         }
@@ -746,12 +887,10 @@ impl ServerState {
             if let Some(expr) = find_expr_at_offset(bodies, offset) {
                 if let Some(hover_text) = format_typed_expr_hover(expr) {
                     return Some(Hover {
-                        contents: HoverContents::Scalar(MarkedString::LanguageString(
-                            LanguageString {
-                                language: "valen".to_string(),
-                                value: hover_text,
-                            },
-                        )),
+                        contents: HoverContents::Markup(MarkupContent {
+                            kind: MarkupKind::Markdown,
+                            value: format!("```valen\n{hover_text}\n```\n"),
+                        }),
                         range: Some(doc.line_index.span_to_range(expr.span)),
                     });
                 }
@@ -881,6 +1020,266 @@ pub fn analyze_document(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Extract `///` doc comments from lines immediately before `span_start` in the source.
+///
+/// Walks backwards from the line preceding the definition, collecting consecutive
+/// `///` comment lines. Strips the `/// ` (or `///`) prefix and joins with newlines.
+/// Returns `None` if no doc comments are found.
+fn extract_doc_comment(source: &str, span_start: u32) -> Option<String> {
+    let before = &source[..span_start as usize];
+    // Find the line containing span_start; we want the lines *before* it.
+    let lines: Vec<&str> = before.lines().collect();
+    if lines.is_empty() {
+        return None;
+    }
+    // Start from the line just before the definition line.
+    // The last line in `lines` is the one containing span_start (or partial).
+    let start_idx = if lines.len() >= 2 {
+        lines.len() - 2
+    } else {
+        return None;
+    };
+
+    let mut doc_lines: Vec<&str> = Vec::new();
+    for i in (0..=start_idx).rev() {
+        let trimmed = lines[i].trim();
+        if let Some(rest) = trimmed.strip_prefix("///") {
+            // Strip optional leading space after `///`
+            let content = rest.strip_prefix(' ').unwrap_or(rest);
+            doc_lines.push(content);
+        } else if trimmed.is_empty() {
+            // Allow blank lines between doc comments and definition
+            if doc_lines.is_empty() {
+                continue;
+            }
+            break;
+        } else {
+            break;
+        }
+    }
+
+    if doc_lines.is_empty() {
+        return None;
+    }
+
+    doc_lines.reverse();
+    Some(doc_lines.join("\n"))
+}
+
+/// Build rich Markdown documentation for a function completion item.
+fn build_fn_documentation(
+    name: &str,
+    f: &valen_hir::FnDef,
+    source: &str,
+    span_start: u32,
+) -> Option<Documentation> {
+    let mut md = String::new();
+    md.push_str("```valen\n");
+    md.push_str(&format_fn_signature(name, f));
+    md.push_str("\n```\n");
+
+    // Type parameters section
+    if !f.generic_bounds.is_empty() {
+        md.push_str("\n**Type Parameters:**\n");
+        for (tp, bounds) in &f.generic_bounds {
+            if bounds.is_empty() {
+                md.push_str(&format!("- `{tp}`\n"));
+            } else {
+                md.push_str(&format!("- `{tp}` \u{2014} `{}`\n", bounds.join(" + ")));
+            }
+        }
+    }
+
+    if let Some(doc) = extract_doc_comment(source, span_start) {
+        md.push_str("\n---\n");
+        md.push_str(&doc);
+        md.push('\n');
+    }
+
+    Some(Documentation::MarkupContent(MarkupContent {
+        kind: MarkupKind::Markdown,
+        value: md,
+    }))
+}
+
+/// Build rich Markdown documentation for a class/data class completion item.
+fn build_class_documentation(
+    name: &str,
+    params: &[valen_hir::CtorParamDef],
+    superclass: Option<&valen_hir::TyRef>,
+    hir: &valen_hir::Hir,
+    source: &str,
+    span_start: u32,
+) -> Option<Documentation> {
+    let mut md = String::new();
+    md.push_str("```valen\n");
+
+    // Build signature line
+    let ps: Vec<String> = params
+        .iter()
+        .map(|p| {
+            let vis = match p.vis {
+                valen_hir::Vis::Pub => "pub ",
+                _ => "",
+            };
+            let m = if p.mutable { "mut " } else { "" };
+            format!("{vis}{m}{}: {}", p.name, p.ty)
+        })
+        .collect();
+    let mut sig = format!("class {name}({})", ps.join(", "));
+    if let Some(sup) = superclass {
+        sig.push_str(&format!(" : {sup}"));
+    }
+    md.push_str(&sig);
+    md.push_str("\n```\n");
+
+    // Implements section: find traits implemented by this class
+    let trait_names: Vec<&str> = hir
+        .trait_impls
+        .iter()
+        .filter(|e| e.target_name.as_str() == name)
+        .map(|e| e.trait_name.as_str())
+        .collect();
+    if !trait_names.is_empty() {
+        md.push_str(&format!("\n**Implements:** {}\n", trait_names.join(", ")));
+    }
+
+    // Fields section
+    if !params.is_empty() {
+        md.push_str("\n**Fields:**\n");
+        for p in params {
+            md.push_str(&format!("- `{}: {}`\n", p.name, p.ty));
+        }
+    }
+
+    if let Some(doc) = extract_doc_comment(source, span_start) {
+        md.push_str("\n---\n");
+        md.push_str(&doc);
+        md.push('\n');
+    }
+
+    Some(Documentation::MarkupContent(MarkupContent {
+        kind: MarkupKind::Markdown,
+        value: md,
+    }))
+}
+
+/// Build rich Markdown documentation for an enum completion item.
+fn build_enum_documentation(
+    name: &str,
+    e: &valen_hir::EnumDef,
+    source: &str,
+    span_start: u32,
+) -> Option<Documentation> {
+    let mut md = String::new();
+    md.push_str("```valen\n");
+
+    let variants_short: Vec<String> = e
+        .variants
+        .iter()
+        .map(|v| {
+            if v.fields.is_empty() {
+                v.name.to_string()
+            } else {
+                let fs: Vec<String> = v.fields.iter().map(|(n, t)| format!("{n}: {t}")).collect();
+                format!("{}({})", v.name, fs.join(", "))
+            }
+        })
+        .collect();
+    md.push_str(&format!("enum {name} {{ {} }}", variants_short.join(", ")));
+    md.push_str("\n```\n");
+
+    // Variants section
+    md.push_str("\n**Variants:**\n");
+    for v in &e.variants {
+        if v.fields.is_empty() {
+            md.push_str(&format!("- `{}`\n", v.name));
+        } else {
+            let fs: Vec<String> = v.fields.iter().map(|(n, t)| format!("{n}: {t}")).collect();
+            md.push_str(&format!("- `{}({})`\n", v.name, fs.join(", ")));
+        }
+    }
+
+    if let Some(doc) = extract_doc_comment(source, span_start) {
+        md.push_str("\n---\n");
+        md.push_str(&doc);
+        md.push('\n');
+    }
+
+    Some(Documentation::MarkupContent(MarkupContent {
+        kind: MarkupKind::Markdown,
+        value: md,
+    }))
+}
+
+/// Build rich Markdown documentation for a trait completion item.
+fn build_trait_documentation(
+    name: &str,
+    t: &valen_hir::TraitDef,
+    hir: &valen_hir::Hir,
+    source: &str,
+    span_start: u32,
+) -> Option<Documentation> {
+    let mut md = String::new();
+    md.push_str("```valen\n");
+    md.push_str(&format!("trait {name} {{\n"));
+
+    let mut method_sigs: Vec<String> = Vec::new();
+    for &mid in &t.methods {
+        if let Some(mdef) = hir.defs.get(&mid) {
+            if let DefKind::Fn(f) = &mdef.kind {
+                let sig = format_fn_signature(&mdef.name, f);
+                md.push_str(&format!("    {sig};\n"));
+                method_sigs.push(sig);
+            }
+        }
+    }
+
+    md.push_str("}\n");
+    md.push_str("```\n");
+
+    // Methods section
+    if !method_sigs.is_empty() {
+        md.push_str("\n**Methods:**\n");
+        for sig in &method_sigs {
+            md.push_str(&format!("- `{sig}`\n"));
+        }
+    }
+
+    if let Some(doc) = extract_doc_comment(source, span_start) {
+        md.push_str("\n---\n");
+        md.push_str(&doc);
+        md.push('\n');
+    }
+
+    Some(Documentation::MarkupContent(MarkupContent {
+        kind: MarkupKind::Markdown,
+        value: md,
+    }))
+}
+
+/// Build Markdown documentation for a variable completion item.
+fn build_variable_documentation(name: &str, ty: &impl std::fmt::Display) -> Option<Documentation> {
+    let md = format!("```valen\nlet {name}: {ty}\n```\n");
+    Some(Documentation::MarkupContent(MarkupContent {
+        kind: MarkupKind::Markdown,
+        value: md,
+    }))
+}
+
+/// Build Markdown documentation for a type parameter with its bounds.
+fn build_type_param_documentation(name: &str, bounds_joined: &str) -> Option<Documentation> {
+    let md = if bounds_joined.is_empty() {
+        format!("Type parameter `{name}`\n")
+    } else {
+        format!("Type parameter with bounds: `{bounds_joined}`\n")
+    };
+    Some(Documentation::MarkupContent(MarkupContent {
+        kind: MarkupKind::Markdown,
+        value: md,
+    }))
+}
 
 fn format_fn_signature(name: &str, f: &valen_hir::FnDef) -> String {
     let params: Vec<String> = f
@@ -1216,7 +1615,11 @@ pub fn extract_word_at(text: &str, offset: u32) -> Option<&str> {
     Some(&text[start..end])
 }
 
-/// Format a HIR definition for hover display.
+/// Format a HIR definition for hover display (plain text).
+///
+/// Retained as a utility for potential non-Markdown consumers; the LSP hover
+/// path now uses [`format_def_hover_markdown`] instead.
+#[allow(dead_code)]
 fn format_def_hover(def: &valen_hir::Def, hir: &valen_hir::Hir) -> String {
     match &def.kind {
         DefKind::Fn(f) => {
@@ -1305,6 +1708,98 @@ fn format_def_hover(def: &valen_hir::Def, hir: &valen_hir::Hir) -> String {
             format!("annotation class {}", def.name)
         }
     }
+}
+
+/// Format a HIR definition for hover display as rich Markdown with doc comments.
+fn format_def_hover_markdown(def: &valen_hir::Def, hir: &valen_hir::Hir, source: &str) -> String {
+    let mut md = String::new();
+    md.push_str("```valen\n");
+
+    match &def.kind {
+        DefKind::Fn(f) => {
+            md.push_str(&format_fn_signature(&def.name, f));
+        }
+        DefKind::Class(c) => {
+            let ps: Vec<String> = c
+                .ctor_params
+                .iter()
+                .map(|p| {
+                    let vis = match p.vis {
+                        valen_hir::Vis::Pub => "pub ",
+                        _ => "",
+                    };
+                    let m = if p.mutable { "mut " } else { "" };
+                    format!("{vis}{m}{}: {}", p.name, p.ty)
+                })
+                .collect();
+            let mut sig = format!("class {}({})", def.name, ps.join(", "));
+            if let Some(sup) = &c.superclass {
+                sig.push_str(&format!(" : {sup}"));
+            }
+            md.push_str(&sig);
+        }
+        DefKind::DataClass(dc) => {
+            let ps: Vec<String> = dc
+                .ctor_params
+                .iter()
+                .map(|p| {
+                    let vis = match p.vis {
+                        valen_hir::Vis::Pub => "pub ",
+                        _ => "",
+                    };
+                    format!("{vis}{}: {}", p.name, p.ty)
+                })
+                .collect();
+            md.push_str(&format!("data class {}({})", def.name, ps.join(", ")));
+        }
+        DefKind::Enum(e) => {
+            let variants: Vec<String> = e
+                .variants
+                .iter()
+                .map(|v| {
+                    if v.fields.is_empty() {
+                        v.name.to_string()
+                    } else {
+                        let fields: Vec<String> =
+                            v.fields.iter().map(|(n, t)| format!("{n}: {t}")).collect();
+                        format!("{}({})", v.name, fields.join(", "))
+                    }
+                })
+                .collect();
+            md.push_str(&format!("enum {} {{ {} }}", def.name, variants.join(", ")));
+        }
+        DefKind::Trait(t) => {
+            md.push_str(&format!("trait {} {{\n", def.name));
+            for &mid in &t.methods {
+                if let Some(mdef) = hir.defs.get(&mid) {
+                    if let DefKind::Fn(f) = &mdef.kind {
+                        md.push_str(&format!("    {};\n", format_fn_signature(&mdef.name, f)));
+                    }
+                }
+            }
+            md.push('}');
+        }
+        DefKind::Impl(im) => {
+            md.push_str(&format!("impl {} for {}", im.trait_ref, im.target));
+        }
+        DefKind::TypeAlias(ta) => {
+            md.push_str(&format!("typealias {} = {}", def.name, ta.target));
+        }
+        DefKind::AnnotationClass(_) => {
+            md.push_str(&format!("annotation class {}", def.name));
+        }
+    }
+
+    md.push_str("\n```\n");
+
+    // Append doc comment if present
+    if let Some(doc) = extract_doc_comment(source, def.span.start) {
+        md.push_str("\n---\n");
+        md.push_str(&doc);
+        md.push('\n');
+    }
+
+    md
 }
 
 /// Classify a `TokenKind` into a semantic token type index, or `None` to skip.
