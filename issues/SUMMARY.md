@@ -238,7 +238,21 @@
 | 174 | valenc | Dual version paths (--version + subcommand) | design |
 | 175 | valenfmt | has_blank_line performance (count all newlines) | performance |
 
+## Codex CLI Supplemental Review (2026-05-15)
+
+独立レビュー（Codex CLI / gpt-5.5）による追加指摘。既存167件と重複なし。
+
+| # | Severity | Scope | Title | Dimension |
+|---|----------|-------|-------|-----------|
+| 057 | major | valen-lsp | [LSP workspace indexing follows symlinks outside workspace](major/057_valen-lsp_symlink_traversal.md) | security |
+| 058 | major | valen-hir | [Classpath scanner が JAR ファイルを処理しない](major/058_valen-hir_classpath_no_jar_support.md) | spec_coverage |
+| 059 | minor | valen-parser | [UTF-8 BOM がエラートークンとしてlexされる](minor/059_valen-parser_utf8_bom_error.md) | edge_case |
+| 060 | major | valen-lsp | [didChange がインクリメンタル編集を全文置換として処理](major/060_valen-lsp_incremental_change_corruption.md) | concurrency |
+| 061 | major | valenfmt | [フォーマッタがファイルを非原子的に書き込む](major/061_valenfmt_non_atomic_write.md) | correctness |
+| 062 | minor | valen-ast | [ソースオフセットが u32::MAX 超でラップアラウンド](minor/062_valen-ast_u32_offset_overflow.md) | edge_case |
+| 063 | enhancement | valen-lsp | [tokio "full" feature が不要](enhancement/063_valen-lsp_tokio_full_unnecessary.md) | dependency |
+
 ## Filed To
 
-- Local md: `./issues/` — critical + major issues as individual files (001–055)
-- Minor + enhancement issues listed in this summary only
+- Local md: `./issues/` — critical/major/minor/enhancement フォルダに分類
+- `issues/critical/` (001–007), `issues/major/` (008–061), `issues/minor/` (059,062), `issues/enhancement/` (063)
