@@ -15,10 +15,10 @@ open abstract sealed override
 package import
 for in while loop break continue
 true false
-as
+as safe annotation typealias type
 ```
 
-予約語（将来用）：`suspend async await yield typealias`
+予約語（将来用）：`suspend async await yield`
 
 ### `as` キーワードの用途
 

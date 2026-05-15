@@ -53,6 +53,8 @@ Valen は JVM をターゲットとする新規プログラミング言語。ADT
 | REQ-TRAIT-002 | trait 充足は impl ブロックのみ | Must | Done |
 | REQ-TRAIT-003 | orphan rule（module 所有、blanket impl 禁止） | Must | Done |
 | REQ-TRAIT-004 | UFCS（Trait::method(receiver, args) 一本化） | Must | Done |
+| REQ-TRAIT-005 | associated type（trait 内 type 宣言、impl で具体化） | Should | Done |
+| REQ-TRAIT-006 | 演算子オーバーロード（trait ベース、9 trait） | Should | Done |
 | REQ-FAIL-001 | Option/Result/panic/Exception の役割分離 | Must | Done |
 | REQ-FAIL-002 | Error trait（E: Error 制約） | Must | Done |
 | REQ-FAIL-003 | ? 演算子（同一E型のみ伝播） | Must | Done |

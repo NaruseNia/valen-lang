@@ -61,6 +61,8 @@ Phase 0（基盤整備）完了済み。Phase 1（MVP）に向けて、コンパ
 | REQ-TRAIT-002 | impl ブロックのみ | TASK-004 | Full |
 | REQ-TRAIT-003 | orphan rule | TASK-006 | Full |
 | REQ-TRAIT-004 | UFCS 統一 | TASK-004 | Full |
+| REQ-TRAIT-005 | associated type | TASK-028 | Full |
+| REQ-TRAIT-006 | 演算子オーバーロード | TASK-028 | Full |
 | REQ-FAIL-001 | 役割分離 | TASK-005, TASK-012 | Full |
 | REQ-FAIL-002 | Error trait | TASK-012 | Full |
 | REQ-FAIL-003 | ? 演算子 | TASK-005, TASK-010, TASK-023 | Full |
