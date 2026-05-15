@@ -59,7 +59,7 @@ TASK-019 で lambda が実装されれば自動解消の可能性大。残れば
 
 | タスク | 内容 | 依存 | 規模 | 状態 |
 |--------|------|------|------|------|
-| TASK-023 | prelude（valen.core 型のコンパイラ内蔵） | — | M | Partial (型注入済、? codegen未) |
+| ~~TASK-023~~ | prelude（valen.core 型のコンパイラ内蔵） | — | M | ✅ |
 | ~~TASK-024~~ | typealias パース + HIR + codegen | — | M | ✅ |
 | ~~TASK-025~~ | classpath 走査（Java .class メタデータ読み取り） | — | L | ✅ |
 | ~~TASK-026~~ | @valen.Closed（REQ-INTEROP-003） | TASK-025 | M | ✅ |
@@ -105,6 +105,7 @@ Kotlin/Java ユーザー向けの快適機能とツール充実。
 | ~~TASK-030~~ | ~~annotation（宣言 + 付与 + ランタイム保持）~~ ✅ | — | L |
 | TASK-031 | valenfmt 最小実装（TASK-015） | — | M |
 | TASK-032 | LSP 拡充（#49: completion/hover/semantic tokens） | TASK-023 | L |
+| TASK-033 | stdlib 強化（Option/Result メソッド群、ジェネリクス活用） | TASK-023, TASK-028 | M |
 
 **詳細:**
 
@@ -196,4 +197,4 @@ M8 (言語機能 + ツール)            │
 | 日付 | 変更 |
 |------|------|
 | 2026-05-13 | grill-me 4巡で策定。M6/M7/M8 3層構造確定 |
-| 2026-05-15 | M6 全完了、M7 TASK-024〜026 完了、M8 TASK-027/029/030 完了、Generics Phase A+B 完了 |
+| 2026-05-15 | M6 全完了、M7 TASK-023〜026 完了、M8 TASK-027/029/030 完了、Generics Phase A+B 完了、TASK-033(stdlib強化) 追加 |

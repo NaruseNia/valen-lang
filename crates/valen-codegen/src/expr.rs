@@ -450,6 +450,11 @@ impl<'a> ExprLowering<'a> {
             TypedExprKind::Safe(body) => {
                 self.lower_safe(body, &expr.ty);
             }
+            TypedExprKind::Try {
+                inner, is_option, ..
+            } => {
+                self.lower_try(inner, *is_option, &expr.ty);
+            }
             TypedExprKind::Error => {}
         }
     }
@@ -1533,6 +1538,50 @@ impl<'a> ExprLowering<'a> {
             params: vec![obj.clone(), obj, JvmType::Boolean],
             ret: JvmType::Void,
         });
+    }
+
+    fn lower_try(&mut self, inner: &TypedExpr, is_option: bool, result_ty: &Ty) {
+        let ok_label = self.alloc_label();
+        let obj = JvmType::Object(JVM_OBJECT.to_string());
+
+        self.lower_expr(inner);
+
+        if is_option {
+            self.ops.push(JvmOp::Dup);
+            self.ops
+                .push(JvmOp::Instanceof("valen/core/Option$Some".to_string()));
+            self.ops.push(JvmOp::IfNe(ok_label));
+            self.ops.push(JvmOp::Return(obj.clone()));
+
+            self.ops.push(JvmOp::Label(ok_label));
+            self.emit_frame(vec![JvmType::Object("valen/core/Option".to_string())]);
+            self.ops
+                .push(JvmOp::Checkcast("valen/core/Option$Some".to_string()));
+            self.ops.push(JvmOp::GetField {
+                owner: "valen/core/Option$Some".to_string(),
+                name: "value".to_string(),
+                descriptor: obj,
+            });
+        } else {
+            self.ops.push(JvmOp::Dup);
+            self.ops
+                .push(JvmOp::Instanceof("valen/core/Result$Ok".to_string()));
+            self.ops.push(JvmOp::IfNe(ok_label));
+            self.ops.push(JvmOp::Return(obj.clone()));
+
+            self.ops.push(JvmOp::Label(ok_label));
+            self.emit_frame(vec![JvmType::Object("valen/core/Result".to_string())]);
+            self.ops
+                .push(JvmOp::Checkcast("valen/core/Result$Ok".to_string()));
+            self.ops.push(JvmOp::GetField {
+                owner: "valen/core/Result$Ok".to_string(),
+                name: "value".to_string(),
+                descriptor: obj,
+            });
+        }
+
+        let jvm_ty = self.ty_to_jvm(result_ty);
+        self.emit_unbox(&jvm_ty);
     }
 
     /// Lowers a `safe {}` block into a JVM try-catch that produces

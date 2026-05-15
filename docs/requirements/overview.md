@@ -55,7 +55,7 @@ Valen は JVM をターゲットとする新規プログラミング言語。ADT
 | REQ-TRAIT-004 | UFCS（Trait::method(receiver, args) 一本化） | Must | Done |
 | REQ-FAIL-001 | Option/Result/panic/Exception の役割分離 | Must | Done |
 | REQ-FAIL-002 | Error trait（E: Error 制約） | Must | Done |
-| REQ-FAIL-003 | ? 演算子（同一E型のみ伝播） | Must | Partial |
+| REQ-FAIL-003 | ? 演算子（同一E型のみ伝播） | Must | Done |
 | REQ-FAIL-004 | safe {} ブロック（Java 例外→Result） | Must | Done |
 | REQ-FAIL-005 | safe {} 内 Java 戻り値は T?（Option<T>） | Must | Done |
 | REQ-EMIT-001 | Java 21 class file 生成 | Must | Done |

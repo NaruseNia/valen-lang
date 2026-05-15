@@ -619,6 +619,11 @@ pub enum TypedExprKind {
     /// A `safe {}` block that catches JVM exceptions at runtime.
     /// The body is lowered into a try-catch in codegen.
     Safe(TypedBody),
+    /// The `?` operator on Result or Option — unwrap or early return.
+    Try {
+        inner: Box<TypedExpr>,
+        is_option: bool,
+    },
     Error,
 }
 
