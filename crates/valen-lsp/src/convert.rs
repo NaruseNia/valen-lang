@@ -32,7 +32,8 @@ impl LineIndex {
         };
         let line_start = self.line_starts[line] as usize;
         let byte_col = (offset as usize).saturating_sub(line_start);
-        let line_text = &self.source[line_start..line_start + byte_col];
+        let end = (line_start + byte_col).min(self.source.len());
+        let line_text = &self.source[line_start..end];
         let utf16_col = line_text.encode_utf16().count() as u32;
         lsp_types::Position::new(line as u32, utf16_col)
     }
