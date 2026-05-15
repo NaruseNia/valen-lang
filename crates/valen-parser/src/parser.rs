@@ -18,15 +18,15 @@
 use smol_str::SmolStr;
 use valen_ast::token::TokenKind;
 use valen_ast::{
-    Annotation, AnnotationArg, AnnotationClassDecl, AnnotationParam, AssignExpr, AtPattern,
-    BinaryExpr, BinaryOp, BindingPattern, Block, BreakExpr, CallArg, CallExpr, ClassDecl,
-    ClassKind, ClassMember, ContinueExpr, CtorParam, DataClassDecl, EnumDecl, EnumField,
-    EnumVariant, EnumVariantFields, Expr, FieldAccess, FileId, FnDecl, ForExpr, GenericParam,
-    IfExpr, ImplBlock, ImplItem, ImportDecl, Item, LambdaExpr, LambdaParam, LetStmt, Literal,
-    LoopExpr, MatchArm, MatchExpr, MethodCallExpr, PackageDecl, Param, Path, PathSegment, Pattern,
-    RangeExpr, RangePattern, ReturnExpr, Span, Stmt, StructPattern, StructPatternField, TraitDecl,
-    TraitItem, TryExpr, Type, TypeAliasDecl, TypePath, TypePathSegment, UnaryExpr, UnaryOp,
-    Variance, Visibility, WhileExpr,
+    Annotation, AnnotationArg, AnnotationClassDecl, AnnotationParam, AssignExpr, AssocTypeDecl,
+    AssocTypeDef, AtPattern, BinaryExpr, BinaryOp, BindingPattern, Block, BreakExpr, CallArg,
+    CallExpr, ClassDecl, ClassKind, ClassMember, ContinueExpr, CtorParam, DataClassDecl, EnumDecl,
+    EnumField, EnumVariant, EnumVariantFields, Expr, FieldAccess, FileId, FnDecl, ForExpr,
+    GenericParam, IfExpr, ImplBlock, ImplItem, ImportDecl, Item, LambdaExpr, LambdaParam, LetStmt,
+    Literal, LoopExpr, MatchArm, MatchExpr, MethodCallExpr, PackageDecl, Param, Path, PathSegment,
+    Pattern, RangeExpr, RangePattern, ReturnExpr, Span, Stmt, StructPattern, StructPatternField,
+    TraitDecl, TraitItem, TryExpr, Type, TypeAliasDecl, TypePath, TypePathSegment, UnaryExpr,
+    UnaryOp, Variance, Visibility, WhileExpr,
 };
 use valen_diagnostics::{DiagCode, Diagnostics};
 
@@ -690,6 +690,22 @@ impl Parser {
         let mut items = Vec::new();
         while !self.at(&TokenKind::RBrace) && !self.at_eof() {
             let item_start = self.peek_span();
+            if self.at(&TokenKind::Type) {
+                self.bump();
+                let type_name = self.expect_ident()?;
+                let default = if self.eat(&TokenKind::Eq).is_some() {
+                    Some(self.parse_type()?)
+                } else {
+                    None
+                };
+                let end = self.expect(TokenKind::Semi)?;
+                items.push(TraitItem::AssociatedType(AssocTypeDecl {
+                    name: type_name,
+                    default,
+                    span: item_start.merge(end),
+                }));
+                continue;
+            }
             self.expect(TokenKind::Fn)?;
             let fn_name = self.expect_ident()?;
             let fn_generics = self.parse_generic_params()?;
@@ -761,6 +777,19 @@ impl Parser {
         let mut items = Vec::new();
         while !self.at(&TokenKind::RBrace) && !self.at_eof() {
             let item_start = self.peek_span();
+            if self.at(&TokenKind::Type) {
+                self.bump();
+                let type_name = self.expect_ident()?;
+                self.expect(TokenKind::Eq)?;
+                let ty = self.parse_type()?;
+                let end = self.expect(TokenKind::Semi)?;
+                items.push(ImplItem::AssociatedType(AssocTypeDef {
+                    name: type_name,
+                    ty,
+                    span: item_start.merge(end),
+                }));
+                continue;
+            }
             let fn_decl =
                 self.parse_fn_decl(vec![], Visibility::Pub, item_start, false, false, false)?;
             items.push(ImplItem::Fn(fn_decl));
