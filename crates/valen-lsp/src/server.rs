@@ -38,6 +38,7 @@ pub struct DocumentState {
 pub struct ServerState {
     client: ClientSocket,
     documents: HashMap<Url, DocumentState>,
+    workspace_root: Option<std::path::PathBuf>,
 }
 
 impl ServerState {
@@ -45,6 +46,7 @@ impl ServerState {
         let this = Self {
             client,
             documents: HashMap::new(),
+            workspace_root: None,
         };
         let mut router = Router::from_language_server(this);
         router.event(Self::on_event);
@@ -56,6 +58,20 @@ impl ServerState {
         _event: async_lsp::AnyEvent,
     ) -> ControlFlow<async_lsp::Result<()>> {
         ControlFlow::Continue(())
+    }
+
+    fn index_workspace(&mut self, root: &std::path::Path) {
+        let vln_files = find_vln_files(root);
+        for path in vln_files {
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                if let Ok(uri) = Url::from_file_path(&path) {
+                    self.documents.entry(uri).or_insert_with(|| {
+                        let (doc_state, _) = analyze_document(&text);
+                        doc_state
+                    });
+                }
+            }
+        }
     }
 
     fn analyze_and_publish(&mut self, uri: Url, text: String, version: i32) {
@@ -74,15 +90,35 @@ impl ServerState {
         let doc = self.documents.get(uri)?;
         let offset = doc.line_index.position_to_offset(position);
         let name = extract_word_at(&doc.text, offset)?;
-        let hir = doc.hir.as_ref()?;
 
-        for def in hir.defs.values() {
-            if def.name.as_str() == name {
-                let range = doc.line_index.span_to_range(def.span);
-                return Some(GotoDefinitionResponse::Scalar(Location {
-                    uri: uri.clone(),
-                    range,
-                }));
+        // Search current document first
+        if let Some(hir) = doc.hir.as_ref() {
+            for def in hir.defs.values() {
+                if def.name.as_str() == name {
+                    let range = doc.line_index.span_to_range(def.span);
+                    return Some(GotoDefinitionResponse::Scalar(Location {
+                        uri: uri.clone(),
+                        range,
+                    }));
+                }
+            }
+        }
+
+        // Cross-file: search other documents
+        for (other_uri, other_doc) in &self.documents {
+            if other_uri == uri {
+                continue;
+            }
+            if let Some(hir) = other_doc.hir.as_ref() {
+                for def in hir.defs.values() {
+                    if def.name.as_str() == name {
+                        let range = other_doc.line_index.span_to_range(def.span);
+                        return Some(GotoDefinitionResponse::Scalar(Location {
+                            uri: other_uri.clone(),
+                            range,
+                        }));
+                    }
+                }
             }
         }
         None
@@ -275,6 +311,21 @@ pub fn analyze_document(text: &str) -> (DocumentState, Vec<async_lsp::lsp_types:
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+fn find_vln_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut files = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(root) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                files.extend(find_vln_files(&path));
+            } else if path.extension().is_some_and(|e| e == "vln") {
+                files.push(path);
+            }
+        }
+    }
+    files
+}
 
 /// Extract the identifier word at the given byte offset.
 pub fn extract_word_at(text: &str, offset: u32) -> Option<&str> {
@@ -470,8 +521,21 @@ impl LanguageServer for ServerState {
 
     fn initialize(
         &mut self,
-        _: InitializeParams,
+        params: InitializeParams,
     ) -> futures::future::BoxFuture<'static, Result<InitializeResult, Self::Error>> {
+        let root_uri = params
+            .workspace_folders
+            .as_ref()
+            .and_then(|folders| folders.first())
+            .map(|f| f.uri.clone())
+            .or_else(|| {
+                #[allow(deprecated)]
+                params.root_uri.clone()
+            });
+        if let Some(root) = root_uri.as_ref().and_then(|u| u.to_file_path().ok()) {
+            self.workspace_root = Some(root.clone());
+            self.index_workspace(&root);
+        }
         Box::pin(async {
             Ok(InitializeResult {
                 capabilities: ServerCapabilities {
