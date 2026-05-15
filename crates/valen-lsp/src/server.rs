@@ -905,7 +905,7 @@ fn find_let_type_annotation(source: &str, var_name: &str) -> Option<String> {
         }
         let ty_part = after_name[1..].trim_start();
         let ty_end = ty_part
-            .find(|c: char| c == '=' || c == ';' || c == '{')
+            .find(['=', ';', '{'])
             .unwrap_or(ty_part.len());
         let ty_str = ty_part[..ty_end].trim();
         // Strip generics for simple lookup
@@ -948,9 +948,8 @@ fn detect_context(before: &str) -> CompletionContext {
     if base.ends_with("<") {
         return CompletionContext::TypePosition;
     }
-    if base.ends_with(",") {
-        // Could be in param list type position — check for `:`
-        let before_comma = &base[..base.len() - 1].trim_end();
+    if base.ends_with(',') {
+        let before_comma = base.strip_suffix(',').unwrap_or(base).trim_end();
         if before_comma
             .rfind(':')
             .is_some_and(|i| before_comma[i..].find('(').is_none())
