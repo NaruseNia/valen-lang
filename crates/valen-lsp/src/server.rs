@@ -460,6 +460,17 @@ impl ServerState {
             }
         }
 
+        // Look up variable type from typed bodies (handles inferred types)
+        let offset = before.len() as u32;
+        if let Some(bodies) = doc.bodies.as_ref() {
+            let locals = collect_local_variables(bodies, offset, doc.hir.as_ref());
+            for (name, ty) in &locals {
+                if name == receiver {
+                    return ty_to_type_name(ty);
+                }
+            }
+        }
+
         // Look up variable type from fn params
         for def in hir.defs.values() {
             if let DefKind::Fn(f) = &def.kind {
@@ -1406,6 +1417,16 @@ fn tyref_to_type_name(ty: &valen_hir::TyRef) -> Option<String> {
         valen_hir::TyRef::Named(n) => Some(n.to_string()),
         valen_hir::TyRef::Generic(n, _) => Some(n.to_string()),
         valen_hir::TyRef::Prim(p) => Some(format!("{p}")),
+        _ => None,
+    }
+}
+
+fn ty_to_type_name(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Named(n) => Some(n.to_string()),
+        Ty::Generic(n, _) => Some(n.to_string()),
+        Ty::Prim(p) => Some(format!("{p}")),
+        Ty::Nullable(inner) => ty_to_type_name(inner),
         _ => None,
     }
 }

@@ -104,3 +104,18 @@ fn extract_word_on_space() {
 fn extract_word_past_end() {
     assert_eq!(extract_word_at("hello", 10), None);
 }
+
+#[test]
+fn local_variable_completion_bodies_present() {
+    let src = r#"package one.nxeu;
+
+class Circle(r: Float) {}
+
+fn main() {
+    let circle = Circle(10.0f);
+    let x = circle;
+}
+"#;
+    let (doc, _diags) = analyze_document(src, FileId(0));
+    assert!(doc.bodies.is_some(), "typed bodies should be present");
+}
