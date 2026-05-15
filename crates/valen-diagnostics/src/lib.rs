@@ -71,6 +71,7 @@ impl fmt::Display for Diagnostic {
 impl DiagCode {
     pub const LEX_UNKNOWN_CHAR: DiagCode = DiagCode(1);
     pub const LEX_INT_OVERFLOW: DiagCode = DiagCode(2);
+    pub const LEX_FILE_TOO_LARGE: DiagCode = DiagCode(3);
     pub const PARSE_EXPECTED_SEMI: DiagCode = DiagCode(100);
     pub const PARSE_EXPECTED_EXPR: DiagCode = DiagCode(101);
     pub const PARSE_EXPECTED_TOKEN: DiagCode = DiagCode(102);

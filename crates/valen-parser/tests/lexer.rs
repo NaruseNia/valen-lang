@@ -75,3 +75,33 @@ fn float_literal() {
 fn dot_and_double_colon() {
     assert_snapshot!(fmt("foo.bar::baz"));
 }
+
+#[test]
+fn bom_prefixed_source() {
+    // U+FEFF BOM should be silently stripped; tokens identical to non-BOM input
+    let with_bom = "\u{FEFF}fn main() {}";
+    let without_bom = "fn main() {}";
+    let (tok_bom, diag_bom) = lex(with_bom, FileId(0));
+    let (tok_no, diag_no) = lex(without_bom, FileId(0));
+    // Same token kinds
+    let kinds_bom: Vec<_> = tok_bom.iter().map(|(k, _)| k.clone()).collect();
+    let kinds_no: Vec<_> = tok_no.iter().map(|(k, _)| k.clone()).collect();
+    assert_eq!(kinds_bom, kinds_no);
+    // Spans are offset by BOM length (3 bytes for UTF-8 BOM)
+    for ((_, s_bom), (_, s_no)) in tok_bom.iter().zip(tok_no.iter()) {
+        assert_eq!(s_bom.start, s_no.start + 3, "start offset mismatch");
+        assert_eq!(s_bom.end, s_no.end + 3, "end offset mismatch");
+    }
+    // No diagnostics from BOM
+    assert!(!diag_bom.has_errors());
+    assert!(!diag_no.has_errors());
+}
+
+#[test]
+fn bom_only_source_produces_eof() {
+    // A source consisting of only a BOM should produce just an EOF token
+    let (tokens, diags) = lex("\u{FEFF}", FileId(0));
+    assert_eq!(tokens.len(), 1);
+    assert!(matches!(tokens[0].0, TokenKind::Eof));
+    assert!(!diags.has_errors());
+}

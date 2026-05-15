@@ -285,22 +285,37 @@ fn parse_string(lex: &mut logos::Lexer<'_, RawTok>) -> Option<SmolStr> {
     Some(SmolStr::from(out))
 }
 
+/// UTF-8 BOM character (U+FEFF) that may appear at the start of source files.
+const UTF8_BOM: &str = "\u{FEFF}";
+
+/// Strip a leading UTF-8 BOM if present, returning the remaining source.
+fn strip_bom(source: &str) -> &str {
+    source.strip_prefix(UTF8_BOM).unwrap_or(source)
+}
+
 /// Stateful token iterator that wraps a logos lexer and tracks diagnostics.
 pub struct Lexer<'src> {
     inner: logos::Lexer<'src, RawTok>,
     file_id: FileId,
     eof_emitted: bool,
     diagnostics: Diagnostics,
+    /// Byte offset added to all spans to account for a stripped BOM.
+    bom_offset: u32,
 }
 
 impl<'src> Lexer<'src> {
     /// Create a new lexer for the given source text and file identifier.
+    ///
+    /// A leading UTF-8 BOM (U+FEFF) is silently stripped before lexing.
     pub fn new(source: &'src str, file_id: FileId) -> Self {
+        let stripped = strip_bom(source);
+        let bom_offset = (source.len() - stripped.len()) as u32;
         Self {
-            inner: RawTok::lexer(source),
+            inner: RawTok::lexer(stripped),
             file_id,
             eof_emitted: false,
             diagnostics: Diagnostics::new(),
+            bom_offset,
         }
     }
 
@@ -311,11 +326,15 @@ impl<'src> Lexer<'src> {
                 return None;
             }
             self.eof_emitted = true;
-            let end = self.inner.source().len() as u32;
+            let end = self.inner.source().len() as u32 + self.bom_offset;
             return Some((TokenKind::Eof, Span::new(end, end, self.file_id)));
         };
         let range = self.inner.span();
-        let span = Span::new(range.start as u32, range.end as u32, self.file_id);
+        let span = Span::new(
+            range.start as u32 + self.bom_offset,
+            range.end as u32 + self.bom_offset,
+            self.file_id,
+        );
         let kind = match raw {
             Ok(tok) => map_token(tok),
             Err(()) => {
@@ -340,7 +359,24 @@ impl<'src> Lexer<'src> {
 }
 
 /// Convenience function: lex the entire source into a token vector and diagnostics.
+///
+/// Returns an immediate error diagnostic if the source exceeds `u32::MAX` bytes,
+/// since [`Span`] uses `u32` byte offsets.
 pub fn lex(source: &str, file_id: FileId) -> (Vec<(TokenKind, Span)>, Diagnostics) {
+    if source.len() > u32::MAX as usize {
+        let mut diags = Diagnostics::new();
+        diags.error(
+            DiagCode::LEX_FILE_TOO_LARGE,
+            Span::new(0, 0, file_id),
+            SmolStr::from(format!(
+                "source file is too large ({} bytes); maximum supported size is {} bytes",
+                source.len(),
+                u32::MAX,
+            )),
+        );
+        let eof = vec![(TokenKind::Eof, Span::new(0, 0, file_id))];
+        return (eof, diags);
+    }
     let mut lex = Lexer::new(source, file_id);
     let mut out = Vec::new();
     while let Some(tok) = lex.next_token() {
