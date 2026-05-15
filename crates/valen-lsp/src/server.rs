@@ -509,9 +509,26 @@ impl ServerState {
                         let sig = format_class_signature(&def.name, &dc.ctor_params);
                         (def.name.to_string(), CompletionItemKind::CLASS, Some(sig))
                     }
-                    DefKind::Enum(_) => (def.name.to_string(), CompletionItemKind::ENUM, None),
-                    DefKind::Trait(_) => {
-                        (def.name.to_string(), CompletionItemKind::INTERFACE, None)
+                    DefKind::Enum(e) => {
+                        let variants: Vec<&str> =
+                            e.variants.iter().map(|v| v.name.as_str()).collect();
+                        (
+                            def.name.to_string(),
+                            CompletionItemKind::ENUM,
+                            Some(format!("{{ {} }}", variants.join(", "))),
+                        )
+                    }
+                    DefKind::Trait(t) => {
+                        let methods: Vec<String> = t
+                            .methods
+                            .iter()
+                            .filter_map(|&mid| hir.defs.get(&mid).map(|d| d.name.to_string()))
+                            .collect();
+                        (
+                            def.name.to_string(),
+                            CompletionItemKind::INTERFACE,
+                            Some(format!("trait {{ {} }}", methods.join(", "))),
+                        )
                     }
                     DefKind::TypeAlias(ta) => {
                         let detail = format!("typealias {} = {}", def.name, ta.target);
