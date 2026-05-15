@@ -81,6 +81,7 @@ impl Parser {
     }
 
     fn parse_item(&mut self) -> Option<Item> {
+        self.pending_gt = 0;
         if self.at(&TokenKind::Package) {
             return self.parse_package().map(Item::Package);
         }
@@ -1840,6 +1841,7 @@ impl Parser {
     }
 
     fn recover_to_item_boundary(&mut self) {
+        self.pending_gt = 0;
         while !self.at_eof() {
             if matches!(
                 self.peek(),
