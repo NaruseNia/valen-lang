@@ -6,8 +6,8 @@ use valen_ast::{self, BinaryOp, Span, UnaryOp};
 use valen_diagnostics::{DiagCode, Diagnostics};
 
 use crate::{
-    tyref_to_ty, DefId, DefKind, Hir, PrimTy, Ty, TyRef, TypedBody, TypedExpr, TypedExprKind,
-    TypedMatchArm, TypedStmt, TypedStringPart,
+    tyref_to_ty, tyref_to_ty_generic, DefId, DefKind, Hir, PrimTy, Ty, TyRef, TypedBody,
+    TypedExpr, TypedExprKind, TypedMatchArm, TypedStmt, TypedStringPart,
 };
 
 /// Output of the type checking pass.
@@ -216,6 +216,72 @@ impl<'hir> TypeChecker<'hir> {
         None
     }
 
+    /// Extract the type name from an AST impl target.
+    fn impl_target_name(&self, target: &valen_ast::Type) -> Option<SmolStr> {
+        match target {
+            valen_ast::Type::Path(tp) if !tp.segments.is_empty() => {
+                Some(tp.segments[0].name.clone())
+            }
+            _ => None,
+        }
+    }
+
+    /// Look up a method def ID specifically for an impl block, matching by target
+    /// type and optionally by trait reference to avoid cross-impl collisions.
+    fn lookup_impl_method_def_id(
+        &self,
+        target_name: Option<&str>,
+        trait_ref: Option<&valen_ast::Type>,
+        method_name: &str,
+    ) -> Option<DefId> {
+        let trait_name: Option<SmolStr> = trait_ref.and_then(|t| match t {
+            valen_ast::Type::Path(tp) if !tp.segments.is_empty() => {
+                Some(tp.segments[0].name.clone())
+            }
+            _ => None,
+        });
+
+        for def in self.hir.defs.values() {
+            if let DefKind::Impl(imp) = &def.kind {
+                // Match target type name
+                let imp_target = match &imp.target {
+                    TyRef::Named(n) => Some(n.as_str()),
+                    // TODO: support Prim target matching (e.g. `impl Trait for Int`)
+                    TyRef::Prim(_) => None,
+                    _ => None,
+                };
+
+                let target_matches = match (target_name, imp_target) {
+                    (Some(tn), Some(it)) => tn == it,
+                    _ => target_name.is_none(),
+                };
+
+                // Also check trait match if available
+                let trait_matches = match (&trait_name, &imp.trait_ref) {
+                    (Some(tn), TyRef::Named(n)) => tn == n,
+                    (Some(tn), TyRef::Generic(n, _)) => tn.as_str() == n.as_str(),
+                    (None, _) => true,
+                    _ => false,
+                };
+
+                if target_matches && trait_matches {
+                    for &mid in &imp.methods {
+                        if let Some(mdef) = self.hir.defs.get(&mid) {
+                            if mdef.name == method_name {
+                                return Some(mid);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Fallback: try the general lookup with the actual class name
+        if let Some(tn) = target_name {
+            return self.lookup_method_def_id(tn, method_name);
+        }
+        None
+    }
+
     fn register_top_level_types(&mut self, items: &[valen_ast::Item]) {
         for item in items {
             match item {
@@ -304,7 +370,7 @@ impl<'hir> TypeChecker<'hir> {
                 let ret = Box::new(self.resolve_ast_type(&ft.return_type));
                 Ty::Fn(params, ret)
             }
-            valen_ast::Type::Tuple(_) => Ty::Error,
+            valen_ast::Type::Tuple(..) => Ty::Error,
         }
     }
 
@@ -411,9 +477,15 @@ impl<'hir> TypeChecker<'hir> {
             self.type_params.insert(g.name.clone());
         }
         let self_ty = self.resolve_ast_type(&imp.target);
+        // Issue #017: Extract actual type name from impl target instead of passing "".
+        let target_type_name = self.impl_target_name(&imp.target);
         for item in &imp.items {
             if let valen_ast::ImplItem::Fn(m) = item {
-                let def_id = self.lookup_method_def_id("", &m.name);
+                let def_id = self.lookup_impl_method_def_id(
+                    target_type_name.as_deref(),
+                    imp.trait_ref.as_ref(),
+                    &m.name,
+                );
                 self.check_fn_decl(m, Some(&self_ty), def_id);
             }
         }
@@ -621,8 +693,50 @@ impl<'hir> TypeChecker<'hir> {
                 span: path.span,
             };
         }
-        // multi-segment path (e.g. Enum::Variant) — resolve first segment
+        // Issue #020: Multi-segment path (e.g. Enum::Variant) — resolve as enum variant
+        // if the first segment is an enum type.
         let first = &path.segments[0].name;
+        if path.segments.len() == 2 {
+            let variant_name = &path.segments[1].name;
+            // Check if the first segment is an enum type and the second is a variant
+            if let Some(enum_def) = self.hir.defs.values().find(|d| {
+                d.name == *first && matches!(d.kind, DefKind::Enum(_))
+            }) {
+                if let DefKind::Enum(edef) = &enum_def.kind {
+                    if let Some(_variant) = edef.variants.iter().find(|v| v.name == *variant_name) {
+                        // Return the enum type — the variant is valid
+                        return TypedExpr {
+                            kind: TypedExprKind::Call {
+                                callee: Box::new(TypedExpr {
+                                    kind: TypedExprKind::LocalVar(
+                                        SmolStr::from(format!("{first}::{variant_name}")),
+                                    ),
+                                    ty: Ty::Named(first.clone()),
+                                    span: path.span,
+                                }),
+                                args: vec![],
+                            },
+                            ty: Ty::Named(first.clone()),
+                            span: path.span,
+                        };
+                    } else {
+                        self.diags.error(
+                            DiagCode::NAME_NOT_FOUND,
+                            path.span,
+                            SmolStr::from(format!(
+                                "enum `{first}` has no variant `{variant_name}`"
+                            )),
+                        );
+                        return TypedExpr {
+                            kind: TypedExprKind::Error,
+                            ty: Ty::Error,
+                            span: path.span,
+                        };
+                    }
+                }
+            }
+        }
+        // Fallback for non-enum multi-segment paths
         let ty = self.env.lookup(first).cloned().unwrap_or(Ty::Error);
         TypedExpr {
             kind: TypedExprKind::LocalVar(first.clone()),
@@ -1060,7 +1174,7 @@ impl<'hir> TypeChecker<'hir> {
                         );
                     } else {
                         let param_tys: Vec<Ty> =
-                            c.ctor_params.iter().map(|p| tyref_to_ty(&p.ty)).collect();
+                            c.ctor_params.iter().map(|p| tyref_to_ty_generic(&p.ty)).collect();
                         let has_tp = param_tys.iter().any(|t| matches!(t, Ty::TypeParam(_)));
                         if has_tp {
                             let bindings = infer_type_bindings(&param_tys, args);
@@ -1120,7 +1234,7 @@ impl<'hir> TypeChecker<'hir> {
                         );
                     } else {
                         for (arg, param) in args.iter().zip(dc.ctor_params.iter()) {
-                            let expected = tyref_to_ty(&param.ty);
+                            let expected = tyref_to_ty_generic(&param.ty);
                             if !arg.ty.is_error() && !expected.is_error() && arg.ty != expected {
                                 self.diags.error(
                                     DiagCode::TYPE_MISMATCH,
@@ -1179,7 +1293,7 @@ impl<'hir> TypeChecker<'hir> {
                             let raw_ret_ty = fdef
                                 .return_ty
                                 .as_ref()
-                                .map(tyref_to_ty)
+                                .map(tyref_to_ty_generic)
                                 .unwrap_or_else(Ty::unit);
                             let ret_ty = if !generic_args.is_empty() {
                                 let bindings = self.build_class_type_bindings(tn, &generic_args);
@@ -1204,7 +1318,7 @@ impl<'hir> TypeChecker<'hir> {
                                 );
                             } else {
                                 for (arg, param) in args.iter().zip(non_self_params.iter()) {
-                                    let expected = tyref_to_ty(&param.ty);
+                                    let expected = tyref_to_ty_generic(&param.ty);
                                     if !arg.ty.is_error()
                                         && !expected.is_error()
                                         && arg.ty != expected
@@ -1361,7 +1475,7 @@ impl<'hir> TypeChecker<'hir> {
                                         return Some(
                                             fdef.return_ty
                                                 .as_ref()
-                                                .map(tyref_to_ty)
+                                                .map(tyref_to_ty_generic)
                                                 .unwrap_or_else(Ty::unit),
                                         );
                                     }
@@ -1586,7 +1700,7 @@ impl<'hir> TypeChecker<'hir> {
                                     return Ty::Error;
                                 }
                             }
-                            return tyref_to_ty(&p.ty);
+                            return tyref_to_ty_generic(&p.ty);
                         }
                     }
                 }
@@ -1607,7 +1721,7 @@ impl<'hir> TypeChecker<'hir> {
                                     return Ty::Error;
                                 }
                             }
-                            return tyref_to_ty(&p.ty);
+                            return tyref_to_ty_generic(&p.ty);
                         }
                     }
                 }
@@ -1813,7 +1927,27 @@ impl<'hir> TypeChecker<'hir> {
                 }
                 args[0].clone()
             }
-            _ => Ty::Prim(PrimTy::Int),
+            // Issue #019: Extract element type from generic collections (e.g. List<String>).
+            Ty::Generic(name, args) if !args.is_empty() => {
+                // For generic types like List<T>, Array<T>, Set<T>, the element type
+                // is the first type argument. If the type implements Iterator, the
+                // element type would come from Iterator::next -> Option<T>.
+                // As a reasonable approximation, use the first type argument.
+                args[0].clone()
+            }
+            Ty::Error => Ty::Error,
+            other => {
+                // Issue #019: Unknown iterable type — report diagnostic instead of
+                // silently defaulting to Int.
+                self.diags.error(
+                    DiagCode::FOR_LOOP_UNKNOWN_ELEM,
+                    f.span,
+                    SmolStr::from(format!(
+                        "cannot iterate over `{other}`; expected `Range<T>` or a generic collection"
+                    )),
+                );
+                Ty::Error
+            }
         };
         self.env.define(f.var.clone(), var_ty, false);
         let prev_loop = self.in_loop;
@@ -1958,7 +2092,19 @@ impl<'hir> TypeChecker<'hir> {
             Ty::Generic(name, args) if name == "Result" && !args.is_empty() => {
                 (args[0].clone(), false)
             }
-            _ => (inner.ty.clone(), false),
+            Ty::Error => (Ty::Error, false),
+            _ => {
+                // Issue #018: `?` operator is only valid on Option<T> or Result<T, E>.
+                self.diags.error(
+                    DiagCode::TRY_INVALID_TYPE,
+                    t.span,
+                    SmolStr::from(format!(
+                        "`?` operator requires `Option<T>` or `Result<T, E>`, found `{}`",
+                        inner.ty
+                    )),
+                );
+                (Ty::Error, false)
+            }
         };
         TypedExpr {
             kind: TypedExprKind::Try {

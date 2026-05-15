@@ -1,6 +1,6 @@
 //! `valenfmt` — Valen source formatter CLI.
 
-use std::io::Read as _;
+use std::io::{Read as _, Write as _};
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -29,10 +29,21 @@ fn main() -> Result<()> {
                 .read_to_string(&mut source)
                 .context("reading stdin")?;
             match valenfmt::format_source(&source) {
-                Some(formatted) => print!("{formatted}"),
+                Some(formatted) => {
+                    if cli.check {
+                        if source != formatted {
+                            eprintln!("would reformat <stdin>");
+                            needs_formatting = true;
+                        }
+                    } else {
+                        print!("{formatted}");
+                    }
+                }
                 None => {
                     eprintln!("valenfmt: <stdin>: parse errors, skipping");
-                    print!("{source}");
+                    if !cli.check {
+                        print!("{source}");
+                    }
                 }
             }
         } else {
@@ -46,7 +57,7 @@ fn main() -> Result<()> {
                             needs_formatting = true;
                         }
                     } else if source != formatted {
-                        std::fs::write(path, &formatted)
+                        atomic_write(path, &formatted)
                             .with_context(|| format!("writing {}", path.display()))?;
                     }
                 }
@@ -61,5 +72,16 @@ fn main() -> Result<()> {
         std::process::exit(1);
     }
 
+    Ok(())
+}
+
+/// Write `content` to `path` atomically via a temp file + fsync + rename.
+fn atomic_write(path: &Path, content: &str) -> Result<()> {
+    let dir = path.parent().unwrap_or(Path::new("."));
+    let mut tmp = tempfile::NamedTempFile::new_in(dir).context("creating temp file")?;
+    tmp.write_all(content.as_bytes())
+        .context("writing temp file")?;
+    tmp.as_file().sync_all().context("fsyncing temp file")?;
+    tmp.persist(path).context("renaming temp file")?;
     Ok(())
 }

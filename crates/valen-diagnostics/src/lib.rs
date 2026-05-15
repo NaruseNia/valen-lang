@@ -78,6 +78,7 @@ impl DiagCode {
     pub const PARSE_EXPECTED_TYPE: DiagCode = DiagCode(104);
     pub const PARSE_UNEXPECTED_TOKEN: DiagCode = DiagCode(105);
     pub const NAME_NOT_FOUND: DiagCode = DiagCode(200);
+    pub const DUPLICATE_DEFINITION: DiagCode = DiagCode(201);
     pub const TYPE_MISMATCH: DiagCode = DiagCode(300);
     pub const UNDECLARED_VAR: DiagCode = DiagCode(301);
     pub const ARG_COUNT_MISMATCH: DiagCode = DiagCode(302);
@@ -95,6 +96,8 @@ impl DiagCode {
     pub const CONTINUE_OUTSIDE_LOOP: DiagCode = DiagCode(314);
     pub const IMMUTABLE_ASSIGN: DiagCode = DiagCode(315);
     pub const PRIVATE_FIELD: DiagCode = DiagCode(316);
+    pub const TRY_INVALID_TYPE: DiagCode = DiagCode(317);
+    pub const FOR_LOOP_UNKNOWN_ELEM: DiagCode = DiagCode(318);
     pub const ORPHAN_RULE_VIOLATION: DiagCode = DiagCode(400);
     pub const BLANKET_IMPL_NOT_ALLOWED: DiagCode = DiagCode(401);
     pub const IMPL_CONFLICT: DiagCode = DiagCode(402);

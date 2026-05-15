@@ -38,6 +38,10 @@ pub struct DocumentState {
 pub struct ServerState {
     client: ClientSocket,
     documents: HashMap<Url, DocumentState>,
+    /// Maps document URIs to unique FileIds for per-document identification.
+    file_ids: HashMap<Url, valen_ast::FileId>,
+    /// Counter for allocating new FileIds.
+    next_file_id: u32,
     workspace_root: Option<std::path::PathBuf>,
 }
 
@@ -46,6 +50,8 @@ impl ServerState {
         let this = Self {
             client,
             documents: HashMap::new(),
+            file_ids: HashMap::new(),
+            next_file_id: 0,
             workspace_root: None,
         };
         let mut router = Router::from_language_server(this);
@@ -60,23 +66,63 @@ impl ServerState {
         ControlFlow::Continue(())
     }
 
+    /// Allocate or retrieve a stable FileId for the given URI.
+    fn file_id_for(&mut self, uri: &Url) -> valen_ast::FileId {
+        if let Some(&id) = self.file_ids.get(uri) {
+            return id;
+        }
+        let id = valen_ast::FileId(self.next_file_id);
+        self.next_file_id += 1;
+        self.file_ids.insert(uri.clone(), id);
+        id
+    }
+
+    // TODO(#041): index_workspace runs synchronously during initialize, blocking
+    // the handshake. Move to a background task post-initialization.
     fn index_workspace(&mut self, root: &std::path::Path) {
         let vln_files = find_vln_files(root);
         for path in vln_files {
             if let Ok(text) = std::fs::read_to_string(&path) {
                 if let Ok(uri) = Url::from_file_path(&path) {
-                    self.documents.entry(uri).or_insert_with(|| {
-                        let (doc_state, _) = analyze_document(&text);
-                        doc_state
-                    });
+                    if !self.documents.contains_key(&uri) {
+                        let file_id = self.file_id_for(&uri);
+                        let (doc_state, _) = analyze_document(&text, file_id);
+                        self.documents.insert(uri, doc_state);
+                    }
                 }
             }
         }
     }
 
     fn analyze_and_publish(&mut self, uri: Url, text: String, version: i32) {
-        let (doc_state, diags) = analyze_document(&text);
+        let file_id = self.file_id_for(&uri);
+        let (doc_state, diags) = analyze_document(&text, file_id);
         self.documents.insert(uri.clone(), doc_state);
+
+        // Re-analyze all other open documents so that cross-file dependents
+        // pick up changes (e.g. new/renamed definitions).
+        let other_uris: Vec<Url> = self
+            .documents
+            .keys()
+            .filter(|u| **u != uri)
+            .cloned()
+            .collect();
+        for other_uri in other_uris {
+            if let Some(doc) = self.documents.get(&other_uri) {
+                let other_text = doc.text.clone();
+                let other_fid = self.file_id_for(&other_uri);
+                let (new_state, new_diags) = analyze_document(&other_text, other_fid);
+                self.documents.insert(other_uri.clone(), new_state);
+                self.client
+                    .publish_diagnostics(PublishDiagnosticsParams {
+                        uri: other_uri,
+                        diagnostics: new_diags,
+                        version: None,
+                    })
+                    .ok();
+            }
+        }
+
         self.client
             .publish_diagnostics(PublishDiagnosticsParams {
                 uri,
@@ -86,21 +132,47 @@ impl ServerState {
             .ok();
     }
 
+    // TODO(#039): Goto definition currently resolves by name only via linear
+    // scan. Should prioritize definitions whose scope contains the cursor
+    // position using HIR scope info once available.
     fn find_definition_at(&self, uri: &Url, position: Position) -> Option<GotoDefinitionResponse> {
         let doc = self.documents.get(uri)?;
         let offset = doc.line_index.position_to_offset(position);
         let name = extract_word_at(&doc.text, offset)?;
 
-        // Search current document first
+        // Search current document first, preferring definitions whose span
+        // encloses the cursor (heuristic for scope proximity).
         if let Some(hir) = doc.hir.as_ref() {
+            let mut best: Option<&valen_hir::Def> = None;
             for def in hir.defs.values() {
                 if def.name.as_str() == name {
-                    let range = doc.line_index.span_to_range(def.span);
-                    return Some(GotoDefinitionResponse::Scalar(Location {
-                        uri: uri.clone(),
-                        range,
-                    }));
+                    match best {
+                        None => best = Some(def),
+                        Some(prev) => {
+                            // Prefer the def whose span is closest to (and contains) the cursor
+                            let prev_contains =
+                                prev.span.start <= offset && offset <= prev.span.end;
+                            let this_contains =
+                                def.span.start <= offset && offset <= def.span.end;
+                            if this_contains && !prev_contains {
+                                best = Some(def);
+                            } else if this_contains
+                                && prev_contains
+                                && def.span.len() < prev.span.len()
+                            {
+                                // Tighter enclosing scope wins
+                                best = Some(def);
+                            }
+                        }
+                    }
                 }
+            }
+            if let Some(def) = best {
+                let range = doc.line_index.span_to_range(def.span);
+                return Some(GotoDefinitionResponse::Scalar(Location {
+                    uri: uri.clone(),
+                    range,
+                }));
             }
         }
 
@@ -661,7 +733,7 @@ impl ServerState {
     /// Produce semantic tokens for the entire document using the lexer.
     fn build_semantic_tokens(&self, uri: &Url) -> Option<SemanticTokensResult> {
         let doc = self.documents.get(uri)?;
-        let file_id = valen_ast::FileId(0);
+        let file_id = self.file_ids.get(uri).copied().unwrap_or(valen_ast::FileId(0));
         let (tokens, _) = valen_parser::lexer::lex(&doc.text, file_id);
 
         let mut result: Vec<SemanticToken> = Vec::new();
@@ -675,7 +747,10 @@ impl ServerState {
             };
 
             let start_pos = doc.line_index.offset_to_position(span.start);
-            let length = span.end.saturating_sub(span.start);
+            // LSP requires token length in UTF-16 code units, not bytes.
+            let token_text = &doc.text
+                [span.start as usize..(span.end as usize).min(doc.text.len())];
+            let length = token_text.encode_utf16().count() as u32;
             if length == 0 {
                 continue;
             }
@@ -711,9 +786,17 @@ impl ServerState {
 // ---------------------------------------------------------------------------
 
 /// Run the full analysis pipeline on a source text, returning document state and LSP diagnostics.
-pub fn analyze_document(text: &str) -> (DocumentState, Vec<async_lsp::lsp_types::Diagnostic>) {
+///
+/// TODO(#040): Full re-parse on every keystroke with no debounce. Parse, resolve,
+/// coherence, and type check all run synchronously. Known MVP limitation.
+///
+/// TODO(#047): Each document is analyzed in isolation — single-file parse+resolve
+/// cannot reference definitions from other files in the workspace.
+pub fn analyze_document(
+    text: &str,
+    file_id: valen_ast::FileId,
+) -> (DocumentState, Vec<async_lsp::lsp_types::Diagnostic>) {
     let line_index = convert::LineIndex::new(text);
-    let file_id = valen_ast::FileId(0);
 
     let parse_result = valen_parser::parse(text, file_id);
     let mut diags = convert::to_lsp_diagnostics(&parse_result.diagnostics, &line_index);
@@ -893,9 +976,13 @@ fn find_let_type_annotation(source: &str, var_name: &str) -> Option<String> {
         let trimmed = line.trim();
         // Match: let [mut] name: Type = ...
         // or:    let [mut] name: Type;
-        let rest = trimmed
+        let rest = match trimmed
             .strip_prefix("let mut ")
-            .or_else(|| trimmed.strip_prefix("let "))?;
+            .or_else(|| trimmed.strip_prefix("let "))
+        {
+            Some(r) => r,
+            None => continue,
+        };
         if !rest.starts_with(var_name) {
             continue;
         }
@@ -1011,21 +1098,67 @@ const SKIP_DIRS: &[&str] = &[".git", "target", "build", "node_modules", ".gradle
 
 fn find_vln_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
     let mut files = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(root) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                if SKIP_DIRS.contains(&name) {
-                    continue;
-                }
-                files.extend(find_vln_files(&path));
-            } else if path.extension().is_some_and(|e| e == "vln") {
-                files.push(path);
+    let canonical_root = match root.canonicalize() {
+        Ok(p) => p,
+        Err(_) => return files,
+    };
+    let mut seen = std::collections::HashSet::new();
+    find_vln_files_inner(&canonical_root, &canonical_root, &mut seen, &mut files);
+    files
+}
+
+fn find_vln_files_inner(
+    dir: &std::path::Path,
+    workspace_root: &std::path::Path,
+    seen: &mut std::collections::HashSet<std::path::PathBuf>,
+    files: &mut Vec<std::path::PathBuf>,
+) {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+
+        // Use symlink_metadata to detect symlinks before following them
+        let meta = match std::fs::symlink_metadata(&path) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+
+        if meta.is_symlink() {
+            // Resolve the symlink target and verify it stays within workspace
+            let canonical = match path.canonicalize() {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+            if !canonical.starts_with(workspace_root) {
+                continue; // Symlink points outside workspace — skip
             }
+            if !seen.insert(canonical.clone()) {
+                continue; // Cycle detection — already visited
+            }
+            if canonical.is_dir() {
+                let name = canonical
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("");
+                if !SKIP_DIRS.contains(&name) {
+                    find_vln_files_inner(&canonical, workspace_root, seen, files);
+                }
+            } else if canonical.extension().is_some_and(|e| e == "vln") {
+                files.push(canonical);
+            }
+        } else if meta.is_dir() {
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if SKIP_DIRS.contains(&name) {
+                continue;
+            }
+            find_vln_files_inner(&path, workspace_root, seen, files);
+        } else if path.extension().is_some_and(|e| e == "vln") {
+            files.push(path);
         }
     }
-    files
 }
 
 /// Extract the identifier word at the given byte offset.
@@ -1332,8 +1465,17 @@ impl LanguageServer for ServerState {
     fn did_change(&mut self, params: DidChangeTextDocumentParams) -> Self::NotifyResult {
         let uri = params.text_document.uri;
         let version = params.text_document.version;
+        // We advertise TextDocumentSyncKind::FULL, so each content change
+        // should be a full-document replacement (range == None).
+        // Reject incremental (range-based) changes to avoid silent corruption.
         if let Some(change) = params.content_changes.into_iter().last() {
-            self.analyze_and_publish(uri, change.text, version);
+            if change.range.is_some() {
+                // Incremental change received despite FULL sync mode — log and
+                // skip to avoid corruption.
+                tracing::warn!("ignoring incremental text change; server advertises FULL sync");
+            } else {
+                self.analyze_and_publish(uri, change.text, version);
+            }
         }
         ControlFlow::Continue(())
     }

@@ -170,6 +170,7 @@ pub struct DataClassDecl {
     pub name: SmolStr,
     pub generics: Vec<GenericParam>,
     pub ctor_params: Vec<CtorParam>,
+    pub supertypes: Vec<Type>,
     pub span: Span,
 }
 
@@ -312,7 +313,7 @@ pub enum Type {
     /// Function type: `fn(Int, Int) -> String`.
     Fn(FnType),
     /// Tuple type `(A, B, C)` — reserved, not used in MVP.
-    Tuple(Vec<Type>),
+    Tuple(Vec<Type>, Span),
 }
 
 /// A dot-separated type path (e.g. `java.util.List<String>`).
@@ -406,6 +407,81 @@ pub enum Literal {
     Bool(bool, Span),
     /// The unit literal `()`.
     Unit(Span),
+}
+
+impl Literal {
+    /// Returns the source span of this literal.
+    pub fn span(&self) -> Span {
+        match self {
+            Literal::Int(_, s)
+            | Literal::Long(_, s)
+            | Literal::Float(_, s)
+            | Literal::Double(_, s)
+            | Literal::Char(_, s)
+            | Literal::String(_, s)
+            | Literal::Bool(_, s)
+            | Literal::Unit(s) => *s,
+        }
+    }
+}
+
+impl Expr {
+    /// Returns the source span of this expression.
+    pub fn span(&self) -> Span {
+        match self {
+            Expr::Literal(l) => l.span(),
+            Expr::Path(p) => p.span,
+            Expr::Call(c) => c.span,
+            Expr::MethodCall(m) => m.span,
+            Expr::Field(f) => f.span,
+            Expr::Binary(b) => b.span,
+            Expr::Unary(u) => u.span,
+            Expr::Assign(a) => a.span,
+            Expr::If(i) => i.span,
+            Expr::Match(m) => m.span,
+            Expr::Block(b) => b.span,
+            Expr::Return(r) => r.span,
+            Expr::Break(b) => b.span,
+            Expr::Continue(c) => c.span,
+            Expr::For(f) => f.span,
+            Expr::While(w) => w.span,
+            Expr::Loop(l) => l.span,
+            Expr::Lambda(l) => l.span,
+            Expr::Range(r) => r.span,
+            Expr::Try(t) => t.span,
+            Expr::StringInterp(s) => s.span,
+            Expr::Safe(s) => s.span,
+        }
+    }
+}
+
+impl Type {
+    /// Returns the source span of this type, if available.
+    pub fn span(&self) -> Option<Span> {
+        match self {
+            Type::Path(p) => Some(p.span),
+            Type::Nullable { span, .. } => Some(*span),
+            Type::Fn(f) => Some(f.span),
+            Type::Tuple(_, span) => Some(*span),
+        }
+    }
+}
+
+impl Pattern {
+    /// Returns the source span of this pattern.
+    pub fn span(&self) -> Span {
+        match self {
+            Pattern::Wildcard(s) => *s,
+            Pattern::Literal(l) => l.span(),
+            Pattern::Binding(b) => b.span,
+            Pattern::Path(p) => p.span,
+            Pattern::Struct(s) => s.span,
+            Pattern::Tuple(_, s) => *s,
+            Pattern::Range(r) => r.span,
+            Pattern::Or(_, s) => *s,
+            Pattern::At(a) => a.span,
+        }
+    }
 }
 
 /// A value-level path (e.g. `foo.bar`, `Shape::Circle`).

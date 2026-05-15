@@ -486,13 +486,30 @@ impl<'a> ExprLowering<'a> {
                     self.lower_lambda_call(callee, args, result_ty);
                     return;
                 }
-                self.lower_expr(callee);
+                // For non-Fn callees (e.g. constructor calls via path expression),
+                // we emit a static call without loading the callee expression.
+                // Previously this loaded the callee onto the stack and then emitted
+                // InvokeStatic which does NOT consume an objectref, leaving a dangling
+                // value on the stack (VerifyError). Instead, treat as a static call
+                // using the callee's type as the owner class.
+                let owner = match &callee.ty {
+                    Ty::Named(n) => crate::descriptor::resolve_type_internal_name(
+                        n,
+                        self.pkg,
+                        &self.hir.imports,
+                    ),
+                    _ => self.class_internal.to_string(),
+                };
+                let call_name = match &callee.kind {
+                    TypedExprKind::FieldAccess { field, .. } => field.to_string(),
+                    _ => "apply".to_string(),
+                };
                 for arg in args {
                     self.lower_expr(arg);
                 }
                 self.ops.push(JvmOp::InvokeStatic {
-                    owner: self.class_internal.to_string(),
-                    name: "apply".to_string(),
+                    owner,
+                    name: call_name,
                     params: param_tys,
                     ret: ret_ty,
                 });
@@ -506,6 +523,20 @@ impl<'a> ExprLowering<'a> {
     /// `invokedynamic` instruction referencing `LambdaMetafactory.metafactory` is emitted
     /// at the call site to create a functional interface proxy.
     fn lower_lambda(&mut self, params: &[(SmolStr, Ty)], body: &TypedExpr, _lambda_ty: &Ty) {
+        // java.util.function only provides Supplier (0), Function (1), BiFunction (2).
+        // 3+ param lambdas cannot be expressed with standard functional interfaces and
+        // would produce wrong-arity proxies (LambdaConversionException at runtime).
+        // Emit a runtime error stub instead of silently generating broken bytecode.
+        if params.len() > 2 {
+            eprintln!(
+                "[codegen] error: lambda with {} parameters exceeds java.util.function \
+                 arity limit (max 2). Emitting UnsupportedOperationException.",
+                params.len()
+            );
+            self.ops.push(JvmOp::StubBody);
+            return;
+        }
+
         let lambda_idx = self.lambda_counter;
         self.lambda_counter += 1;
         let synth_name = format!("lambda${lambda_idx}");
@@ -647,14 +678,13 @@ impl<'a> ExprLowering<'a> {
                 )
             }
             _ => {
-                // Fallback: use Function<Object, Object> and ignore extra args for MVP.
-                let erased = format!("({obj}){obj}");
-                (
-                    "java/util/function/Function".to_string(),
-                    "apply".to_string(),
-                    erased.clone(),
-                    erased,
-                )
+                // 3+ params are rejected earlier in lower_lambda() with a StubBody.
+                // This branch should be unreachable, but provide a safe fallback.
+                unreachable!(
+                    "lambda_functional_interface called with {} params; \
+                     should have been caught in lower_lambda",
+                    param_types.len()
+                );
             }
         }
     }
@@ -715,11 +745,23 @@ impl<'a> ExprLowering<'a> {
         self.lower_expr(callee);
 
         // Determine the functional interface and SAM method.
+        if args.len() > 2 {
+            // 3+ arg lambda calls cannot target standard java.util.function interfaces.
+            // Pop the loaded callee reference and emit a throw to surface the error.
+            self.ops.push(JvmOp::Pop);
+            eprintln!(
+                "[codegen] error: lambda call with {} arguments exceeds java.util.function \
+                 arity limit (max 2). Emitting UnsupportedOperationException.",
+                args.len()
+            );
+            self.ops.push(JvmOp::StubBody);
+            return;
+        }
         let (func_iface, sam_name) = match args.len() {
             0 => ("java/util/function/Supplier", "get"),
             1 => ("java/util/function/Function", "apply"),
             2 => ("java/util/function/BiFunction", "apply"),
-            _ => ("java/util/function/Function", "apply"), // fallback
+            _ => unreachable!("handled above"),
         };
 
         // Box each argument and emit.
@@ -1083,7 +1125,7 @@ impl<'a> ExprLowering<'a> {
                 self.ops.push(JvmOp::Checkcast(variant_internal.clone()));
                 let cast_slot = self.next_slot;
                 let cast_ty = JvmType::Object(variant_internal.clone());
-                self.next_slot += 1;
+                self.next_slot += cast_ty.slot_count();
                 self.ops.push(JvmOp::StoreLocal(cast_slot, cast_ty.clone()));
 
                 let variant_field_types = self.resolve_variant_field_types(&sp.path);
@@ -1100,7 +1142,7 @@ impl<'a> ExprLowering<'a> {
                     });
                     if let Some(pat) = &field.pattern {
                         let inner_slot = self.next_slot;
-                        self.next_slot += 1;
+                        self.next_slot += field_ty.slot_count();
                         self.ops
                             .push(JvmOp::StoreLocal(inner_slot, field_ty.clone()));
                         self.lower_pattern_check(pat, inner_slot, &field_ty, fail_label);

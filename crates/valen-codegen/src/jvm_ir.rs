@@ -404,6 +404,30 @@ pub enum BitwiseOp {
 }
 
 impl JvmOp {
+    /// Returns the branch target label if this op is a conditional or unconditional branch.
+    pub fn branch_target(&self) -> Option<Label> {
+        match self {
+            JvmOp::Goto(l)
+            | JvmOp::IfEq(l)
+            | JvmOp::IfNe(l)
+            | JvmOp::IfICmpEq(l)
+            | JvmOp::IfICmpNe(l)
+            | JvmOp::IfACmpEq(l)
+            | JvmOp::IfACmpNe(l)
+            | JvmOp::IfNull(l)
+            | JvmOp::IfNonNull(l)
+            | JvmOp::IfLt(l)
+            | JvmOp::IfGe(l)
+            | JvmOp::IfGt(l)
+            | JvmOp::IfLe(l)
+            | JvmOp::IfICmpLt(l)
+            | JvmOp::IfICmpGe(l)
+            | JvmOp::IfICmpGt(l)
+            | JvmOp::IfICmpLe(l) => Some(*l),
+            _ => None,
+        }
+    }
+
     /// Returns the net stack-slot change produced by this operation.
     pub fn stack_delta(&self) -> i32 {
         match self {

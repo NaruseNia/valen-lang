@@ -397,7 +397,17 @@ impl<'a> Printer<'a> {
         self.print_generics(&d.generics);
         self.w("(");
         self.print_ctor_params(&d.ctor_params);
-        self.w(");");
+        self.w(")");
+        if !d.supertypes.is_empty() {
+            self.w(" : ");
+            for (i, s) in d.supertypes.iter().enumerate() {
+                if i > 0 {
+                    self.w(", ");
+                }
+                self.print_type(s);
+            }
+        }
+        self.w(";");
         self.newline();
     }
 
@@ -635,7 +645,7 @@ impl<'a> Printer<'a> {
                 self.w(") -> ");
                 self.print_type(&f.return_type);
             }
-            Type::Tuple(types) => {
+            Type::Tuple(types, _) => {
                 self.w("(");
                 for (i, t) in types.iter().enumerate() {
                     if i > 0 {
@@ -1256,43 +1266,11 @@ fn stmt_span(stmt: &Stmt) -> Span {
 }
 
 fn expr_span(expr: &Expr) -> Span {
-    match expr {
-        Expr::Literal(l) => literal_span(l),
-        Expr::Path(p) => p.span,
-        Expr::Call(c) => c.span,
-        Expr::MethodCall(m) => m.span,
-        Expr::Field(f) => f.span,
-        Expr::Binary(b) => b.span,
-        Expr::Unary(u) => u.span,
-        Expr::Assign(a) => a.span,
-        Expr::If(i) => i.span,
-        Expr::Match(m) => m.span,
-        Expr::Block(b) => b.span,
-        Expr::Return(r) => r.span,
-        Expr::Break(b) => b.span,
-        Expr::Continue(c) => c.span,
-        Expr::For(f) => f.span,
-        Expr::While(w) => w.span,
-        Expr::Loop(l) => l.span,
-        Expr::Lambda(l) => l.span,
-        Expr::Range(r) => r.span,
-        Expr::Try(t) => t.span,
-        Expr::StringInterp(s) => s.span,
-        Expr::Safe(s) => s.span,
-    }
+    expr.span()
 }
 
 fn literal_span(lit: &Literal) -> Span {
-    match lit {
-        Literal::Int(_, s)
-        | Literal::Long(_, s)
-        | Literal::Float(_, s)
-        | Literal::Double(_, s)
-        | Literal::Char(_, s)
-        | Literal::String(_, s)
-        | Literal::Bool(_, s)
-        | Literal::Unit(s) => *s,
-    }
+    lit.span()
 }
 
 fn class_member_span(member: &ClassMember) -> Span {
@@ -1317,6 +1295,9 @@ fn impl_item_span(item: &ImplItem) -> Span {
 }
 
 fn has_blank_line(source: &str, from: u32, to: u32) -> bool {
+    if from >= to {
+        return false;
+    }
     let slice = &source[from as usize..to as usize];
     slice.chars().filter(|&c| c == '\n').count() >= 2
 }
