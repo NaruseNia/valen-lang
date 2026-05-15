@@ -228,3 +228,97 @@ fn describe(e: Expr) -> String {
 ```
 
 sealed trait は「振る舞いのインターフェースを持ちつつ、実装を閉じたい」場合に使います。enum との違いは、各実装者が独自のメソッドや状態を持てる点です。
+
+## Associated Type
+
+trait 内で `type Name;` と宣言すると、impl 側で具体型を決める「型の穴」を定義できます。
+
+```valen
+trait Container {
+    type Item;
+    fn get(self, index: Int) -> Self::Item;
+}
+
+impl Container for IntList {
+    type Item = Int;
+    fn get(self, index: Int) -> Int {
+        // ...
+    }
+}
+```
+
+`Self::Item` は impl ごとに一意に解決されるため、呼び出し側で型注釈なしに型推論が働きます。
+
+## 演算子オーバーロード
+
+Valen の演算子オーバーロードは trait ベースです。`+` を使いたい型に `impl Add for MyType` を書きます。
+
+### 算術演算子
+
+```valen
+data class Vec2(pub x: Float, pub y: Float);
+
+impl Add<Vec2> for Vec2 {
+    type Output = Vec2;
+    fn add(self, rhs: Vec2) -> Vec2 {
+        Vec2(x = self.x + rhs.x, y = self.y + rhs.y)
+    }
+}
+
+// これで + が使える
+let a = Vec2(x = 1.0, y = 2.0);
+let b = Vec2(x = 3.0, y = 4.0);
+let c = a + b;  // Vec2(x = 4.0, y = 6.0)
+```
+
+対応する trait は以下の通りです。
+
+| 演算子 | trait | メソッド |
+|--------|-------|---------|
+| `+` | `Add<Rhs>` | `fn add(self, rhs: Rhs) -> Self::Output` |
+| `-` | `Sub<Rhs>` | `fn sub(self, rhs: Rhs) -> Self::Output` |
+| `*` | `Mul<Rhs>` | `fn mul(self, rhs: Rhs) -> Self::Output` |
+| `/` | `Div<Rhs>` | `fn div(self, rhs: Rhs) -> Self::Output` |
+| `%` | `Rem<Rhs>` | `fn rem(self, rhs: Rhs) -> Self::Output` |
+
+各 trait は `type Output` associated type を持ちます。戻り値の型を impl で指定できます。
+
+### 単項演算子
+
+| 演算子 | trait | メソッド |
+|--------|-------|---------|
+| `-x` (符号反転) | `Neg` | `fn neg(self) -> Self::Output` |
+| `!x` (論理否定) | `Not` | `fn not(self) -> Self::Output` |
+
+### 比較演算子
+
+`<` `<=` `>` `>=` を使いたい場合は `Ord` trait を実装します。
+
+```valen
+impl Ord for Priority {
+    fn cmp(self, rhs: Priority) -> Int {
+        self.level - rhs.level
+    }
+}
+
+// cmp が負 → <, 0 → ==, 正 → >
+if taskA < taskB { /* ... */ }
+```
+
+### 等値比較（opt-in）
+
+`==` / `!=` はデフォルトで `.equals()` に変換されます。カスタムの等値比較が必要な場合は `Eq` trait を実装できます。
+
+```valen
+impl Eq for CaseInsensitiveString {
+    fn eq(self, rhs: CaseInsensitiveString) -> Bool {
+        self.value.toLowerCase() == rhs.value.toLowerCase()
+    }
+}
+```
+
+`impl Eq` がある型では `Eq::eq` が使われ、ない型では従来通り `.equals()` にフォールバックします。
+
+### プリミティブ型
+
+`Int`、`Float` 等のプリミティブ型の演算子は組み込みで処理されます（trait 経由ではありません）。プリミティブ型に対して演算子 trait を impl する必要はありません。
