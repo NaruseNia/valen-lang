@@ -80,7 +80,7 @@ cargo test --workspace 2>&1
 
 ### crate → 仕様ファイル マッピング
 
-| crate | 関連する仕様 (docs/spec/) | 関連する要件定義 (docs/requirements/) |
+| crate | 関連する仕様 (docs/lang/) | 関連する要件定義 (docs/requirements/) |
 |---|---|---|
 | `valen-ast` | `01-lexical.md`, `02-types.md`, `03-expressions.md` | `REQ-SYNTAX.md`, `REQ-TYPE.md`, `REQ-ADT.md` |
 | `valen-parser` | `01-lexical.md`, `02-types.md`, `03-expressions.md`, `04-functions.md`, `05-classes.md`, `06-enum.md`, `07-traits.md`, `08-failure.md`, `09-pattern.md`, `20-annotations.md` | `REQ-SYNTAX.md`, `REQ-TYPE.md`, `REQ-ADT.md`, `REQ-CLASS.md`, `REQ-TRAIT.md`, `REQ-FAIL.md` |

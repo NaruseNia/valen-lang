@@ -1,6 +1,6 @@
 # Valen 実装計画
 
-Last updated: 2026-05-14（Phase 0 完了、TASK-001〜012,014,015,017 完了、M3 達成、M4 進行中）
+Last updated: 2026-05-15（Phase 0 完了、Phase 1 TASK-001〜012,014,015,017 完了、Phase 1.5 M6 完了・M7 大部分完了）
 
 ---
 
@@ -13,7 +13,7 @@ Last updated: 2026-05-14（Phase 0 完了、TASK-001〜012,014,015,017 完了、
 ### タスク
 - [x] Rust workspace 初期化（`crates/valen-ast`, `valen-parser`, `valen-hir`, `valen-codegen`, `valen-diagnostics`, `valenc`, `valen-lsp`, `valenfmt`）
 - [x] JVM classfile crate 選定と PoC — **ristretto_classfile 0.31** を選定（write API + Java 21-25 + sealed/record attrs）
-- [x] **enum bytecode emit の実験 spike** — 結果: `docs/enum-abi-report.md`
+- [x] **enum bytecode emit の実験 spike** — 結果: `docs/archive/enum-abi-report.md`
 - [x] Parser 戦略の選定（**logos lexer + 手書き recursive descent** に確定）
 - [x] AST の設計（`valen-ast` に Item / Expr / Pattern / Type / Literal の骨格を定義）
 - [x] テストインフラ（`insta` snapshot 基盤、integration テスト稼働）
@@ -22,19 +22,36 @@ Last updated: 2026-05-14（Phase 0 完了、TASK-001〜012,014,015,017 完了、
 
 ### Phase 1 進捗
 - [x] **TASK-001:** Parser 拡張 — fn params/return type, if/else, match（フルパターン）, call/method call/field/try, paths, return（PR #18）
-- [x] **TASK-002:** Parser 拡張 — class ctor/body, data class, enum, trait, impl, package, import
+- [x] **TASK-002:** Parser 拡張 — class ctor/body, data class, enum, trait, impl, package, import（PR #19）
 - [x] **TASK-003:** Parser 拡張 — for/while/loop/break/continue/lambda → **M1: Parser 完成**
-- [x] **TASK-004:** HIR 設計と名前解決 — AST→HIR lowering, スコープ, メソッド解決, 可視性（PR #21, #22）
-- [x] **TASK-005:** 型検査 — bidirectional type checker, typed HIR, リテラル/変数/演算/if/match/call/lambda 等（PR #23）
-- [x] **TASK-006:** Coherence — orphan rule, blanket impl 禁止, 重複検出, trait 充足検査（PR #24）
-- [x] **TASK-007:** Exhaustiveness check — enum/sealed class/Bool exhaustive match（PR #25）→ **M2: 型チェック通過**
-- [x] **TASK-008:** Codegen — class/data class emit via codegen IR（PR #26）— HIR→JvmIR→bytecode アーキテクチャ導入
+- [x] **TASK-004:** HIR 設計と名前解決 — AST→HIR lowering, スコープ, メソッド解決, 可視性
+- [x] **TASK-005:** 型検査 — bidirectional type checker, typed HIR, リテラル/変数/演算/if/match/call/lambda 等
+- [x] **TASK-006:** Coherence — orphan rule, blanket impl 禁止, 重複検出, trait 充足検査
+- [x] **TASK-007:** Exhaustiveness check — enum/sealed class/Bool exhaustive match → **M2: 型チェック通過**
+- [x] **TASK-008:** Codegen — class/data class emit via codegen IR — HIR→JvmIR→bytecode アーキテクチャ導入
 - [x] **TASK-009:** Codegen — enum ADT フル emit（sealed interface + record/singleton variants）
 - [x] **TASK-010:** Codegen — fn/method/expression bytecode（TypedBody→JvmOp 全式変換）
+- [x] **TASK-011:** Codegen — Java interop（import 解決・safe ブロック）
+- [x] **TASK-012:** 標準ライブラリ（valen.core）
+- [ ] **TASK-013:** Gradle プラグイン（未着手）
+- [x] **TASK-014:** LSP サーバー（MVP）
+- [x] **TASK-015:** valenfmt（最小版）
+- [ ] **TASK-016:** サンプルプロジェクト（TASK-013 依存）
+- [x] **TASK-017:** E2E テスト・CI 拡充
+
+### Phase 1.5 進捗
+- [x] **M6 完了:** StubBody 全潰し（TASK-018〜022）
+- [x] **TASK-024:** typealias + valen.collections
+- [x] **TASK-025:** classpath 走査（Java .class メタデータ読み取り）
+- [x] **TASK-026:** @valen.Closed（REQ-INTEROP-003）
+- [x] **TASK-027:** デフォルト引数
+- [x] **TASK-029:** sealed trait
+- [x] **TASK-030:** annotation system
+- [x] **Generics Phase A+B:** 型パラメータ追跡・推論・bounds checking・Object methods
 
 ### 完了条件
 - 最小限の `class Foo {}` を `.vln` → `Foo.class` に emit できる PoC が動く
-- 上記 spike 結果が `docs/enum-abi-report.md` にまとまっている
+- 上記 spike 結果が `docs/archive/enum-abi-report.md` にまとまっている
 
 ---
 

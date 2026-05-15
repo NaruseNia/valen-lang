@@ -41,7 +41,7 @@ Valen コンパイラ `valenc` は Rust で実装され、`.vln` ソースから
 | `valen-hir` | 名前解決・型検査・coherence・exhaustiveness | `valen-ast`, `valen-diagnostics` |
 | `valen-codegen` | JVM bytecode 生成 | `valen-hir`, `ristretto_classfile` |
 | `valenc` | コンパイラ CLI | 全 crate |
-| `valen-lsp` | LSP サーバー | `valen-parser`, `valen-hir`, `tower-lsp` |
+| `valen-lsp` | LSP サーバー | `valen-parser`, `valen-hir`, `async-lsp` |
 | `valenfmt` | コードフォーマッタ | `valen-parser` |
 
 ## JVM ターゲット
@@ -58,7 +58,7 @@ Valen コンパイラ `valenc` は Rust で実装され、`.vln` ソースから
 | payload variant `A(x: Int)` | `public final record Foo$A(int x) implements Foo` |
 | unit variant `B` | `public final class Foo$B implements Foo` + `INSTANCE` singleton |
 
-詳細: [docs/enum-abi-report.md](../enum-abi-report.md)
+詳細: [docs/archive/enum-abi-report.md](../archive/enum-abi-report.md)
 
 ## ビルドシステム統合
 
@@ -88,18 +88,19 @@ Valen コンパイラ `valenc` は Rust で実装され、`.vln` ソースから
 
 ## 詳細仕様書
 
-言語仕様の詳細は [docs/spec/](../spec/) 配下を参照:
+言語仕様の詳細は [docs/lang/](../lang/) 配下を参照:
 
 | ファイル | 内容 |
 |---------|------|
 | [LANGUAGE_SPEC.md](../LANGUAGE_SPEC.md) | 仕様インデックス |
-| [spec/01-lexical.md](../spec/01-lexical.md) | 字句構文 |
-| [spec/02-types.md](../spec/02-types.md) | 型システム |
-| [spec/03-expressions.md](../spec/03-expressions.md) | 式と文 |
-| [spec/04-functions.md](../spec/04-functions.md) | 関数 |
-| [spec/05-classes.md](../spec/05-classes.md) | クラス |
-| [spec/06-enum.md](../spec/06-enum.md) | enum（ADT） |
-| [spec/07-traits.md](../spec/07-traits.md) | trait / impl |
-| [spec/08-failure.md](../spec/08-failure.md) | 失敗モデル |
-| [spec/09-pattern.md](../spec/09-pattern.md) | パターンマッチ |
-| [spec/10-modules.md](../spec/10-modules.md) | 可視性・モジュール |
+| [lang/01-lexical.md](../lang/01-lexical.md) | 字句構文 |
+| [lang/02-types.md](../lang/02-types.md) | 型システム |
+| [lang/03-expressions.md](../lang/03-expressions.md) | 式と文 |
+| [lang/04-functions.md](../lang/04-functions.md) | 関数 |
+| [lang/05-classes.md](../lang/05-classes.md) | クラス |
+| [lang/06-enum.md](../lang/06-enum.md) | enum（ADT） |
+| [lang/07-traits.md](../lang/07-traits.md) | trait / impl |
+| [lang/08-failure.md](../lang/08-failure.md) | 失敗モデル |
+| [lang/09-pattern.md](../lang/09-pattern.md) | パターンマッチ |
+| [lang/10-modules.md](../lang/10-modules.md) | 可視性・モジュール |
+| [lang/20-annotations.md](../lang/20-annotations.md) | アノテーション |

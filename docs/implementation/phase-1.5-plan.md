@@ -11,17 +11,17 @@ MVP（Phase 1）完了後の補完フェーズ。codegen stub 解消・コンパ
 
 ## マイルストーン
 
-### M6: Codegen 完成（stub 全潰し）
+### M6: Codegen 完成（stub 全潰し） ✅
 
 MVP で StubBody だったコードパスを全て実装し、`valenc compile` で生成した .class が JVM 上で実行可能になる。
 
-| タスク | 内容 | 依存 | 規模 |
-|--------|------|------|------|
-| TASK-018 | trait impl メソッドを対象クラスに emit | — | S |
-| TASK-019 | lambda: invokedynamic + LambdaMetafactory | — | L |
-| TASK-020 | for ループ: Range 型 stdlib + Iterator impl + codegen | TASK-019 | L |
-| TASK-021 | safe{} → Result\<T, JavaException\> 接続 | — | M |
-| TASK-022 | lambda stack underflow 修正 | TASK-019 | S |
+| タスク | 内容 | 依存 | 規模 | 状態 |
+|--------|------|------|------|------|
+| ~~TASK-018~~ | trait impl メソッドを対象クラスに emit | — | S | ✅ |
+| ~~TASK-019~~ | lambda: invokedynamic + LambdaMetafactory | — | L | ✅ |
+| ~~TASK-020~~ | for ループ: Range 型 stdlib + Iterator impl + codegen | TASK-019 | L | ✅ |
+| ~~TASK-021~~ | safe{} → Result\<T, JavaException\> 接続 | — | M | ✅ |
+| ~~TASK-022~~ | lambda stack underflow 修正 | TASK-019 | S | ✅ |
 
 **詳細:**
 
@@ -57,12 +57,12 @@ TASK-019 で lambda が実装されれば自動解消の可能性大。残れば
 
 コンパイラの型システムと Java 連携を実用レベルに引き上げる。
 
-| タスク | 内容 | 依存 | 規模 |
-|--------|------|------|------|
-| TASK-023 | prelude（valen.core 型のコンパイラ内蔵） | — | M |
-| TASK-024 | typealias パース + HIR + codegen | — | M |
-| TASK-025 | classpath 走査（Java .class メタデータ読み取り） | — | L |
-| TASK-026 | @valen.Closed（REQ-INTEROP-003） | TASK-025 | M |
+| タスク | 内容 | 依存 | 規模 | 状態 |
+|--------|------|------|------|------|
+| TASK-023 | prelude（valen.core 型のコンパイラ内蔵） | — | M | Partial (型注入済、? codegen未) |
+| ~~TASK-024~~ | typealias パース + HIR + codegen | — | M | ✅ |
+| ~~TASK-025~~ | classpath 走査（Java .class メタデータ読み取り） | — | L | ✅ |
+| ~~TASK-026~~ | @valen.Closed（REQ-INTEROP-003） | TASK-025 | M | ✅ |
 
 **詳細:**
 
@@ -196,3 +196,4 @@ M8 (言語機能 + ツール)            │
 | 日付 | 変更 |
 |------|------|
 | 2026-05-13 | grill-me 4巡で策定。M6/M7/M8 3層構造確定 |
+| 2026-05-15 | M6 全完了、M7 TASK-024〜026 完了、M8 TASK-027/029/030 完了、Generics Phase A+B 完了 |

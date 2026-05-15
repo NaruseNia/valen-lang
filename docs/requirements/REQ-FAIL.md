@@ -4,7 +4,7 @@
 
 Valen の失敗モデルに関する要件。Option / Result / panic / Exception の役割分離、Error trait、`?` 演算子、`safe {}` ブロックによる Java 例外変換を定義する。
 
-**関連仕様:** [spec/08-failure.md](../spec/08-failure.md)
+**関連仕様:** [lang/08-failure.md](../lang/08-failure.md)
 **Phase:** MVP（Phase 1）
 
 ---
