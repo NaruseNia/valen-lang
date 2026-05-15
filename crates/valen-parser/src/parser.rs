@@ -38,6 +38,10 @@ pub struct Parser {
     pos: usize,
     file_id: FileId,
     diagnostics: Diagnostics,
+    /// Tracks split `>>` tokens: when `>>` (Shr) is consumed inside a generic
+    /// context, one `>` is used and `pending_gt` is incremented so the next
+    /// `expect_gt` / `at_gt` sees the remaining `>`.
+    pending_gt: u32,
 }
 
 impl Parser {
@@ -53,6 +57,7 @@ impl Parser {
             pos: 0,
             file_id,
             diagnostics,
+            pending_gt: 0,
         }
     }
 
@@ -76,6 +81,7 @@ impl Parser {
     }
 
     fn parse_item(&mut self) -> Option<Item> {
+        self.pending_gt = 0;
         if self.at(&TokenKind::Package) {
             return self.parse_package().map(Item::Package);
         }
@@ -405,13 +411,13 @@ impl Parser {
     fn parse_type_path_segment(&mut self, name: SmolStr, start: Span) -> Option<TypePathSegment> {
         let mut generics = Vec::new();
         if self.eat(&TokenKind::Lt).is_some() {
-            while !self.at(&TokenKind::Gt) && !self.at_eof() {
+            while !self.at_gt() && !self.at_eof() {
                 if !generics.is_empty() {
                     self.expect(TokenKind::Comma)?;
                 }
                 generics.push(self.parse_type()?);
             }
-            self.expect(TokenKind::Gt)?;
+            self.expect_gt()?;
         }
         let end = if generics.is_empty() {
             start
@@ -523,10 +529,10 @@ impl Parser {
             return Some(Vec::new());
         }
         let mut params = Vec::new();
-        while !self.at(&TokenKind::Gt) && !self.at_eof() {
+        while !self.at_gt() && !self.at_eof() {
             if !params.is_empty() {
                 self.expect(TokenKind::Comma)?;
-                if self.at(&TokenKind::Gt) {
+                if self.at_gt() {
                     break;
                 }
             }
@@ -547,7 +553,7 @@ impl Parser {
                 span: start.merge(end),
             });
         }
-        self.expect(TokenKind::Gt)?;
+        self.expect_gt()?;
         Some(params)
     }
 
@@ -1746,6 +1752,44 @@ impl Parser {
         None
     }
 
+    /// True when the next effective token is `>`, accounting for a
+    /// previously split `>>` (Shr) that left a pending `>`.
+    fn at_gt(&self) -> bool {
+        self.pending_gt > 0 || self.at(&TokenKind::Gt) || self.at(&TokenKind::Shr)
+    }
+
+    /// Consume a single `>` in generic context.  Handles three cases:
+    /// 1. A pending `>` from a previously split `>>`.
+    /// 2. A plain `>` token.
+    /// 3. A `>>` (Shr) token — consumes it and saves a pending `>`.
+    fn expect_gt(&mut self) -> Option<Span> {
+        if self.pending_gt > 0 {
+            self.pending_gt -= 1;
+            let span = self
+                .tokens
+                .get(self.pos.saturating_sub(1))
+                .map(|(_, s)| *s)
+                .unwrap_or(Span::DUMMY);
+            return Some(span);
+        }
+        if self.at(&TokenKind::Gt) {
+            let (_, span) = self.bump();
+            return Some(span);
+        }
+        if self.at(&TokenKind::Shr) {
+            let (_, span) = self.bump();
+            self.pending_gt = 1;
+            return Some(span);
+        }
+        let span = self.peek_span();
+        self.diagnostics.error(
+            DiagCode::PARSE_EXPECTED_TOKEN,
+            span,
+            SmolStr::from("expected >"),
+        );
+        None
+    }
+
     fn peek_is_ident(&self) -> bool {
         matches!(self.peek(), TokenKind::Ident(_))
     }
@@ -1797,6 +1841,7 @@ impl Parser {
     }
 
     fn recover_to_item_boundary(&mut self) {
+        self.pending_gt = 0;
         while !self.at_eof() {
             if matches!(
                 self.peek(),

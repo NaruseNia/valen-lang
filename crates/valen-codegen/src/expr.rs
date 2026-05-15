@@ -849,10 +849,16 @@ impl<'a> ExprLowering<'a> {
                 let branch = match op {
                     BinaryOp::Eq | BinaryOp::RefEq => JvmOp::IfACmpNe(false_label),
                     BinaryOp::Ne | BinaryOp::RefNe => JvmOp::IfACmpEq(false_label),
-                    BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
-                        unreachable!("ordering comparison on Object/Array types not supported")
+                    other => {
+                        self.ops.push(JvmOp::Pop);
+                        self.ops.push(JvmOp::Pop);
+                        self.ops.push(JvmOp::PushInt(0));
+                        eprintln!(
+                            "codegen warning: ordering comparison {other:?} on Object/Array is not supported, \
+                             emitting constant false"
+                        );
+                        return;
                     }
-                    _ => unreachable!(),
                 };
                 self.ops.push(branch);
             }
