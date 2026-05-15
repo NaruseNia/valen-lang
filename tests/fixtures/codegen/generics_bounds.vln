@@ -10,7 +10,7 @@ impl Show for Dog {
     fn show(self) -> String { self.name }
 }
 
-pub fn display<T: Show>(x: T) -> String {
+pub fn display<T: Show + Iterator>(x: T) -> String {
     x.show()
 }
 

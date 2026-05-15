@@ -128,60 +128,325 @@ impl ServerState {
     // Completion helpers
     // -----------------------------------------------------------------------
 
-    /// Build completion items from keywords and HIR definitions.
-    fn build_completions(&self, uri: &Url) -> Vec<CompletionItem> {
-        let mut items = Vec::new();
+    fn build_completions(&self, uri: &Url, pos: Position) -> Vec<CompletionItem> {
+        let doc = match self.documents.get(uri) {
+            Some(d) => d,
+            None => return Vec::new(),
+        };
 
-        // 1) Keyword completions
-        for kw in VALEN_KEYWORDS {
-            items.push(CompletionItem {
-                label: kw.to_string(),
-                kind: Some(CompletionItemKind::KEYWORD),
-                ..Default::default()
-            });
+        let offset = doc.line_index.position_to_offset(pos) as usize;
+        let before = &doc.text[..offset.min(doc.text.len())];
+
+        if is_double_colon_context(before) {
+            return self.build_path_completions(doc, before);
         }
 
-        // 2) Scope-based completions from HIR
-        if let Some(doc) = self.documents.get(uri) {
-            if let Some(hir) = doc.hir.as_ref() {
-                for def in hir.defs.values() {
-                    let (label, kind) = match &def.kind {
-                        DefKind::Fn(_) => (def.name.to_string(), CompletionItemKind::FUNCTION),
-                        DefKind::Class(_)
-                        | DefKind::DataClass(_)
-                        | DefKind::Enum(_)
-                        | DefKind::TypeAlias(_)
-                        | DefKind::AnnotationClass(_) => {
-                            (def.name.to_string(), CompletionItemKind::CLASS)
-                        }
-                        DefKind::Trait(_) => (def.name.to_string(), CompletionItemKind::INTERFACE),
-                        DefKind::Impl(_) => continue,
-                    };
-                    items.push(CompletionItem {
-                        label,
-                        kind: Some(kind),
-                        ..Default::default()
-                    });
-                }
+        if is_dot_context(before) {
+            return self.build_dot_completions(doc, before);
+        }
 
-                // 3) Method completions from type_methods and trait_impls
-                for methods in hir.type_methods.values() {
-                    for &mid in methods {
-                        if let Some(def) = hir.defs.get(&mid) {
+        self.build_general_completions(doc)
+    }
+
+    fn build_path_completions(&self, doc: &DocumentState, before: &str) -> Vec<CompletionItem> {
+        let mut items = Vec::new();
+        let hir = match doc.hir.as_ref() {
+            Some(h) => h,
+            None => return items,
+        };
+
+        let name = extract_name_before_double_colon(before);
+
+        for def in hir.defs.values() {
+            if def.name.as_str() != name {
+                continue;
+            }
+            match &def.kind {
+                // Enum variants
+                DefKind::Enum(e) => {
+                    for variant in &e.variants {
+                        let detail = if variant.fields.is_empty() {
+                            None
+                        } else {
+                            let fs: Vec<String> = variant
+                                .fields
+                                .iter()
+                                .map(|(n, t)| format!("{n}: {t}"))
+                                .collect();
+                            Some(format!("({})", fs.join(", ")))
+                        };
+                        items.push(CompletionItem {
+                            label: variant.name.to_string(),
+                            kind: Some(CompletionItemKind::ENUM_MEMBER),
+                            detail,
+                            ..Default::default()
+                        });
+                    }
+                }
+                // Class associated functions (no self param)
+                DefKind::Class(c) => {
+                    for &mid in &c.methods {
+                        if let Some(mdef) = hir.defs.get(&mid) {
+                            if let DefKind::Fn(f) = &mdef.kind {
+                                let has_self = f.params.first().is_some_and(|p| p.is_self);
+                                if !has_self {
+                                    items.push(CompletionItem {
+                                        label: mdef.name.to_string(),
+                                        kind: Some(CompletionItemKind::FUNCTION),
+                                        detail: Some(format_fn_signature(&mdef.name, f)),
+                                        ..Default::default()
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                // Trait methods (UFCS)
+                DefKind::Trait(t) => {
+                    for &mid in &t.methods {
+                        if let Some(mdef) = hir.defs.get(&mid) {
+                            if let DefKind::Fn(f) = &mdef.kind {
+                                items.push(CompletionItem {
+                                    label: mdef.name.to_string(),
+                                    kind: Some(CompletionItemKind::METHOD),
+                                    detail: Some(format_fn_signature(&mdef.name, f)),
+                                    ..Default::default()
+                                });
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        items
+    }
+
+    fn build_dot_completions(&self, doc: &DocumentState, before: &str) -> Vec<CompletionItem> {
+        let mut items = Vec::new();
+        let hir = match doc.hir.as_ref() {
+            Some(h) => h,
+            None => return items,
+        };
+
+        let receiver = extract_receiver_before_dot(before);
+        let type_name = self.resolve_receiver_type(doc, hir, receiver);
+
+        if let Some(tn) = &type_name {
+            // Fields from class/data class ctor params
+            for def in hir.defs.values() {
+                match &def.kind {
+                    DefKind::Class(c) if def.name.as_str() == tn => {
+                        for param in &c.ctor_params {
                             items.push(CompletionItem {
-                                label: def.name.to_string(),
+                                label: param.name.to_string(),
+                                kind: Some(CompletionItemKind::FIELD),
+                                ..Default::default()
+                            });
+                        }
+                    }
+                    DefKind::DataClass(dc) if def.name.as_str() == tn => {
+                        for param in &dc.ctor_params {
+                            items.push(CompletionItem {
+                                label: param.name.to_string(),
+                                kind: Some(CompletionItemKind::FIELD),
+                                ..Default::default()
+                            });
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            // Methods from class body
+            if let Some(methods) = hir.type_methods.get(tn.as_str()) {
+                for &mid in methods {
+                    if let Some(mdef) = hir.defs.get(&mid) {
+                        items.push(CompletionItem {
+                            label: mdef.name.to_string(),
+                            kind: Some(CompletionItemKind::METHOD),
+                            ..Default::default()
+                        });
+                    }
+                }
+            }
+
+            // Methods from trait impls
+            for entry in &hir.trait_impls {
+                if entry.target_name.as_str() == tn {
+                    for &mid in &entry.methods {
+                        if let Some(mdef) = hir.defs.get(&mid) {
+                            items.push(CompletionItem {
+                                label: mdef.name.to_string(),
                                 kind: Some(CompletionItemKind::METHOD),
                                 ..Default::default()
                             });
                         }
                     }
                 }
-                for entry in &hir.trait_impls {
-                    for &mid in &entry.methods {
-                        if let Some(def) = hir.defs.get(&mid) {
+            }
+        }
+
+        // Deduplicate
+        items.sort_by(|a, b| a.label.cmp(&b.label));
+        items.dedup_by(|a, b| a.label == b.label);
+        items
+    }
+
+    fn resolve_receiver_type(
+        &self,
+        doc: &DocumentState,
+        hir: &valen_hir::Hir,
+        receiver: &str,
+    ) -> Option<String> {
+        if receiver == "self" {
+            return self.find_enclosing_class(doc, hir);
+        }
+
+        // Check if receiver is a type name directly
+        for def in hir.defs.values() {
+            if def.name.as_str() == receiver {
+                match &def.kind {
+                    DefKind::Class(_) | DefKind::DataClass(_) | DefKind::Enum(_) => {
+                        return Some(receiver.to_string());
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // Look up variable type from fn params
+        for def in hir.defs.values() {
+            if let DefKind::Fn(f) = &def.kind {
+                for param in &f.params {
+                    if param.name.as_str() == receiver {
+                        return tyref_to_type_name(&param.ty);
+                    }
+                }
+            }
+        }
+
+        // Look up variable type from let bindings in source (heuristic)
+        if let Some(ty) = find_let_type_annotation(&doc.text, receiver) {
+            return Some(ty);
+        }
+
+        None
+    }
+
+    fn find_enclosing_class(&self, _doc: &DocumentState, hir: &valen_hir::Hir) -> Option<String> {
+        // Heuristic: return the first user-defined class/data class
+        for def in hir.defs.values() {
+            if hir.prelude_ids.contains(&def.id) {
+                continue;
+            }
+            match &def.kind {
+                DefKind::Class(_) | DefKind::DataClass(_) => {
+                    return Some(def.name.to_string());
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    fn build_general_completions(&self, doc: &DocumentState) -> Vec<CompletionItem> {
+        let mut items = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+
+        for kw in VALEN_KEYWORDS {
+            items.push(CompletionItem {
+                label: kw.to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                ..Default::default()
+            });
+            seen.insert(kw.to_string());
+        }
+
+        for ty in BUILTIN_TYPES {
+            let label = ty.to_string();
+            if seen.insert(label.clone()) {
+                items.push(CompletionItem {
+                    label,
+                    kind: Some(CompletionItemKind::TYPE_PARAMETER),
+                    ..Default::default()
+                });
+            }
+        }
+
+        if let Some(hir) = doc.hir.as_ref() {
+            for def in hir.defs.values() {
+                if hir.prelude_ids.contains(&def.id) || def.name.is_empty() {
+                    continue;
+                }
+                let (label, kind, detail) = match &def.kind {
+                    DefKind::Fn(f) => {
+                        let sig = format_fn_signature(&def.name, f);
+                        (
+                            def.name.to_string(),
+                            CompletionItemKind::FUNCTION,
+                            Some(sig),
+                        )
+                    }
+                    DefKind::Class(c) => {
+                        let sig = format_class_signature(&def.name, &c.ctor_params);
+                        (def.name.to_string(), CompletionItemKind::CLASS, Some(sig))
+                    }
+                    DefKind::DataClass(dc) => {
+                        let sig = format_class_signature(&def.name, &dc.ctor_params);
+                        (def.name.to_string(), CompletionItemKind::CLASS, Some(sig))
+                    }
+                    DefKind::Enum(_) => (def.name.to_string(), CompletionItemKind::ENUM, None),
+                    DefKind::Trait(_) => {
+                        (def.name.to_string(), CompletionItemKind::INTERFACE, None)
+                    }
+                    DefKind::TypeAlias(ta) => {
+                        let detail = format!("typealias {} = {}", def.name, ta.target);
+                        (
+                            def.name.to_string(),
+                            CompletionItemKind::CLASS,
+                            Some(detail),
+                        )
+                    }
+                    DefKind::AnnotationClass(_) => {
+                        (def.name.to_string(), CompletionItemKind::CLASS, None)
+                    }
+                    DefKind::Impl(_) => continue,
+                };
+                if seen.insert(label.clone()) {
+                    items.push(CompletionItem {
+                        label,
+                        kind: Some(kind),
+                        detail,
+                        ..Default::default()
+                    });
+                }
+            }
+
+            // Function parameters (from all fn defs in this file)
+            for def in hir.defs.values() {
+                if let DefKind::Fn(f) = &def.kind {
+                    for param in &f.params {
+                        if param.is_self || param.name.is_empty() {
+                            continue;
+                        }
+                        let label = param.name.to_string();
+                        if seen.insert(label.clone()) {
+                            let mut ty_str = format!("{}", param.ty);
+                            // Annotate type params with bounds
+                            if let valen_hir::TyRef::Unresolved(tp) = &param.ty {
+                                for (bn, bounds) in &f.generic_bounds {
+                                    if bn == tp && !bounds.is_empty() {
+                                        ty_str = format!("{tp}: {}", bounds.join(" + "));
+                                        break;
+                                    }
+                                }
+                            }
                             items.push(CompletionItem {
-                                label: def.name.to_string(),
-                                kind: Some(CompletionItemKind::METHOD),
+                                label,
+                                kind: Some(CompletionItemKind::VARIABLE),
+                                detail: Some(ty_str),
                                 ..Default::default()
                             });
                         }
@@ -204,11 +469,35 @@ impl ServerState {
         let name = extract_word_at(&doc.text, offset)?;
         let hir = doc.hir.as_ref()?;
 
+        // Check if it's a type parameter with bounds
+        for def in hir.defs.values() {
+            if let DefKind::Fn(f) = &def.kind {
+                for (param_name, bounds) in &f.generic_bounds {
+                    if param_name.as_str() == name {
+                        let value = if bounds.is_empty() {
+                            format!("type {name}")
+                        } else {
+                            format!("{name}: {}", bounds.join(" + "))
+                        };
+                        return Some(Hover {
+                            contents: HoverContents::Scalar(MarkedString::LanguageString(
+                                LanguageString {
+                                    language: "valen".to_string(),
+                                    value,
+                                },
+                            )),
+                            range: None,
+                        });
+                    }
+                }
+            }
+        }
+
         for def in hir.defs.values() {
             if def.name.as_str() != name {
                 continue;
             }
-            let value = format_def_hover(def);
+            let value = format_def_hover(def, hir);
             return Some(Hover {
                 contents: HoverContents::Scalar(MarkedString::LanguageString(LanguageString {
                     language: "valen".to_string(),
@@ -312,6 +601,120 @@ pub fn analyze_document(text: &str) -> (DocumentState, Vec<async_lsp::lsp_types:
 // Helpers
 // ---------------------------------------------------------------------------
 
+fn format_fn_signature(name: &str, f: &valen_hir::FnDef) -> String {
+    let params: Vec<String> = f
+        .params
+        .iter()
+        .map(|p| {
+            if p.is_self {
+                if p.mutable {
+                    "mut self".into()
+                } else {
+                    "self".into()
+                }
+            } else {
+                format!("{}: {}", p.name, p.ty)
+            }
+        })
+        .collect();
+    let ret = f
+        .return_ty
+        .as_ref()
+        .map(|t| format!(" -> {t}"))
+        .unwrap_or_default();
+    format!("fn {}({}){}", name, params.join(", "), ret)
+}
+
+fn format_class_signature(name: &str, params: &[valen_hir::CtorParamDef]) -> String {
+    let ps: Vec<String> = params
+        .iter()
+        .map(|p| {
+            let vis = match p.vis {
+                valen_hir::Vis::Pub => "pub ",
+                _ => "",
+            };
+            let m = if p.mutable { "mut " } else { "" };
+            format!("{vis}{m}{}: {}", p.name, p.ty)
+        })
+        .collect();
+    format!("{}({})", name, ps.join(", "))
+}
+
+const BUILTIN_TYPES: &[&str] = &[
+    "Int", "Long", "Float", "Double", "Char", "Bool", "Byte", "Short", "String", "Unit", "Nothing",
+    "Option", "Result",
+];
+
+fn tyref_to_type_name(ty: &valen_hir::TyRef) -> Option<String> {
+    match ty {
+        valen_hir::TyRef::Named(n) => Some(n.to_string()),
+        valen_hir::TyRef::Generic(n, _) => Some(n.to_string()),
+        valen_hir::TyRef::Prim(p) => Some(format!("{p}")),
+        _ => None,
+    }
+}
+
+fn find_let_type_annotation(source: &str, var_name: &str) -> Option<String> {
+    for line in source.lines() {
+        let trimmed = line.trim();
+        // Match: let [mut] name: Type = ...
+        // or:    let [mut] name: Type;
+        let rest = trimmed
+            .strip_prefix("let mut ")
+            .or_else(|| trimmed.strip_prefix("let "))?;
+        if !rest.starts_with(var_name) {
+            continue;
+        }
+        let after_name = &rest[var_name.len()..];
+        if !after_name.starts_with(':') {
+            continue;
+        }
+        let ty_part = after_name[1..].trim_start();
+        let ty_end = ty_part
+            .find(|c: char| c == '=' || c == ';' || c == '{')
+            .unwrap_or(ty_part.len());
+        let ty_str = ty_part[..ty_end].trim();
+        // Strip generics for simple lookup
+        let base = ty_str.split('<').next().unwrap_or(ty_str).trim();
+        if !base.is_empty() {
+            return Some(base.to_string());
+        }
+    }
+    None
+}
+
+fn is_double_colon_context(before: &str) -> bool {
+    let trimmed = before.trim_end_matches(|c: char| c.is_ascii_alphanumeric() || c == '_');
+    trimmed.trim_end().ends_with("::")
+}
+
+fn extract_name_before_double_colon(before: &str) -> &str {
+    let trimmed = before.trim_end_matches(|c: char| c.is_ascii_alphanumeric() || c == '_');
+    let without_colons = trimmed.trim_end().strip_suffix("::").unwrap_or(trimmed);
+    let without_colons = without_colons.trim_end();
+    let start = without_colons
+        .rfind(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    &without_colons[start..]
+}
+
+fn is_dot_context(before: &str) -> bool {
+    let trimmed = before.trim_end_matches(|c: char| c.is_ascii_alphanumeric() || c == '_');
+    trimmed.trim_end().ends_with('.')
+}
+
+fn extract_receiver_before_dot(before: &str) -> &str {
+    let trimmed = before.trim_end();
+    let without_dot = trimmed.strip_suffix('.').unwrap_or(trimmed);
+    let without_dot = without_dot.trim_end();
+    let start = without_dot
+        .rfind(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    &without_dot[start..]
+}
+
 fn find_vln_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
     let mut files = Vec::new();
     if let Ok(entries) = std::fs::read_dir(root) {
@@ -346,15 +749,22 @@ pub fn extract_word_at(text: &str, offset: u32) -> Option<&str> {
 }
 
 /// Format a HIR definition for hover display.
-fn format_def_hover(def: &valen_hir::Def) -> String {
+fn format_def_hover(def: &valen_hir::Def, hir: &valen_hir::Hir) -> String {
     match &def.kind {
         DefKind::Fn(f) => {
             let params_str: Vec<String> = f
                 .params
                 .iter()
                 .map(|p| {
-                    let mutability = if p.mutable { "mut " } else { "" };
-                    format!("{}{}: {}", mutability, p.name, p.ty)
+                    if p.is_self {
+                        if p.mutable {
+                            "mut self".to_string()
+                        } else {
+                            "self".to_string()
+                        }
+                    } else {
+                        format!("{}: {}", p.name, p.ty)
+                    }
                 })
                 .collect();
             let ret = f
@@ -368,7 +778,14 @@ fn format_def_hover(def: &valen_hir::Def) -> String {
             let params_str: Vec<String> = c
                 .ctor_params
                 .iter()
-                .map(|p| format!("{}: {}", p.name, p.ty))
+                .map(|p| {
+                    let vis = match p.vis {
+                        valen_hir::Vis::Pub => "pub ",
+                        _ => "",
+                    };
+                    let m = if p.mutable { "mut " } else { "" };
+                    format!("{vis}{m}{}: {}", p.name, p.ty)
+                })
                 .collect();
             format!("class {}({})", def.name, params_str.join(", "))
         }
@@ -376,19 +793,37 @@ fn format_def_hover(def: &valen_hir::Def) -> String {
             let params_str: Vec<String> = dc
                 .ctor_params
                 .iter()
-                .map(|p| format!("{}: {}", p.name, p.ty))
+                .map(|p| {
+                    let vis = match p.vis {
+                        valen_hir::Vis::Pub => "pub ",
+                        _ => "",
+                    };
+                    format!("{vis}{}: {}", p.name, p.ty)
+                })
                 .collect();
             format!("data class {}({})", def.name, params_str.join(", "))
         }
         DefKind::Enum(e) => {
-            let variants: Vec<&str> = e.variants.iter().map(|v| v.name.as_str()).collect();
+            let variants: Vec<String> = e
+                .variants
+                .iter()
+                .map(|v| {
+                    if v.fields.is_empty() {
+                        v.name.to_string()
+                    } else {
+                        let fields: Vec<String> =
+                            v.fields.iter().map(|(n, t)| format!("{n}: {t}")).collect();
+                        format!("{}({})", v.name, fields.join(", "))
+                    }
+                })
+                .collect();
             format!("enum {} {{ {} }}", def.name, variants.join(", "))
         }
         DefKind::Trait(t) => {
             let method_names: Vec<String> = t
                 .methods
                 .iter()
-                .map(|&mid| format!("method#{mid}"))
+                .filter_map(|&mid| hir.defs.get(&mid).map(|d| d.name.to_string()))
                 .collect();
             format!("trait {} {{ {} }}", def.name, method_names.join(", "))
         }
@@ -634,7 +1069,8 @@ impl LanguageServer for ServerState {
         params: CompletionParams,
     ) -> futures::future::BoxFuture<'static, Result<Option<CompletionResponse>, Self::Error>> {
         let uri = params.text_document_position.text_document.uri;
-        let items = self.build_completions(&uri);
+        let pos = params.text_document_position.position;
+        let items = self.build_completions(&uri, pos);
         Box::pin(async { Ok(Some(CompletionResponse::Array(items))) })
     }
 
