@@ -694,12 +694,11 @@ impl<'hir> TypeChecker<'hir> {
                 span: path.span,
             };
         }
-        // Issue #020: Multi-segment path (e.g. Enum::Variant) — resolve as enum variant
-        // if the first segment is an enum type.
         let first = &path.segments[0].name;
         if path.segments.len() == 2 {
-            let variant_name = &path.segments[1].name;
-            // Check if the first segment is an enum type and the second is a variant
+            let second = &path.segments[1].name;
+
+            // Enum::Variant — resolve as enum variant path
             if let Some(enum_def) = self
                 .hir
                 .defs
@@ -707,19 +706,28 @@ impl<'hir> TypeChecker<'hir> {
                 .find(|d| d.name == *first && matches!(d.kind, DefKind::Enum(_)))
             {
                 if let DefKind::Enum(edef) = &enum_def.kind {
-                    if let Some(_variant) = edef.variants.iter().find(|v| v.name == *variant_name) {
-                        // Return the enum type — the variant is valid
+                    if let Some(variant) = edef.variants.iter().find(|v| v.name == *second) {
+                        if variant.fields.is_empty() {
+                            return TypedExpr {
+                                kind: TypedExprKind::Call {
+                                    callee: Box::new(TypedExpr {
+                                        kind: TypedExprKind::LocalVar(SmolStr::from(format!(
+                                            "{first}::{second}"
+                                        ))),
+                                        ty: Ty::Named(first.clone()),
+                                        span: path.span,
+                                    }),
+                                    args: vec![],
+                                },
+                                ty: Ty::Named(first.clone()),
+                                span: path.span,
+                            };
+                        }
+                        // Record variant — return Named so synth_call handles arg checking
                         return TypedExpr {
-                            kind: TypedExprKind::Call {
-                                callee: Box::new(TypedExpr {
-                                    kind: TypedExprKind::LocalVar(SmolStr::from(format!(
-                                        "{first}::{variant_name}"
-                                    ))),
-                                    ty: Ty::Named(first.clone()),
-                                    span: path.span,
-                                }),
-                                args: vec![],
-                            },
+                            kind: TypedExprKind::LocalVar(SmolStr::from(format!(
+                                "{first}::{second}"
+                            ))),
                             ty: Ty::Named(first.clone()),
                             span: path.span,
                         };
@@ -727,9 +735,7 @@ impl<'hir> TypeChecker<'hir> {
                         self.diags.error(
                             DiagCode::NAME_NOT_FOUND,
                             path.span,
-                            SmolStr::from(format!(
-                                "enum `{first}` has no variant `{variant_name}`"
-                            )),
+                            SmolStr::from(format!("enum `{first}` has no variant `{second}`")),
                         );
                         return TypedExpr {
                             kind: TypedExprKind::Error,
@@ -739,6 +745,13 @@ impl<'hir> TypeChecker<'hir> {
                     }
                 }
             }
+
+            // Class::method — return Named so synth_call handles arg checking
+            return TypedExpr {
+                kind: TypedExprKind::LocalVar(SmolStr::from(format!("{first}::{second}"))),
+                ty: Ty::Named(first.clone()),
+                span: path.span,
+            };
         }
         // Fallback for non-enum multi-segment paths
         let ty = self.env.lookup(first).cloned().unwrap_or(Ty::Error);
@@ -1120,6 +1133,36 @@ impl<'hir> TypeChecker<'hir> {
                 }
             }
             Ty::Named(name) => {
+                // Check for 2-segment path calls (Enum::Variant or Class::method)
+                if let valen_ast::Expr::Path(path) = &*call.callee {
+                    if path.segments.len() == 2 {
+                        let class_name = &path.segments[0].name;
+                        let member_name = &path.segments[1].name;
+
+                        // Enum::Variant(args) — check variant fields
+                        if let Some(result) = self.resolve_enum_variant_call(
+                            class_name,
+                            member_name,
+                            &callee,
+                            &args,
+                            call.span,
+                        ) {
+                            return result;
+                        }
+
+                        // Class::method(args) — check associated function params
+                        if let Some(result) = self.resolve_associated_fn_call(
+                            class_name,
+                            member_name,
+                            &callee,
+                            &args,
+                            call.span,
+                        ) {
+                            return result;
+                        }
+                    }
+                }
+
                 // Constructor call — look up class/data class
                 let ctor_ty = self.resolve_ctor_type(name, &args, call.span);
                 TypedExpr {
@@ -1263,6 +1306,166 @@ impl<'hir> TypeChecker<'hir> {
             return Ty::Named(name.clone());
         }
         Ty::Named(name.clone())
+    }
+
+    fn resolve_enum_variant_call(
+        &mut self,
+        enum_name: &SmolStr,
+        variant_name: &SmolStr,
+        callee: &TypedExpr,
+        args: &[TypedExpr],
+        span: Span,
+    ) -> Option<TypedExpr> {
+        let enum_def = self
+            .hir
+            .defs
+            .values()
+            .find(|d| d.name == *enum_name && matches!(d.kind, DefKind::Enum(_)))?;
+        let edef = match &enum_def.kind {
+            DefKind::Enum(e) => e,
+            _ => return None,
+        };
+        let variant = edef.variants.iter().find(|v| v.name == *variant_name)?;
+        if variant.fields.is_empty() {
+            return None;
+        }
+
+        let field_tys: Vec<Ty> = variant
+            .fields
+            .iter()
+            .map(|(_, tyref)| tyref_to_ty_generic(tyref))
+            .collect();
+
+        if args.len() != field_tys.len() {
+            self.diags.error(
+                DiagCode::ARG_COUNT_MISMATCH,
+                span,
+                SmolStr::from(format!(
+                    "`{enum_name}::{variant_name}` expects {} argument(s), found {}",
+                    field_tys.len(),
+                    args.len()
+                )),
+            );
+        } else {
+            for (arg, expected) in args.iter().zip(field_tys.iter()) {
+                let resolved = if field_tys.iter().any(|t| matches!(t, Ty::TypeParam(_))) {
+                    let bindings = infer_type_bindings(&field_tys, args);
+                    substitute_ty(expected, &bindings)
+                } else {
+                    expected.clone()
+                };
+                if !arg.ty.is_error()
+                    && !resolved.is_error()
+                    && arg.ty != resolved
+                    && !is_subtype(&arg.ty, &resolved)
+                {
+                    self.diags.error(
+                        DiagCode::TYPE_MISMATCH,
+                        arg.span,
+                        SmolStr::from(format!("expected `{resolved}`, found `{}`", arg.ty)),
+                    );
+                }
+            }
+        }
+
+        let bindings = infer_type_bindings(&field_tys, args);
+        let type_params: Vec<Ty> = collect_type_params_ordered(&field_tys);
+        let ret_ty = if type_params.is_empty() {
+            Ty::Named(enum_name.clone())
+        } else {
+            let resolved_params: Vec<Ty> = type_params
+                .iter()
+                .map(|p| substitute_ty(p, &bindings))
+                .collect();
+            Ty::Generic(enum_name.clone(), resolved_params)
+        };
+
+        Some(TypedExpr {
+            kind: TypedExprKind::Call {
+                callee: Box::new(callee.clone()),
+                args: args.to_vec(),
+            },
+            ty: ret_ty,
+            span,
+        })
+    }
+
+    fn resolve_associated_fn_call(
+        &mut self,
+        class_name: &SmolStr,
+        method_name: &SmolStr,
+        callee: &TypedExpr,
+        args: &[TypedExpr],
+        span: Span,
+    ) -> Option<TypedExpr> {
+        let mid = self.lookup_method_def_id(class_name, method_name)?;
+        let method_def = self.hir.defs.get(&mid)?;
+        let fn_def = match &method_def.kind {
+            DefKind::Fn(f) => f,
+            _ => return None,
+        };
+        if fn_def.params.iter().any(|p| p.is_self) {
+            return None;
+        }
+
+        let param_tys: Vec<Ty> = fn_def
+            .params
+            .iter()
+            .map(|p| tyref_to_ty_generic(&p.ty))
+            .collect();
+        let ret_ty = fn_def
+            .return_ty
+            .as_ref()
+            .map(tyref_to_ty_generic)
+            .unwrap_or_else(Ty::unit);
+
+        let min_args = fn_def.params.iter().filter(|p| !p.has_default).count();
+        if args.len() < min_args || args.len() > param_tys.len() {
+            self.diags.error(
+                DiagCode::ARG_COUNT_MISMATCH,
+                span,
+                SmolStr::from(if min_args == param_tys.len() {
+                    format!(
+                        "expected {} argument(s), found {}",
+                        param_tys.len(),
+                        args.len()
+                    )
+                } else {
+                    format!(
+                        "expected {}-{} argument(s), found {}",
+                        min_args,
+                        param_tys.len(),
+                        args.len()
+                    )
+                }),
+            );
+        } else {
+            for (arg, expected) in args.iter().zip(param_tys.iter()) {
+                if !arg.ty.is_error()
+                    && !expected.is_error()
+                    && arg.ty != *expected
+                    && !is_subtype(&arg.ty, expected)
+                {
+                    self.diags.error(
+                        DiagCode::TYPE_MISMATCH,
+                        arg.span,
+                        SmolStr::from(format!("expected `{expected}`, found `{}`", arg.ty)),
+                    );
+                }
+            }
+        }
+
+        let bindings = infer_type_bindings(&param_tys, args);
+        let resolved_ret = substitute_ty(&ret_ty, &bindings);
+
+        Some(TypedExpr {
+            kind: TypedExprKind::Call {
+                callee: Box::new(callee.clone()),
+                args: args.to_vec(),
+            },
+            ty: resolved_ret,
+            span,
+        })
     }
 
     // -- method call --------------------------------------------------------
@@ -2218,6 +2421,35 @@ fn substitute_ty(ty: &Ty, bindings: &IndexMap<SmolStr, Ty>) -> Ty {
     }
 }
 
+fn collect_type_params_ordered(tys: &[Ty]) -> Vec<Ty> {
+    let mut seen = IndexMap::new();
+    for ty in tys {
+        collect_type_params_inner(ty, &mut seen);
+    }
+    seen.into_keys().map(Ty::TypeParam).collect()
+}
+
+fn collect_type_params_inner(ty: &Ty, seen: &mut IndexMap<SmolStr, ()>) {
+    match ty {
+        Ty::TypeParam(name) => {
+            seen.entry(name.clone()).or_insert(());
+        }
+        Ty::Generic(_, args) => {
+            for a in args {
+                collect_type_params_inner(a, seen);
+            }
+        }
+        Ty::Nullable(inner) => collect_type_params_inner(inner, seen),
+        Ty::Fn(params, ret) => {
+            for p in params {
+                collect_type_params_inner(p, seen);
+            }
+            collect_type_params_inner(ret, seen);
+        }
+        _ => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2540,5 +2772,95 @@ mod tests {
     fn continue_outside_loop() {
         let r = check_source("fn main() { continue; }");
         assert_has_error(&r, DiagCode::CONTINUE_OUTSIDE_LOOP);
+    }
+
+    // -- enum variant call with generics (#064) ---
+
+    #[test]
+    fn enum_variant_call_field_types_checked() {
+        let r = check_source(
+            r#"
+            enum Shape {
+                Circle(r: Double),
+                Point
+            }
+            fn make() -> Shape { Shape::Circle(3.14) }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn enum_variant_call_arg_count_mismatch() {
+        let r = check_source(
+            r#"
+            enum Shape {
+                Circle(r: Double),
+                Point
+            }
+            fn make() -> Shape { Shape::Circle() }
+            "#,
+        );
+        assert_has_error(&r, DiagCode::ARG_COUNT_MISMATCH);
+    }
+
+    #[test]
+    fn enum_variant_call_arg_type_mismatch() {
+        let r = check_source(
+            r#"
+            enum Shape {
+                Circle(r: Double),
+                Point
+            }
+            fn make() -> Shape { Shape::Circle("not a number") }
+            "#,
+        );
+        assert_has_error(&r, DiagCode::TYPE_MISMATCH);
+    }
+
+    #[test]
+    fn enum_unit_variant_path() {
+        let r = check_source(
+            r#"
+            enum Shape {
+                Circle(r: Double),
+                Point
+            }
+            fn make() -> Shape { Shape::Point }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    // -- associated function call (#86) ---
+
+    #[test]
+    fn associated_fn_arg_count_checked() {
+        let r = check_source(
+            r#"
+            class Shape() {
+                fn detect(shape: Int) -> Shape {
+                    Shape()
+                }
+            }
+            fn test() -> Shape { Shape::detect() }
+            "#,
+        );
+        assert_has_error(&r, DiagCode::ARG_COUNT_MISMATCH);
+    }
+
+    #[test]
+    fn associated_fn_correct_call() {
+        let r = check_source(
+            r#"
+            class Shape() {
+                fn detect(shape: Int) -> Shape {
+                    Shape()
+                }
+            }
+            fn test() -> Shape { Shape::detect(42) }
+            "#,
+        );
+        assert_no_errors(&r);
     }
 }
