@@ -1009,13 +1009,9 @@ pub fn analyze_document(
         &line_index,
     ));
 
-    let (hir, bodies) = if !resolve_result.diagnostics.has_errors() {
-        let tc = valen_hir::ty::type_check(&resolve_result.hir, &parse_result.items);
-        diags.extend(convert::to_lsp_diagnostics(&tc.diagnostics, &line_index));
-        (Some(resolve_result.hir), Some(tc.bodies))
-    } else {
-        (Some(resolve_result.hir), None)
-    };
+    let tc = valen_hir::ty::type_check(&resolve_result.hir, &parse_result.items);
+    diags.extend(convert::to_lsp_diagnostics(&tc.diagnostics, &line_index));
+    let (hir, bodies) = (Some(resolve_result.hir), Some(tc.bodies));
 
     let doc = DocumentState {
         text: text.to_string(),
