@@ -119,3 +119,179 @@ fn main() {
     let (doc, _diags) = analyze_document(src, FileId(0));
     assert!(doc.bodies.is_some(), "typed bodies should be present");
 }
+
+#[test]
+fn local_var_and_dot_completion_full_repro() {
+    use valen_lsp::server::collect_local_variables_pub;
+
+    let src = r#"package one.nxeu;
+
+trait Shape {
+    fn area(self) -> Float;
+}
+
+class Rectangle(w: Float, h: Float) {}
+class Circle(r: Float) {}
+
+impl Shape for Rectangle {
+    fn area(self) -> Float {
+        self.w * self.h
+    }
+}
+
+impl Shape for Circle {
+    fn area(self) -> Float {
+        self.r * self.r * 3.14f
+    }
+}
+
+fn main() {
+    let circle = Circle(10.0f);
+    let rect = Rectangle(10.0f, 10.0f);
+    let circleArea = circle.area();
+}
+"#;
+    let (doc, diags) = analyze_document(src, FileId(0));
+    eprintln!(
+        "diags: {:?}",
+        diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+    );
+
+    // Bodies must be present
+    assert!(doc.bodies.is_some(), "typed bodies must be present");
+    let bodies = doc.bodies.as_ref().unwrap();
+    assert!(!bodies.is_empty(), "should have at least one body");
+
+    // Find offset inside main() after `let rect = ...;\n    `
+    let marker = "let circleArea";
+    let offset = src.find(marker).unwrap() as u32;
+
+    let locals = collect_local_variables_pub(bodies, offset, doc.hir.as_ref());
+    let local_names: Vec<&str> = locals.iter().map(|(n, _)| n.as_str()).collect();
+    eprintln!("locals at offset {offset}: {local_names:?}");
+    assert!(
+        local_names.contains(&"circle"),
+        "circle should be visible, got: {local_names:?}"
+    );
+    assert!(
+        local_names.contains(&"rect"),
+        "rect should be visible, got: {local_names:?}"
+    );
+
+    // Check that circle's type resolves to Circle
+    let circle_ty = locals.iter().find(|(n, _)| n == "circle").map(|(_, t)| t);
+    eprintln!("circle type: {circle_ty:?}");
+    assert!(
+        matches!(circle_ty, Some(valen_hir::Ty::Named(n)) if n == "Circle"),
+        "circle should be typed as Circle, got: {circle_ty:?}"
+    );
+
+    // Check trait_impls contain Circle -> area
+    let hir = doc.hir.as_ref().unwrap();
+    eprintln!("trait_impls count: {}", hir.trait_impls.len());
+    for entry in &hir.trait_impls {
+        eprintln!(
+            "  impl {} for {} ({} methods)",
+            entry.trait_name,
+            entry.target_name,
+            entry.methods.len()
+        );
+        for &mid in &entry.methods {
+            if let Some(mdef) = hir.defs.get(&mid) {
+                eprintln!("    method: {}", mdef.name);
+            }
+        }
+    }
+
+    let circle_impls: Vec<_> = hir
+        .trait_impls
+        .iter()
+        .filter(|e| e.target_name.as_str() == "Circle")
+        .collect();
+    assert!(
+        !circle_impls.is_empty(),
+        "should have trait impl for Circle"
+    );
+    let has_area = circle_impls.iter().any(|e| {
+        e.methods.iter().any(|&mid| {
+            hir.defs
+                .get(&mid)
+                .map(|d| d.name.as_str() == "area")
+                .unwrap_or(false)
+        })
+    });
+    assert!(has_area, "Circle should have area() from trait impl");
+
+    // Check type_methods
+    eprintln!(
+        "type_methods keys: {:?}",
+        hir.type_methods.keys().collect::<Vec<_>>()
+    );
+    if let Some(methods) = hir.type_methods.get("Circle") {
+        eprintln!("Circle type_methods: {} entries", methods.len());
+    } else {
+        eprintln!("Circle has no type_methods entry");
+    }
+
+    // Check fields: class Circle(r: Float)
+    for def in hir.defs.values() {
+        if let valen_hir::DefKind::Class(c) = &def.kind {
+            if def.name == "Circle" {
+                eprintln!(
+                    "Circle ctor_params: {:?}",
+                    c.ctor_params.iter().map(|p| &p.name).collect::<Vec<_>>()
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn dot_completion_with_incomplete_code() {
+    use valen_lsp::server::find_let_type_annotation_pub;
+
+    // Simulate typing "circle." — incomplete expression causes parse error,
+    // fn main() is dropped from AST. The text-based heuristic must still
+    // resolve the receiver type from `let circle = Circle(...)`.
+    let src = r#"package one.nxeu;
+
+trait Shape {
+    fn area(self) -> Float;
+}
+
+class Circle(r: Float) {}
+
+impl Shape for Circle {
+    fn area(self) -> Float {
+        self.r * self.r * 3.14f
+    }
+}
+
+fn main() {
+    let circle = Circle(10.0f);
+    circle.
+}
+"#;
+    let (doc, _diags) = analyze_document(src, FileId(0));
+
+    let hir = doc
+        .hir
+        .as_ref()
+        .expect("HIR must exist even with parse errors");
+    let circle_impl_count = hir
+        .trait_impls
+        .iter()
+        .filter(|e| e.target_name == "Circle")
+        .count();
+    assert!(
+        circle_impl_count > 0,
+        "Circle trait impl must survive parse errors"
+    );
+
+    let inferred = find_let_type_annotation_pub(src, "circle");
+    assert_eq!(
+        inferred.as_deref(),
+        Some("Circle"),
+        "should infer Circle from constructor call"
+    );
+}
