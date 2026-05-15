@@ -601,6 +601,10 @@ impl LanguageServer for ServerState {
         ControlFlow::Continue(())
     }
 
+    fn did_save(&mut self, _params: DidSaveTextDocumentParams) -> Self::NotifyResult {
+        ControlFlow::Continue(())
+    }
+
     fn did_close(&mut self, params: DidCloseTextDocumentParams) -> Self::NotifyResult {
         let uri = params.text_document.uri;
         self.documents.remove(&uri);
