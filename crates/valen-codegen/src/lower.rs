@@ -45,7 +45,14 @@ pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<DefId, TypedBody>) -> Vec<Jv
                 ));
             }
             DefKind::Enum(enum_def) => {
-                classes.extend(lower_enum(def, enum_def, pkg, source_file, &hir.imports));
+                classes.extend(lower_enum(
+                    hir,
+                    def,
+                    enum_def,
+                    typed_bodies,
+                    pkg,
+                    source_file,
+                ));
             }
             DefKind::Trait(trait_def) if trait_def.is_sealed => {
                 classes.push(lower_sealed_trait(hir, def, pkg, source_file));
@@ -638,11 +645,12 @@ fn superclass_matches(tyref: &valen_hir::TyRef, name: &str) -> bool {
 }
 
 fn lower_enum(
+    hir: &Hir,
     def: &Def,
     enum_def: &valen_hir::EnumDef,
+    typed_bodies: &IndexMap<DefId, TypedBody>,
     pkg: Option<&[SmolStr]>,
     source_file: Option<String>,
-    imports: &IndexMap<SmolStr, Vec<SmolStr>>,
 ) -> Vec<JvmClass> {
     let enum_internal = class_internal_name(&def.name, pkg);
     let mut classes = Vec::new();
@@ -652,6 +660,44 @@ fn lower_enum(
         .iter()
         .map(|v| format!("{enum_internal}${}", v.name))
         .collect();
+
+    let mut methods = Vec::new();
+    let mut interfaces = Vec::new();
+    let mut all_synthetic_lambdas = Vec::new();
+    let mut all_bootstrap_methods = Vec::new();
+
+    for impl_entry in &hir.trait_impls {
+        if impl_entry.target_name == def.name {
+            if let Some(trait_internal) = hir
+                .imports
+                .get(&impl_entry.trait_name)
+                .map(|p| p.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("/"))
+            {
+                if !interfaces.contains(&trait_internal) {
+                    interfaces.push(trait_internal);
+                }
+            } else if is_sealed_trait_def(hir, &impl_entry.trait_name) {
+                let iface = class_internal_name(&impl_entry.trait_name, pkg);
+                if !interfaces.contains(&iface) {
+                    interfaces.push(iface);
+                }
+            }
+            for &mid in &impl_entry.methods {
+                if let Some(method_def) = hir.defs.get(&mid) {
+                    if let DefKind::Fn(fn_def) = &method_def.kind {
+                        let body = typed_bodies.get(&mid);
+                        let result =
+                            lower_method(hir, method_def, fn_def, body, &enum_internal, pkg);
+                        methods.push(result.method);
+                        all_synthetic_lambdas.extend(result.synthetic_lambdas);
+                        all_bootstrap_methods.extend(result.bootstrap_methods);
+                    }
+                }
+            }
+        }
+    }
+
+    let synthetic_methods = synthetic_lambdas_to_methods(all_synthetic_lambdas);
 
     classes.push(JvmClass {
         version: JvmVersion::Java21,
@@ -663,14 +709,14 @@ fn lower_enum(
         },
         name: enum_internal.clone(),
         super_class: JVM_OBJECT.to_string(),
-        interfaces: vec![],
+        interfaces,
         fields: vec![],
-        methods: vec![],
+        methods,
         source_file: source_file.clone(),
         permitted_subclasses: variant_internals.clone(),
         is_record: false,
-        bootstrap_methods: vec![],
-        synthetic_methods: vec![],
+        bootstrap_methods: all_bootstrap_methods,
+        synthetic_methods,
         annotations: vec![],
     });
 
@@ -688,7 +734,7 @@ fn lower_enum(
                 &variant.fields,
                 pkg,
                 source_file.clone(),
-                imports,
+                &hir.imports,
             ));
         }
     }
