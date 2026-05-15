@@ -581,6 +581,8 @@ pub enum TypedStmt {
         ty: Ty,
         init: TypedExpr,
         mutable: bool,
+        /// Whether the user wrote an explicit type annotation.
+        has_annotation: bool,
         span: Span,
     },
     /// An expression whose value is used (tail position).

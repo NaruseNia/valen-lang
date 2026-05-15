@@ -553,6 +553,7 @@ impl<'hir> TypeChecker<'hir> {
                     ty,
                     init,
                     mutable: ls.mutable,
+                    has_annotation: ls.ty.is_some(),
                     span: ls.span,
                 }
             }
@@ -1285,7 +1286,7 @@ impl<'hir> TypeChecker<'hir> {
         let (type_name, generic_args) = match &receiver.ty {
             Ty::Named(n) => (Some(n.clone()), vec![]),
             Ty::Generic(n, args) => (Some(n.clone()), args.clone()),
-            Ty::Prim(p) => (Some(SmolStr::from(format!("{p:?}"))), vec![]),
+            Ty::Prim(p) => (Some(SmolStr::from(format!("{p}"))), vec![]),
             Ty::TypeParam(_) => (None, vec![]),
             _ => (None, vec![]),
         };

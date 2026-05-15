@@ -8,7 +8,7 @@ use async_lsp::router::Router;
 use async_lsp::{ClientSocket, LanguageClient, LanguageServer, ResponseError};
 
 use valen_ast::token::TokenKind;
-use valen_hir::DefKind;
+use valen_hir::{DefKind, Ty, TypedBody, TypedExpr, TypedExprKind, TypedStmt};
 
 use crate::convert;
 
@@ -32,6 +32,8 @@ pub struct DocumentState {
     pub line_index: convert::LineIndex,
     pub items: Vec<valen_ast::Item>,
     pub hir: Option<valen_hir::Hir>,
+    /// Typed bodies from type checking, indexed by DefId.
+    pub bodies: Option<indexmap::IndexMap<valen_hir::DefId, valen_hir::TypedBody>>,
 }
 
 /// The Valen LSP server state.
@@ -220,7 +222,7 @@ impl ServerState {
             CompletionContext::TypePosition => self.build_type_completions(doc),
             CompletionContext::ImplTarget => self.build_impl_target_completions(doc),
             CompletionContext::NamingPosition => Vec::new(),
-            CompletionContext::General => self.build_general_completions(doc),
+            CompletionContext::General => self.build_general_completions(doc, offset as u32),
         }
     }
 
@@ -251,10 +253,28 @@ impl ServerState {
                                 .collect();
                             Some(format!("({})", fs.join(", ")))
                         };
+                        // Variant documentation: show which enum it belongs to
+                        let documentation = {
+                            let mut md = format!("```valen\n{name}::{}", variant.name);
+                            if !variant.fields.is_empty() {
+                                let fs: Vec<String> = variant
+                                    .fields
+                                    .iter()
+                                    .map(|(n, t)| format!("{n}: {t}"))
+                                    .collect();
+                                md.push_str(&format!("({})", fs.join(", ")));
+                            }
+                            md.push_str("\n```\n");
+                            Some(Documentation::MarkupContent(MarkupContent {
+                                kind: MarkupKind::Markdown,
+                                value: md,
+                            }))
+                        };
                         items.push(CompletionItem {
                             label: variant.name.to_string(),
                             kind: Some(CompletionItemKind::ENUM_MEMBER),
                             detail,
+                            documentation,
                             ..Default::default()
                         });
                     }
@@ -266,10 +286,17 @@ impl ServerState {
                             if let DefKind::Fn(f) = &mdef.kind {
                                 let has_self = f.params.first().is_some_and(|p| p.is_self);
                                 if !has_self {
+                                    let documentation = build_fn_documentation(
+                                        &mdef.name,
+                                        f,
+                                        &doc.text,
+                                        mdef.span.start,
+                                    );
                                     items.push(CompletionItem {
                                         label: mdef.name.to_string(),
                                         kind: Some(CompletionItemKind::FUNCTION),
                                         detail: Some(format_fn_signature(&mdef.name, f)),
+                                        documentation,
                                         ..Default::default()
                                     });
                                 }
@@ -282,10 +309,17 @@ impl ServerState {
                     for &mid in &t.methods {
                         if let Some(mdef) = hir.defs.get(&mid) {
                             if let DefKind::Fn(f) = &mdef.kind {
+                                let documentation = build_fn_documentation(
+                                    &mdef.name,
+                                    f,
+                                    &doc.text,
+                                    mdef.span.start,
+                                );
                                 items.push(CompletionItem {
                                     label: mdef.name.to_string(),
                                     kind: Some(CompletionItemKind::METHOD),
                                     detail: Some(format_fn_signature(&mdef.name, f)),
+                                    documentation,
                                     ..Default::default()
                                 });
                             }
@@ -315,20 +349,26 @@ impl ServerState {
                 match &def.kind {
                     DefKind::Class(c) if def.name.as_str() == tn => {
                         for param in &c.ctor_params {
+                            let documentation =
+                                build_variable_documentation(&param.name, &param.ty);
                             items.push(CompletionItem {
                                 label: param.name.to_string(),
                                 kind: Some(CompletionItemKind::FIELD),
                                 detail: Some(format!("{}", param.ty)),
+                                documentation,
                                 ..Default::default()
                             });
                         }
                     }
                     DefKind::DataClass(dc) if def.name.as_str() == tn => {
                         for param in &dc.ctor_params {
+                            let documentation =
+                                build_variable_documentation(&param.name, &param.ty);
                             items.push(CompletionItem {
                                 label: param.name.to_string(),
                                 kind: Some(CompletionItemKind::FIELD),
                                 detail: Some(format!("{}", param.ty)),
+                                documentation,
                                 ..Default::default()
                             });
                         }
@@ -341,15 +381,19 @@ impl ServerState {
             if let Some(methods) = hir.type_methods.get(tn.as_str()) {
                 for &mid in methods {
                     if let Some(mdef) = hir.defs.get(&mid) {
-                        let detail = if let DefKind::Fn(f) = &mdef.kind {
-                            Some(format_fn_signature(&mdef.name, f))
+                        let (detail, documentation) = if let DefKind::Fn(f) = &mdef.kind {
+                            (
+                                Some(format_fn_signature(&mdef.name, f)),
+                                build_fn_documentation(&mdef.name, f, &doc.text, mdef.span.start),
+                            )
                         } else {
-                            None
+                            (None, None)
                         };
                         items.push(CompletionItem {
                             label: mdef.name.to_string(),
                             kind: Some(CompletionItemKind::METHOD),
                             detail,
+                            documentation,
                             ..Default::default()
                         });
                     }
@@ -361,15 +405,24 @@ impl ServerState {
                 if entry.target_name.as_str() == tn {
                     for &mid in &entry.methods {
                         if let Some(mdef) = hir.defs.get(&mid) {
-                            let detail = if let DefKind::Fn(f) = &mdef.kind {
-                                Some(format_fn_signature(&mdef.name, f))
+                            let (detail, documentation) = if let DefKind::Fn(f) = &mdef.kind {
+                                (
+                                    Some(format_fn_signature(&mdef.name, f)),
+                                    build_fn_documentation(
+                                        &mdef.name,
+                                        f,
+                                        &doc.text,
+                                        mdef.span.start,
+                                    ),
+                                )
                             } else {
-                                None
+                                (None, None)
                             };
                             items.push(CompletionItem {
                                 label: mdef.name.to_string(),
                                 kind: Some(CompletionItemKind::METHOD),
                                 detail,
+                                documentation,
                                 ..Default::default()
                             });
                         }
@@ -451,11 +504,38 @@ impl ServerState {
                 if hir.prelude_ids.contains(&def.id) || def.name.is_empty() {
                     continue;
                 }
-                let kind = match &def.kind {
-                    DefKind::Class(_) | DefKind::DataClass(_) => CompletionItemKind::CLASS,
-                    DefKind::Enum(_) => CompletionItemKind::ENUM,
-                    DefKind::Trait(_) => CompletionItemKind::INTERFACE,
-                    DefKind::TypeAlias(_) => CompletionItemKind::CLASS,
+                let (kind, documentation) = match &def.kind {
+                    DefKind::Class(c) => (
+                        CompletionItemKind::CLASS,
+                        build_class_documentation(
+                            &def.name,
+                            &c.ctor_params,
+                            c.superclass.as_ref(),
+                            hir,
+                            &doc.text,
+                            def.span.start,
+                        ),
+                    ),
+                    DefKind::DataClass(dc) => (
+                        CompletionItemKind::CLASS,
+                        build_class_documentation(
+                            &def.name,
+                            &dc.ctor_params,
+                            None,
+                            hir,
+                            &doc.text,
+                            def.span.start,
+                        ),
+                    ),
+                    DefKind::Enum(e) => (
+                        CompletionItemKind::ENUM,
+                        build_enum_documentation(&def.name, e, &doc.text, def.span.start),
+                    ),
+                    DefKind::Trait(t) => (
+                        CompletionItemKind::INTERFACE,
+                        build_trait_documentation(&def.name, t, hir, &doc.text, def.span.start),
+                    ),
+                    DefKind::TypeAlias(_) => (CompletionItemKind::CLASS, None),
                     _ => continue,
                 };
                 let label = def.name.to_string();
@@ -463,6 +543,7 @@ impl ServerState {
                     items.push(CompletionItem {
                         label,
                         kind: Some(kind),
+                        documentation,
                         ..Default::default()
                     });
                 }
@@ -479,10 +560,13 @@ impl ServerState {
                             } else {
                                 Some(format!("{tp}: {}", bounds.join(" + ")))
                             };
+                            let bounds_str = bounds.join(" + ");
+                            let documentation = build_type_param_documentation(tp, &bounds_str);
                             items.push(CompletionItem {
                                 label,
                                 kind: Some(CompletionItemKind::TYPE_PARAMETER),
                                 detail,
+                                documentation,
                                 ..Default::default()
                             });
                         }
@@ -505,19 +589,37 @@ impl ServerState {
                 match &def.kind {
                     DefKind::Class(c) => {
                         let sig = format_class_signature(&def.name, &c.ctor_params);
+                        let documentation = build_class_documentation(
+                            &def.name,
+                            &c.ctor_params,
+                            c.superclass.as_ref(),
+                            hir,
+                            &doc.text,
+                            def.span.start,
+                        );
                         items.push(CompletionItem {
                             label: def.name.to_string(),
                             kind: Some(CompletionItemKind::CLASS),
                             detail: Some(sig),
+                            documentation,
                             ..Default::default()
                         });
                     }
                     DefKind::DataClass(dc) => {
                         let sig = format_class_signature(&def.name, &dc.ctor_params);
+                        let documentation = build_class_documentation(
+                            &def.name,
+                            &dc.ctor_params,
+                            None,
+                            hir,
+                            &doc.text,
+                            def.span.start,
+                        );
                         items.push(CompletionItem {
                             label: def.name.to_string(),
                             kind: Some(CompletionItemKind::CLASS),
                             detail: Some(sig),
+                            documentation,
                             ..Default::default()
                         });
                     }
@@ -529,14 +631,33 @@ impl ServerState {
         items
     }
 
-    fn build_general_completions(&self, doc: &DocumentState) -> Vec<CompletionItem> {
+    fn build_general_completions(&self, doc: &DocumentState, offset: u32) -> Vec<CompletionItem> {
         let mut items = Vec::new();
         let mut seen = std::collections::HashSet::new();
+
+        // Local variables from typed bodies (sorted above keywords)
+        if let Some(bodies) = doc.bodies.as_ref() {
+            let locals = collect_local_variables(bodies, offset, doc.hir.as_ref());
+            for (name, ty) in locals {
+                if seen.insert(name.clone()) {
+                    let documentation = build_variable_documentation(&name, &ty);
+                    items.push(CompletionItem {
+                        label: name,
+                        kind: Some(CompletionItemKind::VARIABLE),
+                        detail: Some(format!("{ty}")),
+                        sort_text: Some(format!("0_{}", items.len())),
+                        documentation,
+                        ..Default::default()
+                    });
+                }
+            }
+        }
 
         for kw in VALEN_KEYWORDS {
             items.push(CompletionItem {
                 label: kw.to_string(),
                 kind: Some(CompletionItemKind::KEYWORD),
+                // No documentation for keywords
                 ..Default::default()
             });
             seen.insert(kw.to_string());
@@ -563,42 +684,72 @@ impl ServerState {
                 if hir.prelude_ids.contains(&def.id) && matches!(&def.kind, DefKind::Fn(_)) {
                     continue;
                 }
-                let (label, kind, detail) = match &def.kind {
+                let (label, kind, detail, documentation) = match &def.kind {
                     DefKind::Fn(f) => {
                         let sig = format_fn_signature(&def.name, f);
+                        let doc_md =
+                            build_fn_documentation(&def.name, f, &doc.text, def.span.start);
                         (
                             def.name.to_string(),
                             CompletionItemKind::FUNCTION,
                             Some(sig),
+                            doc_md,
                         )
                     }
                     DefKind::Class(c) => {
                         let sig = format_class_signature(&def.name, &c.ctor_params);
-                        (def.name.to_string(), CompletionItemKind::CLASS, Some(sig))
+                        let doc_md = build_class_documentation(
+                            &def.name,
+                            &c.ctor_params,
+                            c.superclass.as_ref(),
+                            hir,
+                            &doc.text,
+                            def.span.start,
+                        );
+                        (
+                            def.name.to_string(),
+                            CompletionItemKind::CLASS,
+                            Some(sig),
+                            doc_md,
+                        )
                     }
                     DefKind::DataClass(dc) => {
                         let sig = format_class_signature(&def.name, &dc.ctor_params);
-                        (def.name.to_string(), CompletionItemKind::CLASS, Some(sig))
+                        let doc_md = build_class_documentation(
+                            &def.name,
+                            &dc.ctor_params,
+                            None,
+                            hir,
+                            &doc.text,
+                            def.span.start,
+                        );
+                        (
+                            def.name.to_string(),
+                            CompletionItemKind::CLASS,
+                            Some(sig),
+                            doc_md,
+                        )
                     }
                     DefKind::Enum(e) => {
                         let variants: Vec<&str> =
                             e.variants.iter().map(|v| v.name.as_str()).collect();
+                        let doc_md =
+                            build_enum_documentation(&def.name, e, &doc.text, def.span.start);
                         (
                             def.name.to_string(),
                             CompletionItemKind::ENUM,
                             Some(format!("{{ {} }}", variants.join(", "))),
+                            doc_md,
                         )
                     }
                     DefKind::Trait(t) => {
-                        let methods: Vec<String> = t
-                            .methods
-                            .iter()
-                            .filter_map(|&mid| hir.defs.get(&mid).map(|d| d.name.to_string()))
-                            .collect();
+                        let doc_md =
+                            build_trait_documentation(&def.name, t, hir, &doc.text, def.span.start);
                         (
                             def.name.to_string(),
                             CompletionItemKind::INTERFACE,
-                            Some(format!("trait {{ {} }}", methods.join(", "))),
+                            Some(format!("trait {}", def.name)),
+                            doc_md,
                         )
                     }
                     DefKind::TypeAlias(ta) => {
@@ -607,10 +758,11 @@ impl ServerState {
                             def.name.to_string(),
                             CompletionItemKind::CLASS,
                             Some(detail),
+                            None,
                         )
                     }
                     DefKind::AnnotationClass(_) => {
-                        (def.name.to_string(), CompletionItemKind::CLASS, None)
+                        (def.name.to_string(), CompletionItemKind::CLASS, None, None)
                     }
                     DefKind::Impl(_) => continue,
                 };
@@ -619,6 +771,7 @@ impl ServerState {
                         label,
                         kind: Some(kind),
                         detail,
+                        documentation,
                         ..Default::default()
                     });
                 }
@@ -650,19 +803,27 @@ impl ServerState {
                         let label = param.name.to_string();
                         if seen.insert(label.clone()) {
                             let mut ty_str = format!("{}", param.ty);
+                            let mut is_type_param = false;
                             // Annotate type params with bounds
                             if let valen_hir::TyRef::Unresolved(tp) = &param.ty {
                                 for (bn, bounds) in &f.generic_bounds {
                                     if bn == tp && !bounds.is_empty() {
                                         ty_str = format!("{tp}: {}", bounds.join(" + "));
+                                        is_type_param = true;
                                         break;
                                     }
                                 }
                             }
+                            let documentation = if is_type_param {
+                                None
+                            } else {
+                                build_variable_documentation(&label, &param.ty)
+                            };
                             items.push(CompletionItem {
                                 label,
                                 kind: Some(CompletionItemKind::VARIABLE),
                                 detail: Some(ty_str),
+                                documentation,
                                 ..Default::default()
                             });
                         }
@@ -691,17 +852,15 @@ impl ServerState {
                 for (param_name, bounds) in &f.generic_bounds {
                     if param_name.as_str() == name {
                         let value = if bounds.is_empty() {
-                            format!("type {name}")
+                            format!("```valen\ntype {name}\n```\n")
                         } else {
-                            format!("{name}: {}", bounds.join(" + "))
+                            format!("```valen\n{name}: {}\n```\n", bounds.join(" + "))
                         };
                         return Some(Hover {
-                            contents: HoverContents::Scalar(MarkedString::LanguageString(
-                                LanguageString {
-                                    language: "valen".to_string(),
-                                    value,
-                                },
-                            )),
+                            contents: HoverContents::Markup(MarkupContent {
+                                kind: MarkupKind::Markdown,
+                                value,
+                            }),
                             range: None,
                         });
                     }
@@ -713,15 +872,31 @@ impl ServerState {
             if def.name.as_str() != name {
                 continue;
             }
-            let value = format_def_hover(def, hir);
+            let value = format_def_hover_markdown(def, hir, &doc.text);
             return Some(Hover {
-                contents: HoverContents::Scalar(MarkedString::LanguageString(LanguageString {
-                    language: "valen".to_string(),
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
                     value,
-                })),
+                }),
                 range: Some(doc.line_index.span_to_range(def.span)),
             });
         }
+
+        // Search typed bodies for expression type info at cursor
+        if let Some(bodies) = doc.bodies.as_ref() {
+            if let Some(expr) = find_expr_at_offset(bodies, offset) {
+                if let Some(hover_text) = format_typed_expr_hover(expr) {
+                    return Some(Hover {
+                        contents: HoverContents::Markup(MarkupContent {
+                            kind: MarkupKind::Markdown,
+                            value: format!("```valen\n{hover_text}\n```\n"),
+                        }),
+                        range: Some(doc.line_index.span_to_range(expr.span)),
+                    });
+                }
+            }
+        }
+
         None
     }
 
@@ -823,12 +998,12 @@ pub fn analyze_document(
         &line_index,
     ));
 
-    let hir = if !resolve_result.diagnostics.has_errors() {
+    let (hir, bodies) = if !resolve_result.diagnostics.has_errors() {
         let tc = valen_hir::ty::type_check(&resolve_result.hir, &parse_result.items);
         diags.extend(convert::to_lsp_diagnostics(&tc.diagnostics, &line_index));
-        Some(resolve_result.hir)
+        (Some(resolve_result.hir), Some(tc.bodies))
     } else {
-        Some(resolve_result.hir)
+        (Some(resolve_result.hir), None)
     };
 
     let doc = DocumentState {
@@ -836,6 +1011,7 @@ pub fn analyze_document(
         line_index,
         items: parse_result.items,
         hir,
+        bodies,
     };
 
     (doc, diags)
@@ -844,6 +1020,266 @@ pub fn analyze_document(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Extract `///` doc comments from lines immediately before `span_start` in the source.
+///
+/// Walks backwards from the line preceding the definition, collecting consecutive
+/// `///` comment lines. Strips the `/// ` (or `///`) prefix and joins with newlines.
+/// Returns `None` if no doc comments are found.
+fn extract_doc_comment(source: &str, span_start: u32) -> Option<String> {
+    let before = &source[..span_start as usize];
+    // Find the line containing span_start; we want the lines *before* it.
+    let lines: Vec<&str> = before.lines().collect();
+    if lines.is_empty() {
+        return None;
+    }
+    // Start from the line just before the definition line.
+    // The last line in `lines` is the one containing span_start (or partial).
+    let start_idx = if lines.len() >= 2 {
+        lines.len() - 2
+    } else {
+        return None;
+    };
+
+    let mut doc_lines: Vec<&str> = Vec::new();
+    for i in (0..=start_idx).rev() {
+        let trimmed = lines[i].trim();
+        if let Some(rest) = trimmed.strip_prefix("///") {
+            // Strip optional leading space after `///`
+            let content = rest.strip_prefix(' ').unwrap_or(rest);
+            doc_lines.push(content);
+        } else if trimmed.is_empty() {
+            // Allow blank lines between doc comments and definition
+            if doc_lines.is_empty() {
+                continue;
+            }
+            break;
+        } else {
+            break;
+        }
+    }
+
+    if doc_lines.is_empty() {
+        return None;
+    }
+
+    doc_lines.reverse();
+    Some(doc_lines.join("\n"))
+}
+
+/// Build rich Markdown documentation for a function completion item.
+fn build_fn_documentation(
+    name: &str,
+    f: &valen_hir::FnDef,
+    source: &str,
+    span_start: u32,
+) -> Option<Documentation> {
+    let mut md = String::new();
+    md.push_str("```valen\n");
+    md.push_str(&format_fn_signature(name, f));
+    md.push_str("\n```\n");
+
+    // Type parameters section
+    if !f.generic_bounds.is_empty() {
+        md.push_str("\n**Type Parameters:**\n");
+        for (tp, bounds) in &f.generic_bounds {
+            if bounds.is_empty() {
+                md.push_str(&format!("- `{tp}`\n"));
+            } else {
+                md.push_str(&format!("- `{tp}` \u{2014} `{}`\n", bounds.join(" + ")));
+            }
+        }
+    }
+
+    if let Some(doc) = extract_doc_comment(source, span_start) {
+        md.push_str("\n---\n");
+        md.push_str(&doc);
+        md.push('\n');
+    }
+
+    Some(Documentation::MarkupContent(MarkupContent {
+        kind: MarkupKind::Markdown,
+        value: md,
+    }))
+}
+
+/// Build rich Markdown documentation for a class/data class completion item.
+fn build_class_documentation(
+    name: &str,
+    params: &[valen_hir::CtorParamDef],
+    superclass: Option<&valen_hir::TyRef>,
+    hir: &valen_hir::Hir,
+    source: &str,
+    span_start: u32,
+) -> Option<Documentation> {
+    let mut md = String::new();
+    md.push_str("```valen\n");
+
+    // Build signature line
+    let ps: Vec<String> = params
+        .iter()
+        .map(|p| {
+            let vis = match p.vis {
+                valen_hir::Vis::Pub => "pub ",
+                _ => "",
+            };
+            let m = if p.mutable { "mut " } else { "" };
+            format!("{vis}{m}{}: {}", p.name, p.ty)
+        })
+        .collect();
+    let mut sig = format!("class {name}({})", ps.join(", "));
+    if let Some(sup) = superclass {
+        sig.push_str(&format!(" : {sup}"));
+    }
+    md.push_str(&sig);
+    md.push_str("\n```\n");
+
+    // Implements section: find traits implemented by this class
+    let trait_names: Vec<&str> = hir
+        .trait_impls
+        .iter()
+        .filter(|e| e.target_name.as_str() == name)
+        .map(|e| e.trait_name.as_str())
+        .collect();
+    if !trait_names.is_empty() {
+        md.push_str(&format!("\n**Implements:** {}\n", trait_names.join(", ")));
+    }
+
+    // Fields section
+    if !params.is_empty() {
+        md.push_str("\n**Fields:**\n");
+        for p in params {
+            md.push_str(&format!("- `{}: {}`\n", p.name, p.ty));
+        }
+    }
+
+    if let Some(doc) = extract_doc_comment(source, span_start) {
+        md.push_str("\n---\n");
+        md.push_str(&doc);
+        md.push('\n');
+    }
+
+    Some(Documentation::MarkupContent(MarkupContent {
+        kind: MarkupKind::Markdown,
+        value: md,
+    }))
+}
+
+/// Build rich Markdown documentation for an enum completion item.
+fn build_enum_documentation(
+    name: &str,
+    e: &valen_hir::EnumDef,
+    source: &str,
+    span_start: u32,
+) -> Option<Documentation> {
+    let mut md = String::new();
+    md.push_str("```valen\n");
+
+    let variants_short: Vec<String> = e
+        .variants
+        .iter()
+        .map(|v| {
+            if v.fields.is_empty() {
+                v.name.to_string()
+            } else {
+                let fs: Vec<String> = v.fields.iter().map(|(n, t)| format!("{n}: {t}")).collect();
+                format!("{}({})", v.name, fs.join(", "))
+            }
+        })
+        .collect();
+    md.push_str(&format!("enum {name} {{ {} }}", variants_short.join(", ")));
+    md.push_str("\n```\n");
+
+    // Variants section
+    md.push_str("\n**Variants:**\n");
+    for v in &e.variants {
+        if v.fields.is_empty() {
+            md.push_str(&format!("- `{}`\n", v.name));
+        } else {
+            let fs: Vec<String> = v.fields.iter().map(|(n, t)| format!("{n}: {t}")).collect();
+            md.push_str(&format!("- `{}({})`\n", v.name, fs.join(", ")));
+        }
+    }
+
+    if let Some(doc) = extract_doc_comment(source, span_start) {
+        md.push_str("\n---\n");
+        md.push_str(&doc);
+        md.push('\n');
+    }
+
+    Some(Documentation::MarkupContent(MarkupContent {
+        kind: MarkupKind::Markdown,
+        value: md,
+    }))
+}
+
+/// Build rich Markdown documentation for a trait completion item.
+fn build_trait_documentation(
+    name: &str,
+    t: &valen_hir::TraitDef,
+    hir: &valen_hir::Hir,
+    source: &str,
+    span_start: u32,
+) -> Option<Documentation> {
+    let mut md = String::new();
+    md.push_str("```valen\n");
+    md.push_str(&format!("trait {name} {{\n"));
+
+    let mut method_sigs: Vec<String> = Vec::new();
+    for &mid in &t.methods {
+        if let Some(mdef) = hir.defs.get(&mid) {
+            if let DefKind::Fn(f) = &mdef.kind {
+                let sig = format_fn_signature(&mdef.name, f);
+                md.push_str(&format!("    {sig};\n"));
+                method_sigs.push(sig);
+            }
+        }
+    }
+
+    md.push_str("}\n");
+    md.push_str("```\n");
+
+    // Methods section
+    if !method_sigs.is_empty() {
+        md.push_str("\n**Methods:**\n");
+        for sig in &method_sigs {
+            md.push_str(&format!("- `{sig}`\n"));
+        }
+    }
+
+    if let Some(doc) = extract_doc_comment(source, span_start) {
+        md.push_str("\n---\n");
+        md.push_str(&doc);
+        md.push('\n');
+    }
+
+    Some(Documentation::MarkupContent(MarkupContent {
+        kind: MarkupKind::Markdown,
+        value: md,
+    }))
+}
+
+/// Build Markdown documentation for a variable completion item.
+fn build_variable_documentation(name: &str, ty: &impl std::fmt::Display) -> Option<Documentation> {
+    let md = format!("```valen\nlet {name}: {ty}\n```\n");
+    Some(Documentation::MarkupContent(MarkupContent {
+        kind: MarkupKind::Markdown,
+        value: md,
+    }))
+}
+
+/// Build Markdown documentation for a type parameter with its bounds.
+fn build_type_param_documentation(name: &str, bounds_joined: &str) -> Option<Documentation> {
+    let md = if bounds_joined.is_empty() {
+        format!("Type parameter `{name}`\n")
+    } else {
+        format!("Type parameter with bounds: `{bounds_joined}`\n")
+    };
+    Some(Documentation::MarkupContent(MarkupContent {
+        kind: MarkupKind::Markdown,
+        value: md,
+    }))
+}
 
 fn format_fn_signature(name: &str, f: &valen_hir::FnDef) -> String {
     let params: Vec<String> = f
@@ -1179,7 +1615,11 @@ pub fn extract_word_at(text: &str, offset: u32) -> Option<&str> {
     Some(&text[start..end])
 }
 
-/// Format a HIR definition for hover display.
+/// Format a HIR definition for hover display (plain text).
+///
+/// Retained as a utility for potential non-Markdown consumers; the LSP hover
+/// path now uses [`format_def_hover_markdown`] instead.
+#[allow(dead_code)]
 fn format_def_hover(def: &valen_hir::Def, hir: &valen_hir::Hir) -> String {
     match &def.kind {
         DefKind::Fn(f) => {
@@ -1270,6 +1710,98 @@ fn format_def_hover(def: &valen_hir::Def, hir: &valen_hir::Hir) -> String {
     }
 }
 
+/// Format a HIR definition for hover display as rich Markdown with doc comments.
+fn format_def_hover_markdown(def: &valen_hir::Def, hir: &valen_hir::Hir, source: &str) -> String {
+    let mut md = String::new();
+    md.push_str("```valen\n");
+
+    match &def.kind {
+        DefKind::Fn(f) => {
+            md.push_str(&format_fn_signature(&def.name, f));
+        }
+        DefKind::Class(c) => {
+            let ps: Vec<String> = c
+                .ctor_params
+                .iter()
+                .map(|p| {
+                    let vis = match p.vis {
+                        valen_hir::Vis::Pub => "pub ",
+                        _ => "",
+                    };
+                    let m = if p.mutable { "mut " } else { "" };
+                    format!("{vis}{m}{}: {}", p.name, p.ty)
+                })
+                .collect();
+            let mut sig = format!("class {}({})", def.name, ps.join(", "));
+            if let Some(sup) = &c.superclass {
+                sig.push_str(&format!(" : {sup}"));
+            }
+            md.push_str(&sig);
+        }
+        DefKind::DataClass(dc) => {
+            let ps: Vec<String> = dc
+                .ctor_params
+                .iter()
+                .map(|p| {
+                    let vis = match p.vis {
+                        valen_hir::Vis::Pub => "pub ",
+                        _ => "",
+                    };
+                    format!("{vis}{}: {}", p.name, p.ty)
+                })
+                .collect();
+            md.push_str(&format!("data class {}({})", def.name, ps.join(", ")));
+        }
+        DefKind::Enum(e) => {
+            let variants: Vec<String> = e
+                .variants
+                .iter()
+                .map(|v| {
+                    if v.fields.is_empty() {
+                        v.name.to_string()
+                    } else {
+                        let fields: Vec<String> =
+                            v.fields.iter().map(|(n, t)| format!("{n}: {t}")).collect();
+                        format!("{}({})", v.name, fields.join(", "))
+                    }
+                })
+                .collect();
+            md.push_str(&format!("enum {} {{ {} }}", def.name, variants.join(", ")));
+        }
+        DefKind::Trait(t) => {
+            md.push_str(&format!("trait {} {{\n", def.name));
+            for &mid in &t.methods {
+                if let Some(mdef) = hir.defs.get(&mid) {
+                    if let DefKind::Fn(f) = &mdef.kind {
+                        md.push_str(&format!("    {};\n", format_fn_signature(&mdef.name, f)));
+                    }
+                }
+            }
+            md.push('}');
+        }
+        DefKind::Impl(im) => {
+            md.push_str(&format!("impl {} for {}", im.trait_ref, im.target));
+        }
+        DefKind::TypeAlias(ta) => {
+            md.push_str(&format!("typealias {} = {}", def.name, ta.target));
+        }
+        DefKind::AnnotationClass(_) => {
+            md.push_str(&format!("annotation class {}", def.name));
+        }
+    }
+
+    md.push_str("\n```\n");
+
+    // Append doc comment if present
+    if let Some(doc) = extract_doc_comment(source, def.span.start) {
+        md.push_str("\n---\n");
+        md.push_str(&doc);
+        md.push('\n');
+    }
+
+    md
+}
+
 /// Classify a `TokenKind` into a semantic token type index, or `None` to skip.
 fn classify_token(kind: &TokenKind) -> Option<u32> {
     match kind {
@@ -1342,6 +1874,566 @@ fn classify_token(kind: &TokenKind) -> Option<u32> {
 
         // Punctuation, operators, whitespace, EOF, errors — skip
         _ => None,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Inlay hints
+// ---------------------------------------------------------------------------
+
+/// Build inlay hints for the requested range of a document.
+fn build_inlay_hints(doc: &DocumentState, range: Range) -> Vec<InlayHint> {
+    let bodies = match doc.bodies.as_ref() {
+        Some(b) => b,
+        None => return Vec::new(),
+    };
+
+    let mut hints = Vec::new();
+
+    for body in bodies.values() {
+        collect_hints_from_body(body, doc, range, &mut hints);
+    }
+
+    hints
+}
+
+/// Recursively collect inlay hints from a typed body.
+fn collect_hints_from_body(
+    body: &TypedBody,
+    doc: &DocumentState,
+    range: Range,
+    hints: &mut Vec<InlayHint>,
+) {
+    for stmt in &body.stmts {
+        collect_hints_from_stmt(stmt, doc, range, hints);
+    }
+    if let Some(tail) = &body.tail {
+        collect_hints_from_expr(tail, doc, range, hints);
+    }
+}
+
+/// Collect inlay hints from a single typed statement.
+fn collect_hints_from_stmt(
+    stmt: &TypedStmt,
+    doc: &DocumentState,
+    range: Range,
+    hints: &mut Vec<InlayHint>,
+) {
+    match stmt {
+        TypedStmt::Let {
+            has_annotation: false,
+            name,
+            ty,
+            span,
+            init,
+            ..
+        } => {
+            if !ty.is_error() {
+                // Position hint after the variable name.
+                // The span covers the whole let statement; we find the name end
+                // by scanning from span.start for `let [mut] <name>`.
+                let let_text =
+                    &doc.text[span.start as usize..(span.end as usize).min(doc.text.len())];
+                if let Some(name_offset) = find_name_end_in_let(let_text, name) {
+                    let abs_offset = span.start + name_offset as u32;
+                    let pos = doc.line_index.offset_to_position(abs_offset);
+                    if position_in_range(pos, range) {
+                        hints.push(InlayHint {
+                            position: pos,
+                            label: InlayHintLabel::String(format!(": {ty}")),
+                            kind: Some(InlayHintKind::TYPE),
+                            text_edits: None,
+                            tooltip: None,
+                            padding_left: None,
+                            padding_right: None,
+                            data: None,
+                        });
+                    }
+                }
+            }
+            collect_hints_from_expr(init, doc, range, hints);
+        }
+        TypedStmt::Let { init, .. } => {
+            collect_hints_from_expr(init, doc, range, hints);
+        }
+        TypedStmt::Expr(e) | TypedStmt::ExprSemi(e) => {
+            collect_hints_from_expr(e, doc, range, hints);
+        }
+    }
+}
+
+/// Collect inlay hints from a typed expression (recursively).
+fn collect_hints_from_expr(
+    expr: &TypedExpr,
+    doc: &DocumentState,
+    range: Range,
+    hints: &mut Vec<InlayHint>,
+) {
+    match &expr.kind {
+        TypedExprKind::Lambda { params, body } => {
+            // Emit type hints for lambda params that lack an explicit annotation.
+            let lam_text =
+                &doc.text[expr.span.start as usize..(expr.span.end as usize).min(doc.text.len())];
+            for (pname, pty) in params {
+                if !pty.is_error() {
+                    if let Some(rel_end) = find_param_name_end(lam_text, pname) {
+                        // Heuristic: if the source text immediately after the param
+                        // name (before the next `,` or `|`) contains `:`, the user
+                        // wrote an explicit type annotation — skip the hint.
+                        if lambda_param_has_annotation(lam_text, rel_end) {
+                            continue;
+                        }
+                        let abs_offset = expr.span.start + rel_end as u32;
+                        let pos = doc.line_index.offset_to_position(abs_offset);
+                        if position_in_range(pos, range) {
+                            hints.push(InlayHint {
+                                position: pos,
+                                label: InlayHintLabel::String(format!(": {pty}")),
+                                kind: Some(InlayHintKind::TYPE),
+                                text_edits: None,
+                                tooltip: None,
+                                padding_left: None,
+                                padding_right: None,
+                                data: None,
+                            });
+                        }
+                    }
+                }
+            }
+            collect_hints_from_expr(body, doc, range, hints);
+        }
+        TypedExprKind::Block(body) | TypedExprKind::Safe(body) => {
+            collect_hints_from_body(body, doc, range, hints);
+        }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_hints_from_expr(cond, doc, range, hints);
+            collect_hints_from_body(then_branch, doc, range, hints);
+            if let Some(eb) = else_branch {
+                collect_hints_from_expr(eb, doc, range, hints);
+            }
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            collect_hints_from_expr(scrutinee, doc, range, hints);
+            for arm in arms {
+                if let Some(g) = &arm.guard {
+                    collect_hints_from_expr(g, doc, range, hints);
+                }
+                collect_hints_from_expr(&arm.body, doc, range, hints);
+            }
+        }
+        TypedExprKind::For { iter, body, .. } => {
+            collect_hints_from_expr(iter, doc, range, hints);
+            collect_hints_from_body(body, doc, range, hints);
+        }
+        TypedExprKind::While { cond, body } => {
+            collect_hints_from_expr(cond, doc, range, hints);
+            collect_hints_from_body(body, doc, range, hints);
+        }
+        TypedExprKind::Loop { body } => {
+            collect_hints_from_body(body, doc, range, hints);
+        }
+        TypedExprKind::Call { callee, args } => {
+            collect_hints_from_expr(callee, doc, range, hints);
+            for a in args {
+                collect_hints_from_expr(a, doc, range, hints);
+            }
+        }
+        TypedExprKind::MethodCall { receiver, args, .. } => {
+            collect_hints_from_expr(receiver, doc, range, hints);
+            for a in args {
+                collect_hints_from_expr(a, doc, range, hints);
+            }
+        }
+        TypedExprKind::Binary { lhs, rhs, .. } => {
+            collect_hints_from_expr(lhs, doc, range, hints);
+            collect_hints_from_expr(rhs, doc, range, hints);
+        }
+        TypedExprKind::Unary { expr: inner, .. } => {
+            collect_hints_from_expr(inner, doc, range, hints);
+        }
+        TypedExprKind::FieldAccess { receiver, .. } => {
+            collect_hints_from_expr(receiver, doc, range, hints);
+        }
+        TypedExprKind::Assign { target, value } => {
+            collect_hints_from_expr(target, doc, range, hints);
+            collect_hints_from_expr(value, doc, range, hints);
+        }
+        TypedExprKind::Return(Some(inner)) | TypedExprKind::Break(Some(inner)) => {
+            collect_hints_from_expr(inner, doc, range, hints);
+        }
+        TypedExprKind::Try { inner, .. } => {
+            collect_hints_from_expr(inner, doc, range, hints);
+        }
+        TypedExprKind::Range { start, end, .. } => {
+            if let Some(s) = start {
+                collect_hints_from_expr(s, doc, range, hints);
+            }
+            if let Some(e) = end {
+                collect_hints_from_expr(e, doc, range, hints);
+            }
+        }
+        TypedExprKind::StringInterp(parts) => {
+            for part in parts {
+                if let valen_hir::TypedStringPart::Expr(e) = part {
+                    collect_hints_from_expr(e, doc, range, hints);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Find the byte offset (relative to the let statement text) where the variable name ends.
+fn find_name_end_in_let(let_text: &str, name: &str) -> Option<usize> {
+    // Skip `let` keyword and optional `mut`
+    let rest = let_text.strip_prefix("let")?;
+    let rest = rest.trim_start();
+    let rest = rest.strip_prefix("mut ").unwrap_or(rest);
+    let rest = rest.trim_start();
+    if rest.starts_with(name.as_bytes().first().copied().unwrap_or(0) as char)
+        && rest.starts_with(name)
+    {
+        let after_name = &rest[name.len()..];
+        // Make sure the name isn't a prefix of a longer identifier
+        if after_name.is_empty()
+            || !after_name.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
+        {
+            let offset_in_let = let_text.len() - rest.len() + name.len();
+            return Some(offset_in_let);
+        }
+    }
+    None
+}
+
+/// Find the byte offset (relative to the lambda text) where a param name ends.
+fn find_param_name_end(lambda_text: &str, name: &str) -> Option<usize> {
+    // Search for the param name preceded by `|`, `(`, `,`, or whitespace
+    let mut search_from = 0;
+    while search_from < lambda_text.len() {
+        if let Some(pos) =
+            lambda_text[search_from..].find(name.as_bytes().first().copied().unwrap_or(0) as char)
+        {
+            let abs_pos = search_from + pos;
+            let candidate = &lambda_text[abs_pos..];
+            if let Some(after) = candidate.strip_prefix(name) {
+                let before_ok = abs_pos == 0
+                    || lambda_text.as_bytes()[abs_pos - 1].is_ascii_whitespace()
+                    || lambda_text.as_bytes()[abs_pos - 1] == b'|'
+                    || lambda_text.as_bytes()[abs_pos - 1] == b'('
+                    || lambda_text.as_bytes()[abs_pos - 1] == b',';
+                let after_ok = after.is_empty()
+                    || !after.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_');
+                if before_ok && after_ok {
+                    return Some(abs_pos + name.len());
+                }
+            }
+            search_from = abs_pos + 1;
+        } else {
+            break;
+        }
+    }
+    None
+}
+
+/// Check whether a lambda parameter at the given position has an explicit type annotation.
+///
+/// Looks at the source text after the param name (up to the next `,` or `|`) for a `:`.
+fn lambda_param_has_annotation(lambda_text: &str, name_end: usize) -> bool {
+    let rest = &lambda_text[name_end..];
+    for ch in rest.chars() {
+        match ch {
+            ':' => return true,
+            ',' | '|' | ')' => return false,
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Check whether a position falls within the given range (inclusive start, exclusive end).
+fn position_in_range(pos: Position, range: Range) -> bool {
+    if pos.line < range.start.line || pos.line > range.end.line {
+        return false;
+    }
+    if pos.line == range.start.line && pos.character < range.start.character {
+        return false;
+    }
+    if pos.line == range.end.line && pos.character > range.end.character {
+        return false;
+    }
+    true
+}
+
+// ---------------------------------------------------------------------------
+// Typed expression search (for hover / completion)
+// ---------------------------------------------------------------------------
+
+/// Find the narrowest typed expression whose span contains the given byte offset.
+fn find_expr_at_offset(
+    bodies: &indexmap::IndexMap<valen_hir::DefId, TypedBody>,
+    offset: u32,
+) -> Option<&TypedExpr> {
+    let mut best: Option<&TypedExpr> = None;
+    for body in bodies.values() {
+        find_expr_in_body(body, offset, &mut best);
+    }
+    best
+}
+
+fn find_expr_in_body<'a>(body: &'a TypedBody, offset: u32, best: &mut Option<&'a TypedExpr>) {
+    for stmt in &body.stmts {
+        match stmt {
+            TypedStmt::Let { init, .. } => find_expr_in_expr(init, offset, best),
+            TypedStmt::Expr(e) | TypedStmt::ExprSemi(e) => find_expr_in_expr(e, offset, best),
+        }
+    }
+    if let Some(tail) = &body.tail {
+        find_expr_in_expr(tail, offset, best);
+    }
+}
+
+fn find_expr_in_expr<'a>(expr: &'a TypedExpr, offset: u32, best: &mut Option<&'a TypedExpr>) {
+    // Spans are half-open intervals [start, end)
+    if offset < expr.span.start || offset >= expr.span.end {
+        return;
+    }
+    // This expression contains the offset — check if it's narrower than current best
+    let dominated = match best {
+        Some(prev) => expr.span.len() < prev.span.len(),
+        None => true,
+    };
+    if dominated {
+        *best = Some(expr);
+    }
+    // Recurse into sub-expressions
+    match &expr.kind {
+        TypedExprKind::Block(body) | TypedExprKind::Safe(body) => {
+            find_expr_in_body(body, offset, best);
+        }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            find_expr_in_expr(cond, offset, best);
+            find_expr_in_body(then_branch, offset, best);
+            if let Some(eb) = else_branch {
+                find_expr_in_expr(eb, offset, best);
+            }
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            find_expr_in_expr(scrutinee, offset, best);
+            for arm in arms {
+                if let Some(g) = &arm.guard {
+                    find_expr_in_expr(g, offset, best);
+                }
+                find_expr_in_expr(&arm.body, offset, best);
+            }
+        }
+        TypedExprKind::For { iter, body, .. } => {
+            find_expr_in_expr(iter, offset, best);
+            find_expr_in_body(body, offset, best);
+        }
+        TypedExprKind::While { cond, body } => {
+            find_expr_in_expr(cond, offset, best);
+            find_expr_in_body(body, offset, best);
+        }
+        TypedExprKind::Loop { body } => {
+            find_expr_in_body(body, offset, best);
+        }
+        TypedExprKind::Lambda { body, .. } => {
+            find_expr_in_expr(body, offset, best);
+        }
+        TypedExprKind::Call { callee, args } => {
+            find_expr_in_expr(callee, offset, best);
+            for a in args {
+                find_expr_in_expr(a, offset, best);
+            }
+        }
+        TypedExprKind::MethodCall { receiver, args, .. } => {
+            find_expr_in_expr(receiver, offset, best);
+            for a in args {
+                find_expr_in_expr(a, offset, best);
+            }
+        }
+        TypedExprKind::Binary { lhs, rhs, .. } => {
+            find_expr_in_expr(lhs, offset, best);
+            find_expr_in_expr(rhs, offset, best);
+        }
+        TypedExprKind::Unary { expr: inner, .. } => {
+            find_expr_in_expr(inner, offset, best);
+        }
+        TypedExprKind::FieldAccess { receiver, .. } => {
+            find_expr_in_expr(receiver, offset, best);
+        }
+        TypedExprKind::Assign { target, value } => {
+            find_expr_in_expr(target, offset, best);
+            find_expr_in_expr(value, offset, best);
+        }
+        TypedExprKind::Return(Some(inner)) | TypedExprKind::Break(Some(inner)) => {
+            find_expr_in_expr(inner, offset, best);
+        }
+        TypedExprKind::Try { inner, .. } => {
+            find_expr_in_expr(inner, offset, best);
+        }
+        TypedExprKind::Range { start, end, .. } => {
+            if let Some(s) = start {
+                find_expr_in_expr(s, offset, best);
+            }
+            if let Some(e) = end {
+                find_expr_in_expr(e, offset, best);
+            }
+        }
+        TypedExprKind::StringInterp(parts) => {
+            for part in parts {
+                if let valen_hir::TypedStringPart::Expr(e) = part {
+                    find_expr_in_expr(e, offset, best);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Local variable collection (for completion)
+// ---------------------------------------------------------------------------
+
+/// Collect local variables visible at the given offset from typed bodies.
+///
+/// Only walks the body whose enclosing function's span contains `offset`,
+/// so variables from unrelated functions are excluded.
+fn collect_local_variables(
+    bodies: &indexmap::IndexMap<valen_hir::DefId, TypedBody>,
+    offset: u32,
+    hir: Option<&valen_hir::Hir>,
+) -> Vec<(String, Ty)> {
+    let mut vars: indexmap::IndexMap<String, Ty> = indexmap::IndexMap::new();
+
+    // Find which DefId's span contains the cursor, then walk only that body.
+    if let Some(hir) = hir {
+        for (&def_id, body) in bodies {
+            if let Some(def) = hir.defs.get(&def_id) {
+                if offset >= def.span.start && offset < def.span.end {
+                    let mut raw = Vec::new();
+                    collect_vars_from_body(body, offset, &mut raw);
+                    // IndexMap::insert overwrites, so the last (innermost) binding wins
+                    for (name, ty) in raw {
+                        vars.insert(name, ty);
+                    }
+                }
+            }
+        }
+    } else {
+        // Fallback: no HIR, walk all bodies (best effort)
+        for body in bodies.values() {
+            let mut raw = Vec::new();
+            collect_vars_from_body(body, offset, &mut raw);
+            for (name, ty) in raw {
+                vars.insert(name, ty);
+            }
+        }
+    }
+
+    vars.into_iter().collect()
+}
+
+fn collect_vars_from_body(body: &TypedBody, offset: u32, vars: &mut Vec<(String, Ty)>) {
+    for stmt in &body.stmts {
+        match stmt {
+            TypedStmt::Let {
+                name,
+                ty,
+                span,
+                init,
+                ..
+            } => {
+                // Only include let bindings after the initializer has ended,
+                // so the variable is not visible inside its own initializer.
+                if span.start < offset && offset >= init.span.end {
+                    vars.push((name.to_string(), ty.clone()));
+                }
+                // Also recurse into init expression for nested blocks
+                collect_vars_from_expr(init, offset, vars);
+            }
+            TypedStmt::Expr(e) | TypedStmt::ExprSemi(e) => {
+                collect_vars_from_expr(e, offset, vars);
+            }
+        }
+    }
+    if let Some(tail) = &body.tail {
+        collect_vars_from_expr(tail, offset, vars);
+    }
+}
+
+fn collect_vars_from_expr(expr: &TypedExpr, offset: u32, vars: &mut Vec<(String, Ty)>) {
+    // Only recurse into blocks/bodies that contain the offset (half-open [start, end))
+    if offset < expr.span.start || offset >= expr.span.end {
+        return;
+    }
+    match &expr.kind {
+        TypedExprKind::Block(body) | TypedExprKind::Safe(body) => {
+            collect_vars_from_body(body, offset, vars);
+        }
+        TypedExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_vars_from_body(then_branch, offset, vars);
+            if let Some(eb) = else_branch {
+                collect_vars_from_expr(eb, offset, vars);
+            }
+        }
+        TypedExprKind::For { var, iter, body } => {
+            // The iteration variable is in scope inside the body
+            if body.stmts.first().is_some_and(|s| match s {
+                TypedStmt::Let { span, .. } => span.start <= offset,
+                TypedStmt::Expr(e) | TypedStmt::ExprSemi(e) => e.span.start <= offset,
+            }) || body.tail.as_ref().is_some_and(|t| t.span.start <= offset)
+            {
+                vars.push((var.to_string(), iter.ty.clone()));
+            }
+            collect_vars_from_body(body, offset, vars);
+        }
+        TypedExprKind::While { body, .. } => {
+            collect_vars_from_body(body, offset, vars);
+        }
+        TypedExprKind::Loop { body } => {
+            collect_vars_from_body(body, offset, vars);
+        }
+        TypedExprKind::Match { arms, .. } => {
+            for arm in arms {
+                collect_vars_from_expr(&arm.body, offset, vars);
+            }
+        }
+        TypedExprKind::Lambda { body, .. } => {
+            collect_vars_from_expr(body, offset, vars);
+        }
+        _ => {}
+    }
+}
+
+/// Format a typed expression for hover display.
+fn format_typed_expr_hover(expr: &TypedExpr) -> Option<String> {
+    if expr.ty.is_error() {
+        return None;
+    }
+    match &expr.kind {
+        TypedExprKind::LocalVar(name) => Some(format!("(variable) {name}: {}", expr.ty)),
+        TypedExprKind::IntLit(v) => Some(format!("{v}: {}", expr.ty)),
+        TypedExprKind::LongLit(v) => Some(format!("{v}: {}", expr.ty)),
+        TypedExprKind::FloatLit(v) => Some(format!("{v}: {}", expr.ty)),
+        TypedExprKind::Float32Lit(v) => Some(format!("{v}: {}", expr.ty)),
+        TypedExprKind::CharLit(v) => Some(format!("'{v}': {}", expr.ty)),
+        TypedExprKind::StringLit(v) => Some(format!("\"{v}\": {}", expr.ty)),
+        TypedExprKind::BoolLit(v) => Some(format!("{v}: {}", expr.ty)),
+        TypedExprKind::UnitLit => Some(format!("(): {}", expr.ty)),
+        _ => Some(format!("{}", expr.ty)),
     }
 }
 
@@ -1418,6 +2510,7 @@ impl LanguageServer for ServerState {
                         ..Default::default()
                     }),
                     hover_provider: Some(HoverProviderCapability::Simple(true)),
+                    inlay_hint_provider: Some(OneOf::Left(true)),
                     semantic_tokens_provider: Some(
                         SemanticTokensServerCapabilities::SemanticTokensOptions(
                             SemanticTokensOptions {
@@ -1535,6 +2628,18 @@ impl LanguageServer for ServerState {
     {
         let uri = params.text_document.uri;
         let result = self.build_semantic_tokens(&uri);
+        Box::pin(async { Ok(result) })
+    }
+
+    fn inlay_hint(
+        &mut self,
+        params: InlayHintParams,
+    ) -> futures::future::BoxFuture<'static, Result<Option<Vec<InlayHint>>, Self::Error>> {
+        let uri = params.text_document.uri;
+        let result = self
+            .documents
+            .get(&uri)
+            .map(|doc| build_inlay_hints(doc, params.range));
         Box::pin(async { Ok(result) })
     }
 }
