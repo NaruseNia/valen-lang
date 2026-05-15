@@ -105,7 +105,7 @@ Kotlin/Java ユーザー向けの快適機能とツール充実。
 | ~~TASK-030~~ | ~~annotation（宣言 + 付与 + ランタイム保持）~~ ✅ | — | L |
 | TASK-031 | valenfmt 最小実装（TASK-015） | — | M |
 | TASK-032 | LSP 拡充（#49: completion/hover/semantic tokens） | TASK-023 | L |
-| TASK-033 | stdlib 強化（Option/Result メソッド群、ジェネリクス活用） | TASK-023, TASK-028 | M |
+| TASK-033 | stdlib 二層化 + 強化 | TASK-023, TASK-028 | L |
 
 **詳細:**
 
@@ -143,6 +143,27 @@ Kotlin/Java ユーザー向けの快適機能とツール充実。
 - hover: 型情報表示
 - semantic tokens: キーワード / 型 / 関数 / 変数 着色
 - (cross-file は TASK-025 の classpath 走査が前提)
+
+#### TASK-033: stdlib 二層化 + 強化
+
+**二層構造:**
+
+| 層 | パッケージ | 配布形態 | 内容 |
+|---|---|---|---|
+| **core** | `valen.core` | コンパイラ内蔵（jar なし） | Option, Result, Error, Iterator, Range, JavaException + 演算子 trait (Add/Sub/Mul/Div/Rem/Neg/Not/Eq/Ord) |
+| **std** | `valen.std.*` | `valen-stdlib.jar` | コレクションユーティリティ、IO ラッパー、文字列ヘルパー等 |
+
+**core（組み込み型）強化:**
+- Option: `map`, `flatMap`, `unwrapOr`, `filter`, `isSome`, `isNone`
+- Result: `map`, `mapErr`, `flatMap`, `unwrapOr`, `isOk`, `isErr`
+- Iterator: `map`, `filter`, `fold`, `collect`, `forEach`, `count`
+
+**std（valen-stdlib.jar）新設:**
+- `valen.std.collections`: `List`/`Map`/`Set` 拡張ユーティリティ（reduce, groupBy, zip 等）
+- `valen.std.io`: `readFile`, `writeFile` 等の safe ラッパー
+- `valen.std.fmt`: 文字列フォーマットユーティリティ
+- `.vln` で記述（セルフホスティングの足がかり）
+- Gradle plugin で自動依存解決
 
 **完了条件:** Kotlin からの移植コストが「大きな違和感なし」レベル。VSCode で日常開発体験。
 
