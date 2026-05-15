@@ -247,6 +247,7 @@ impl ServerState {
                             items.push(CompletionItem {
                                 label: param.name.to_string(),
                                 kind: Some(CompletionItemKind::FIELD),
+                                detail: Some(format!("{}", param.ty)),
                                 ..Default::default()
                             });
                         }
@@ -256,6 +257,7 @@ impl ServerState {
                             items.push(CompletionItem {
                                 label: param.name.to_string(),
                                 kind: Some(CompletionItemKind::FIELD),
+                                detail: Some(format!("{}", param.ty)),
                                 ..Default::default()
                             });
                         }
@@ -268,9 +270,15 @@ impl ServerState {
             if let Some(methods) = hir.type_methods.get(tn.as_str()) {
                 for &mid in methods {
                     if let Some(mdef) = hir.defs.get(&mid) {
+                        let detail = if let DefKind::Fn(f) = &mdef.kind {
+                            Some(format_fn_signature(&mdef.name, f))
+                        } else {
+                            None
+                        };
                         items.push(CompletionItem {
                             label: mdef.name.to_string(),
                             kind: Some(CompletionItemKind::METHOD),
+                            detail,
                             ..Default::default()
                         });
                     }
@@ -282,9 +290,15 @@ impl ServerState {
                 if entry.target_name.as_str() == tn {
                     for &mid in &entry.methods {
                         if let Some(mdef) = hir.defs.get(&mid) {
+                            let detail = if let DefKind::Fn(f) = &mdef.kind {
+                                Some(format_fn_signature(&mdef.name, f))
+                            } else {
+                                None
+                            };
                             items.push(CompletionItem {
                                 label: mdef.name.to_string(),
                                 kind: Some(CompletionItemKind::METHOD),
+                                detail,
                                 ..Default::default()
                             });
                         }
@@ -514,6 +528,22 @@ impl ServerState {
                         ..Default::default()
                     });
                 }
+            }
+
+            // self keyword (if any fn has a self param)
+            let has_self = hir.defs.values().any(|d| {
+                if let DefKind::Fn(f) = &d.kind {
+                    f.params.first().is_some_and(|p| p.is_self)
+                } else {
+                    false
+                }
+            });
+            if has_self && seen.insert("self".to_string()) {
+                items.push(CompletionItem {
+                    label: "self".to_string(),
+                    kind: Some(CompletionItemKind::KEYWORD),
+                    ..Default::default()
+                });
             }
 
             // Function parameters (from all fn defs in this file)
