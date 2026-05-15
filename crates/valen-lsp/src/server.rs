@@ -1540,7 +1540,8 @@ fn is_dot_context(before: &str) -> bool {
 }
 
 fn extract_receiver_before_dot(before: &str) -> &str {
-    let trimmed = before.trim_end();
+    let stripped = before.trim_end_matches(|c: char| c.is_ascii_alphanumeric() || c == '_');
+    let trimmed = stripped.trim_end();
     let without_dot = trimmed.strip_suffix('.').unwrap_or(trimmed);
     let without_dot = without_dot.trim_end();
     let start = without_dot
