@@ -4,11 +4,11 @@ import java.util.ArrayList;
 import java.io.File as JavaFile;
 
 pub class Importer {
-    fn create_list(self) -> ArrayList {
+    fn createList(self) -> ArrayList {
         ArrayList()
     }
 
-    fn create_file(self, path: String) -> JavaFile {
+    fn createFile(self, path: String) -> JavaFile {
         JavaFile(path)
     }
 }

@@ -57,6 +57,7 @@ pub fn resolve_with_classpath(items: &[Item], classpath: &[std::path::PathBuf]) 
         current_package: None,
     };
     resolver.resolve_items(items);
+    resolver.check_naming_conventions();
 
     if !classpath.is_empty() {
         resolver.hir.foreign_types =
@@ -615,6 +616,45 @@ impl Resolver {
         );
     }
 
+    fn check_naming_conventions(&mut self) {
+        for def in self.hir.defs.values() {
+            if self.hir.prelude_ids.contains(&def.id) {
+                continue;
+            }
+            match &def.kind {
+                DefKind::Fn(_) if !def.name.is_empty() && contains_underscore(&def.name) => {
+                    self.diagnostics.warning(
+                        DiagCode::NAMING_NOT_CAMEL_CASE,
+                        def.span,
+                        SmolStr::from(format!(
+                            "function `{}` should use camelCase (e.g. `{}`)",
+                            def.name,
+                            to_camel_case(&def.name)
+                        )),
+                    );
+                }
+                DefKind::Class(_)
+                | DefKind::DataClass(_)
+                | DefKind::Enum(_)
+                | DefKind::Trait(_)
+                    if !def.name.is_empty()
+                        && def
+                            .name
+                            .chars()
+                            .next()
+                            .is_some_and(|c| c.is_ascii_lowercase()) =>
+                {
+                    self.diagnostics.warning(
+                        DiagCode::NAMING_NOT_PASCAL_CASE,
+                        def.span,
+                        SmolStr::from(format!("type `{}` should use PascalCase", def.name)),
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
+
     fn build_method_index(&mut self) {
         let defs: Vec<_> = self.hir.defs.values().cloned().collect();
         for def in &defs {
@@ -971,6 +1011,26 @@ impl Resolver {
     pub fn diagnostics(&self) -> &Diagnostics {
         &self.diagnostics
     }
+}
+
+fn contains_underscore(name: &str) -> bool {
+    name.contains('_')
+}
+
+fn to_camel_case(name: &str) -> String {
+    let mut result = String::new();
+    let mut capitalize_next = false;
+    for ch in name.chars() {
+        if ch == '_' {
+            capitalize_next = true;
+        } else if capitalize_next {
+            result.extend(ch.to_uppercase());
+            capitalize_next = false;
+        } else {
+            result.push(ch);
+        }
+    }
+    result
 }
 
 fn lower_vis(v: Visibility) -> Vis {

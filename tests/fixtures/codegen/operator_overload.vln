@@ -17,11 +17,11 @@ impl Sub<Vec2> for Vec2 {
 }
 
 pub class Calculator {
-    fn add_vectors(self, a: Vec2, b: Vec2) -> Vec2 {
+    fn addVectors(self, a: Vec2, b: Vec2) -> Vec2 {
         a + b
     }
 
-    fn sub_vectors(self, a: Vec2, b: Vec2) -> Vec2 {
+    fn subVectors(self, a: Vec2, b: Vec2) -> Vec2 {
         a - b
     }
 }
