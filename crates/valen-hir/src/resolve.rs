@@ -9,7 +9,7 @@ use valen_diagnostics::DiagCode;
 
 use crate::{
     ClassDef, ClassDefKind, CtorParamDef, DataClassDef, Def, DefId, DefKind, EnumDef,
-    EnumVariantDef, FnDef, Hir, ImplDef, ImplEntry, ParamDef, TraitDef, TyRef, Vis,
+    EnumVariantDef, FnDef, Hir, HirAssocType, ImplDef, ImplEntry, ParamDef, TraitDef, TyRef, Vis,
 };
 
 /// Name resolver that lowers AST items into HIR definitions and builds scope tables.
@@ -124,6 +124,7 @@ impl Resolver {
         self.inject_prelude_iterator_trait(&prelude_pkg);
         self.inject_prelude_range(&prelude_pkg);
         self.inject_prelude_java_exception(&prelude_pkg);
+        self.inject_prelude_operator_traits(&prelude_pkg);
     }
 
     fn inject_prelude_option(&mut self, pkg: &Option<Vec<SmolStr>>) {
@@ -243,6 +244,7 @@ impl Resolver {
             kind: DefKind::Trait(TraitDef {
                 is_sealed: false,
                 methods: vec![mid],
+                associated_types: vec![],
             }),
             vis: Vis::Pub,
             span: valen_ast::Span::DUMMY,
@@ -298,6 +300,7 @@ impl Resolver {
             kind: DefKind::Trait(TraitDef {
                 is_sealed: false,
                 methods: vec![mid],
+                associated_types: vec![],
             }),
             vis: Vis::Pub,
             span: valen_ast::Span::DUMMY,
@@ -409,6 +412,209 @@ impl Resolver {
         );
     }
 
+    /// Inject prelude operator traits: Add, Sub, Mul, Div, Rem, Neg, Not, Ord, Eq.
+    fn inject_prelude_operator_traits(&mut self, pkg: &Option<Vec<SmolStr>>) {
+        // Binary arithmetic traits with associated type Output and Rhs type param
+        for name in &["Add", "Sub", "Mul", "Div", "Rem"] {
+            self.inject_binary_arith_trait(name, pkg);
+        }
+        // Unary traits with associated type Output
+        for (name, method) in &[("Neg", "neg"), ("Not", "not")] {
+            self.inject_unary_trait(name, method, pkg);
+        }
+        // Ord: fn cmp(self, rhs: Self) -> Int
+        self.inject_comparison_trait("Ord", "cmp", TyRef::Prim(crate::PrimTy::Int), pkg);
+        // Eq: fn eq(self, rhs: Self) -> Bool
+        self.inject_comparison_trait("Eq", "eq", TyRef::Prim(crate::PrimTy::Bool), pkg);
+    }
+
+    /// trait Name<Rhs> { type Output; fn name(self, rhs: Rhs) -> Self::Output; }
+    fn inject_binary_arith_trait(&mut self, name: &str, pkg: &Option<Vec<SmolStr>>) {
+        if self.scope.lookup(name).is_some() {
+            return;
+        }
+        let method_name = name.to_ascii_lowercase();
+
+        let mid = self.hir.alloc_id();
+        let mdef = Def {
+            id: mid,
+            name: SmolStr::from(method_name.as_str()),
+            kind: DefKind::Fn(FnDef {
+                params: vec![
+                    ParamDef {
+                        name: SmolStr::from("self"),
+                        ty: TyRef::SelfTy,
+                        mutable: false,
+                        is_self: true,
+                        has_default: false,
+                    },
+                    ParamDef {
+                        name: SmolStr::from("rhs"),
+                        ty: TyRef::Unresolved(SmolStr::from("Rhs")),
+                        mutable: false,
+                        is_self: false,
+                        has_default: false,
+                    },
+                ],
+                return_ty: Some(TyRef::SelfTy),
+                has_body: false,
+                generic_bounds: vec![],
+            }),
+            vis: Vis::Pub,
+            span: valen_ast::Span::DUMMY,
+            package: pkg.clone(),
+        };
+        self.hir.defs.insert(mid, mdef);
+        self.hir.prelude_ids.push(mid);
+
+        let id = self.hir.alloc_id();
+        let sname = SmolStr::from(name);
+        let def = Def {
+            id,
+            name: sname.clone(),
+            kind: DefKind::Trait(TraitDef {
+                is_sealed: false,
+                methods: vec![mid],
+                associated_types: vec![HirAssocType {
+                    name: SmolStr::from("Output"),
+                    default: None,
+                }],
+            }),
+            vis: Vis::Pub,
+            span: valen_ast::Span::DUMMY,
+            package: pkg.clone(),
+        };
+        self.hir.defs.insert(id, def);
+        self.hir.prelude_ids.push(id);
+        self.scope.names.insert(sname.clone(), id);
+        self.hir.imports.insert(
+            sname.clone(),
+            vec![SmolStr::from("valen"), SmolStr::from("core"), sname],
+        );
+    }
+
+    /// trait Name { type Output; fn method(self) -> Self::Output; }
+    fn inject_unary_trait(&mut self, name: &str, method: &str, pkg: &Option<Vec<SmolStr>>) {
+        if self.scope.lookup(name).is_some() {
+            return;
+        }
+
+        let mid = self.hir.alloc_id();
+        let mdef = Def {
+            id: mid,
+            name: SmolStr::from(method),
+            kind: DefKind::Fn(FnDef {
+                params: vec![ParamDef {
+                    name: SmolStr::from("self"),
+                    ty: TyRef::SelfTy,
+                    mutable: false,
+                    is_self: true,
+                    has_default: false,
+                }],
+                return_ty: Some(TyRef::SelfTy),
+                has_body: false,
+                generic_bounds: vec![],
+            }),
+            vis: Vis::Pub,
+            span: valen_ast::Span::DUMMY,
+            package: pkg.clone(),
+        };
+        self.hir.defs.insert(mid, mdef);
+        self.hir.prelude_ids.push(mid);
+
+        let id = self.hir.alloc_id();
+        let sname = SmolStr::from(name);
+        let def = Def {
+            id,
+            name: sname.clone(),
+            kind: DefKind::Trait(TraitDef {
+                is_sealed: false,
+                methods: vec![mid],
+                associated_types: vec![HirAssocType {
+                    name: SmolStr::from("Output"),
+                    default: None,
+                }],
+            }),
+            vis: Vis::Pub,
+            span: valen_ast::Span::DUMMY,
+            package: pkg.clone(),
+        };
+        self.hir.defs.insert(id, def);
+        self.hir.prelude_ids.push(id);
+        self.scope.names.insert(sname.clone(), id);
+        self.hir.imports.insert(
+            sname.clone(),
+            vec![SmolStr::from("valen"), SmolStr::from("core"), sname],
+        );
+    }
+
+    /// trait Name { fn method(self, rhs: Self) -> RetTy; }
+    fn inject_comparison_trait(
+        &mut self,
+        name: &str,
+        method: &str,
+        ret_ty: TyRef,
+        pkg: &Option<Vec<SmolStr>>,
+    ) {
+        if self.scope.lookup(name).is_some() {
+            return;
+        }
+
+        let mid = self.hir.alloc_id();
+        let mdef = Def {
+            id: mid,
+            name: SmolStr::from(method),
+            kind: DefKind::Fn(FnDef {
+                params: vec![
+                    ParamDef {
+                        name: SmolStr::from("self"),
+                        ty: TyRef::SelfTy,
+                        mutable: false,
+                        is_self: true,
+                        has_default: false,
+                    },
+                    ParamDef {
+                        name: SmolStr::from("rhs"),
+                        ty: TyRef::SelfTy,
+                        mutable: false,
+                        is_self: false,
+                        has_default: false,
+                    },
+                ],
+                return_ty: Some(ret_ty),
+                has_body: false,
+                generic_bounds: vec![],
+            }),
+            vis: Vis::Pub,
+            span: valen_ast::Span::DUMMY,
+            package: pkg.clone(),
+        };
+        self.hir.defs.insert(mid, mdef);
+        self.hir.prelude_ids.push(mid);
+
+        let id = self.hir.alloc_id();
+        let sname = SmolStr::from(name);
+        let def = Def {
+            id,
+            name: sname.clone(),
+            kind: DefKind::Trait(TraitDef {
+                is_sealed: false,
+                methods: vec![mid],
+                associated_types: vec![],
+            }),
+            vis: Vis::Pub,
+            span: valen_ast::Span::DUMMY,
+            package: pkg.clone(),
+        };
+        self.hir.defs.insert(id, def);
+        self.hir.prelude_ids.push(id);
+        self.scope.names.insert(sname.clone(), id);
+        self.hir.imports.insert(
+            sname.clone(),
+            vec![SmolStr::from("valen"), SmolStr::from("core"), sname],
+        );
+    }
+
     fn build_method_index(&mut self) {
         let defs: Vec<_> = self.hir.defs.values().cloned().collect();
         for def in &defs {
@@ -426,6 +632,7 @@ impl Resolver {
                     };
                     let trait_name = match &imp.trait_ref {
                         TyRef::Named(n) => n.clone(),
+                        TyRef::Generic(n, _) => n.clone(),
                         _ => continue,
                     };
                     self.hir.trait_impls.push(ImplEntry {
@@ -564,19 +771,31 @@ impl Resolver {
                 let trait_params: Vec<SmolStr> =
                     t.generics.iter().map(|g| g.name.clone()).collect();
                 let mut method_ids = Vec::new();
+                let mut assoc_types = Vec::new();
                 for ti in &t.items {
-                    if let valen_ast::TraitItem::Fn(m) = ti {
-                        let mid = self.hir.alloc_id();
-                        let mdef = Def {
-                            id: mid,
-                            name: m.name.clone(),
-                            kind: DefKind::Fn(self.lower_fn_with_params(m, &trait_params)),
-                            vis: Vis::Pub,
-                            span: m.span,
-                            package: self.current_package.clone(),
-                        };
-                        self.hir.defs.insert(mid, mdef);
-                        method_ids.push(mid);
+                    match ti {
+                        valen_ast::TraitItem::Fn(m) => {
+                            let mid = self.hir.alloc_id();
+                            let mdef = Def {
+                                id: mid,
+                                name: m.name.clone(),
+                                kind: DefKind::Fn(self.lower_fn_with_params(m, &trait_params)),
+                                vis: Vis::Pub,
+                                span: m.span,
+                                package: self.current_package.clone(),
+                            };
+                            self.hir.defs.insert(mid, mdef);
+                            method_ids.push(mid);
+                        }
+                        valen_ast::TraitItem::AssociatedType(decl) => {
+                            assoc_types.push(crate::HirAssocType {
+                                name: decl.name.clone(),
+                                default: decl
+                                    .default
+                                    .as_ref()
+                                    .map(|t| lower_type_ref_with_params(t, &trait_params)),
+                            });
+                        }
                     }
                 }
                 let def = Def {
@@ -585,6 +804,7 @@ impl Resolver {
                     kind: DefKind::Trait(TraitDef {
                         is_sealed: t.is_sealed,
                         methods: method_ids,
+                        associated_types: assoc_types,
                     }),
                     vis: lower_vis(t.visibility),
                     span: t.span,
@@ -598,19 +818,28 @@ impl Resolver {
                 let impl_params: Vec<SmolStr> =
                     imp.generics.iter().map(|g| g.name.clone()).collect();
                 let mut method_ids = Vec::new();
+                let mut assoc_types = Vec::new();
                 for ii in &imp.items {
-                    if let valen_ast::ImplItem::Fn(m) = ii {
-                        let mid = self.hir.alloc_id();
-                        let mdef = Def {
-                            id: mid,
-                            name: m.name.clone(),
-                            kind: DefKind::Fn(self.lower_fn_with_params(m, &impl_params)),
-                            vis: Vis::Pub,
-                            span: m.span,
-                            package: self.current_package.clone(),
-                        };
-                        self.hir.defs.insert(mid, mdef);
-                        method_ids.push(mid);
+                    match ii {
+                        valen_ast::ImplItem::Fn(m) => {
+                            let mid = self.hir.alloc_id();
+                            let mdef = Def {
+                                id: mid,
+                                name: m.name.clone(),
+                                kind: DefKind::Fn(self.lower_fn_with_params(m, &impl_params)),
+                                vis: Vis::Pub,
+                                span: m.span,
+                                package: self.current_package.clone(),
+                            };
+                            self.hir.defs.insert(mid, mdef);
+                            method_ids.push(mid);
+                        }
+                        valen_ast::ImplItem::AssociatedType(def) => {
+                            assoc_types.push((
+                                def.name.clone(),
+                                lower_type_ref_with_params(&def.ty, &impl_params),
+                            ));
+                        }
                     }
                 }
                 let trait_ref = imp
@@ -627,6 +856,7 @@ impl Resolver {
                         target: lower_type_ref_with_params(&imp.target, &impl_params),
                         methods: method_ids,
                         generics,
+                        associated_types: assoc_types,
                     }),
                     vis: Vis::Internal,
                     span: imp.span,

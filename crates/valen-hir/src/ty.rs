@@ -670,6 +670,20 @@ impl<'hir> TypeChecker<'hir> {
             };
         }
 
+        if let Some((trait_method, output_ty)) =
+            self.resolve_binary_op_trait(bin.op, &lhs.ty, &rhs.ty)
+        {
+            return TypedExpr {
+                kind: TypedExprKind::MethodCall {
+                    receiver: Box::new(lhs),
+                    method: trait_method,
+                    args: vec![rhs],
+                },
+                ty: output_ty,
+                span: bin.span,
+            };
+        }
+
         let result_ty = self.binary_result_ty(bin.op, &lhs.ty, &rhs.ty, bin.span);
 
         TypedExpr {
@@ -759,6 +773,94 @@ impl<'hir> TypeChecker<'hir> {
             }
             BinaryOp::RefEq | BinaryOp::RefNe => Ty::Prim(PrimTy::Bool),
         }
+    }
+
+    fn op_to_trait_name(op: BinaryOp) -> Option<&'static str> {
+        match op {
+            BinaryOp::Add => Some("Add"),
+            BinaryOp::Sub => Some("Sub"),
+            BinaryOp::Mul => Some("Mul"),
+            BinaryOp::Div => Some("Div"),
+            BinaryOp::Rem => Some("Rem"),
+            BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => Some("Ord"),
+            BinaryOp::Eq | BinaryOp::Ne => Some("Eq"),
+            _ => None,
+        }
+    }
+
+    fn op_to_method_name(op: BinaryOp) -> Option<&'static str> {
+        match op {
+            BinaryOp::Add => Some("add"),
+            BinaryOp::Sub => Some("sub"),
+            BinaryOp::Mul => Some("mul"),
+            BinaryOp::Div => Some("div"),
+            BinaryOp::Rem => Some("rem"),
+            BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => Some("cmp"),
+            BinaryOp::Eq | BinaryOp::Ne => Some("eq"),
+            _ => None,
+        }
+    }
+
+    fn resolve_binary_op_trait(&self, op: BinaryOp, lhs: &Ty, _rhs: &Ty) -> Option<(SmolStr, Ty)> {
+        if lhs.is_numeric() || lhs.is_bool() || matches!(lhs, Ty::Prim(PrimTy::String)) {
+            return None;
+        }
+
+        let trait_name = Self::op_to_trait_name(op)?;
+        let method_name = Self::op_to_method_name(op)?;
+
+        let lhs_name = match lhs {
+            Ty::Named(n) => n.as_str(),
+            _ => return None,
+        };
+
+        for entry in &self.hir.trait_impls {
+            if entry.trait_name == trait_name && entry.target_name == lhs_name {
+                let impl_def = self.hir.defs.values().find(|d| {
+                    if let DefKind::Impl(imp) = &d.kind {
+                        let tname = match &imp.trait_ref {
+                            TyRef::Named(n) => n.as_str(),
+                            _ => "",
+                        };
+                        let target = match &imp.target {
+                            TyRef::Named(n) => n.as_str(),
+                            _ => "",
+                        };
+                        tname == trait_name && target == lhs_name
+                    } else {
+                        false
+                    }
+                });
+
+                let output_ty = if let Some(def) = impl_def {
+                    if let DefKind::Impl(imp) = &def.kind {
+                        imp.associated_types
+                            .iter()
+                            .find(|(n, _)| n == "Output")
+                            .map(|(_, tyref)| tyref_to_ty(tyref))
+                            .unwrap_or_else(|| lhs.clone())
+                    } else {
+                        lhs.clone()
+                    }
+                } else {
+                    lhs.clone()
+                };
+
+                let final_ty = match op {
+                    BinaryOp::Lt
+                    | BinaryOp::Le
+                    | BinaryOp::Gt
+                    | BinaryOp::Ge
+                    | BinaryOp::Eq
+                    | BinaryOp::Ne => Ty::Prim(PrimTy::Bool),
+                    _ => output_ty,
+                };
+
+                return Some((SmolStr::from(method_name), final_ty));
+            }
+        }
+
+        None
     }
 
     // -- unary ops ----------------------------------------------------------

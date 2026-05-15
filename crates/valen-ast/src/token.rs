@@ -61,6 +61,7 @@ pub enum TokenKind {
     Await,
     Yield,
     TypeAlias,
+    Type,
 
     // Punctuation
     LParen,

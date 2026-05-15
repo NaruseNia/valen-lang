@@ -107,16 +107,43 @@ fn process(e: Expr) -> Int {
 
 **exhaustive check:** enum / sealed class と同様に厳密 exhaustive。実装者が1つでも不足するとコンパイルエラー。wildcard `_` で回避可能。
 
-## 7.6 演算子オーバーロード
+## 7.6 Associated Type
 
-Phase 1.5+。trait ベース：
+trait 内で `type Name;` と宣言すると、impl 側で具体型を決定する associated type を定義できる。
 
 ```valen
-trait Add<Rhs> {
-    type Output;
-    fn add(self, rhs: Rhs) -> Self::Output;
+trait Container {
+    type Item;
+    fn get(self, index: Int) -> Self::Item;
 }
 
+impl Container for IntList {
+    type Item = Int;
+    fn get(self, index: Int) -> Int { /* ... */ }
+}
+```
+
+- `Self::Output` のように `Self::` で参照
+- impl ごとに一意に解決される
+- trait 定義側でデフォルト型を指定可能: `type Item = Int;`
+
+## 7.7 演算子オーバーロード（Phase 1.5 実装済み）
+
+trait ベースの演算子オーバーロード。prelude に定義された演算子 trait を impl することで有効化する。
+
+### 算術演算子
+
+| 演算子 | trait | メソッド |
+|--------|-------|---------|
+| `+` | `Add<Rhs>` | `fn add(self, rhs: Rhs) -> Self::Output` |
+| `-` | `Sub<Rhs>` | `fn sub(self, rhs: Rhs) -> Self::Output` |
+| `*` | `Mul<Rhs>` | `fn mul(self, rhs: Rhs) -> Self::Output` |
+| `/` | `Div<Rhs>` | `fn div(self, rhs: Rhs) -> Self::Output` |
+| `%` | `Rem<Rhs>` | `fn rem(self, rhs: Rhs) -> Self::Output` |
+
+各 trait は `type Output` associated type を持つ。
+
+```valen
 impl Add<Vec2> for Vec2 {
     type Output = Vec2;
     fn add(self, rhs: Vec2) -> Vec2 {
@@ -124,3 +151,32 @@ impl Add<Vec2> for Vec2 {
     }
 }
 ```
+
+### 単項演算子
+
+| 演算子 | trait | メソッド |
+|--------|-------|---------|
+| `-x` | `Neg` | `fn neg(self) -> Self::Output` |
+| `!x` | `Not` | `fn not(self) -> Self::Output` |
+
+### 比較演算子
+
+| 演算子 | trait | メソッド |
+|--------|-------|---------|
+| `<` `<=` `>` `>=` | `Ord` | `fn cmp(self, rhs: Self) -> Int` |
+
+`cmp` の戻り値: 負 → `<`、0 → `==`、正 → `>`。
+
+### 等値比較（opt-in）
+
+| 演算子 | trait | メソッド |
+|--------|-------|---------|
+| `==` `!=` | `Eq` | `fn eq(self, rhs: Self) -> Bool` |
+
+- `impl Eq` がある型 → `Eq::eq` を使用
+- `impl Eq` がない型 → 従来通り `.equals()` にフォールバック
+- プリミティブ型の `==` は組み込み処理（trait 不要）
+
+### プリミティブ型
+
+`Int`、`Float` 等のプリミティブ型の演算子は組み込みで直接処理される（`iadd` / `fadd` 等）。プリミティブ型に対して演算子 trait を impl する必要はない。

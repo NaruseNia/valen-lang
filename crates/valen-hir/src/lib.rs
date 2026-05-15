@@ -263,11 +263,19 @@ pub struct EnumVariantDef {
     pub fields: Vec<(SmolStr, TyRef)>,
 }
 
+/// An associated type declaration in a trait (HIR level).
+#[derive(Debug, Clone)]
+pub struct HirAssocType {
+    pub name: SmolStr,
+    pub default: Option<TyRef>,
+}
+
 /// Trait definition listing its method signatures.
 #[derive(Debug, Clone)]
 pub struct TraitDef {
     pub is_sealed: bool,
     pub methods: Vec<DefId>,
+    pub associated_types: Vec<HirAssocType>,
 }
 
 /// A type alias mapping a name to another type.
@@ -290,6 +298,8 @@ pub struct ImplDef {
     pub methods: Vec<DefId>,
     /// Generic type parameter names declared on the impl.
     pub generics: Vec<SmolStr>,
+    /// Associated type assignments (`type Output = Int;`).
+    pub associated_types: Vec<(SmolStr, TyRef)>,
 }
 
 /// Syntactic type reference as written in source code (not yet resolved to a semantic `Ty`).
