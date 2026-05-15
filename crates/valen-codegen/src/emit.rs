@@ -26,6 +26,12 @@ pub enum CodegenError {
     /// A branch references a label that was never defined.
     #[error("unresolved label: {0}")]
     UnresolvedLabel(Label),
+    /// An arithmetic or negation operation on an unsupported type.
+    #[error("unsupported operation: {0}")]
+    UnsupportedOperation(String),
+    /// An IInc increment value exceeds the i16 range of `wide iinc`.
+    #[error("iinc increment {0} out of i16 range")]
+    IIncOutOfRange(i32),
 }
 
 /// Emits a single `JvmClass` IR node to classfile bytes.
@@ -841,8 +847,8 @@ fn emit_op(
             vec![Instruction::Ifnonnull(0)]
         }
 
-        JvmOp::Arith(aop, ty) => vec![emit_arith(*aop, ty)],
-        JvmOp::Neg(ty) => vec![emit_neg(ty)],
+        JvmOp::Arith(aop, ty) => vec![emit_arith(*aop, ty)?],
+        JvmOp::Neg(ty) => vec![emit_neg(ty)?],
         JvmOp::Cmp(kind) => vec![emit_cmp(*kind)],
         JvmOp::Convert { from, to } => emit_convert(from, to),
         JvmOp::Bitwise(bop, ty) => vec![emit_bitwise(*bop, ty)],
@@ -895,8 +901,10 @@ fn emit_op(
         JvmOp::IInc(slot, inc) => {
             if *slot <= 255 && (-128..=127).contains(inc) {
                 vec![Instruction::Iinc(*slot as u8, *inc as i8)]
-            } else {
+            } else if i16::try_from(*inc).is_ok() {
                 vec![Instruction::Iinc_w(*slot, *inc as i16)]
+            } else {
+                return Err(CodegenError::IIncOutOfRange(*inc));
             }
         }
 
@@ -904,9 +912,9 @@ fn emit_op(
     })
 }
 
-fn emit_arith(op: ArithOp, ty: &JvmType) -> Instruction {
+fn emit_arith(op: ArithOp, ty: &JvmType) -> Result<Instruction, CodegenError> {
     use ArithOp::*;
-    match (op, ty) {
+    Ok(match (op, ty) {
         (Add, JvmType::Int | JvmType::Byte | JvmType::Short | JvmType::Char | JvmType::Boolean) => {
             Instruction::Iadd
         }
@@ -937,18 +945,26 @@ fn emit_arith(op: ArithOp, ty: &JvmType) -> Instruction {
         (Mul, JvmType::Double) => Instruction::Dmul,
         (Div, JvmType::Double) => Instruction::Ddiv,
         (Rem, JvmType::Double) => Instruction::Drem,
-        (op, ty) => unreachable!("emit_arith: unsupported {op:?} for {ty:?}"),
-    }
+        (op, ty) => {
+            return Err(CodegenError::UnsupportedOperation(format!(
+                "emit_arith: unsupported {op:?} for {ty:?}"
+            )))
+        }
+    })
 }
 
-fn emit_neg(ty: &JvmType) -> Instruction {
-    match ty {
+fn emit_neg(ty: &JvmType) -> Result<Instruction, CodegenError> {
+    Ok(match ty {
         JvmType::Int | JvmType::Byte | JvmType::Short | JvmType::Char => Instruction::Ineg,
         JvmType::Long => Instruction::Lneg,
         JvmType::Float => Instruction::Fneg,
         JvmType::Double => Instruction::Dneg,
-        other => unreachable!("emit_neg: unsupported type {other:?}"),
-    }
+        other => {
+            return Err(CodegenError::UnsupportedOperation(format!(
+                "emit_neg: unsupported type {other:?}"
+            )))
+        }
+    })
 }
 
 fn emit_cmp(kind: CmpKind) -> Instruction {
@@ -1002,10 +1018,6 @@ fn emit_bitwise(op: BitwiseOp, ty: &JvmType) -> Instruction {
 }
 
 fn load_instruction(slot: u16, ty: &JvmType) -> Instruction {
-    assert!(
-        slot <= 255,
-        "local slot {slot} exceeds u8 range; wide prefix not yet supported"
-    );
     match ty {
         JvmType::Int | JvmType::Byte | JvmType::Short | JvmType::Char | JvmType::Boolean => {
             match slot {
@@ -1013,7 +1025,8 @@ fn load_instruction(slot: u16, ty: &JvmType) -> Instruction {
                 1 => Instruction::Iload_1,
                 2 => Instruction::Iload_2,
                 3 => Instruction::Iload_3,
-                s => Instruction::Iload(s as u8),
+                s if s <= 255 => Instruction::Iload(s as u8),
+                s => Instruction::Iload_w(s),
             }
         }
         JvmType::Long => match slot {
@@ -1021,37 +1034,37 @@ fn load_instruction(slot: u16, ty: &JvmType) -> Instruction {
             1 => Instruction::Lload_1,
             2 => Instruction::Lload_2,
             3 => Instruction::Lload_3,
-            s => Instruction::Lload(s as u8),
+            s if s <= 255 => Instruction::Lload(s as u8),
+            s => Instruction::Lload_w(s),
         },
         JvmType::Float => match slot {
             0 => Instruction::Fload_0,
             1 => Instruction::Fload_1,
             2 => Instruction::Fload_2,
             3 => Instruction::Fload_3,
-            s => Instruction::Fload(s as u8),
+            s if s <= 255 => Instruction::Fload(s as u8),
+            s => Instruction::Fload_w(s),
         },
         JvmType::Double => match slot {
             0 => Instruction::Dload_0,
             1 => Instruction::Dload_1,
             2 => Instruction::Dload_2,
             3 => Instruction::Dload_3,
-            s => Instruction::Dload(s as u8),
+            s if s <= 255 => Instruction::Dload(s as u8),
+            s => Instruction::Dload_w(s),
         },
         _ => match slot {
             0 => Instruction::Aload_0,
             1 => Instruction::Aload_1,
             2 => Instruction::Aload_2,
             3 => Instruction::Aload_3,
-            s => Instruction::Aload(s as u8),
+            s if s <= 255 => Instruction::Aload(s as u8),
+            s => Instruction::Aload_w(s),
         },
     }
 }
 
 fn store_instruction(slot: u16, ty: &JvmType) -> Instruction {
-    assert!(
-        slot <= 255,
-        "local slot {slot} exceeds u8 range; wide prefix not yet supported"
-    );
     match ty {
         JvmType::Int | JvmType::Byte | JvmType::Short | JvmType::Char | JvmType::Boolean => {
             match slot {
@@ -1059,7 +1072,8 @@ fn store_instruction(slot: u16, ty: &JvmType) -> Instruction {
                 1 => Instruction::Istore_1,
                 2 => Instruction::Istore_2,
                 3 => Instruction::Istore_3,
-                s => Instruction::Istore(s as u8),
+                s if s <= 255 => Instruction::Istore(s as u8),
+                s => Instruction::Istore_w(s),
             }
         }
         JvmType::Long => match slot {
@@ -1067,28 +1081,32 @@ fn store_instruction(slot: u16, ty: &JvmType) -> Instruction {
             1 => Instruction::Lstore_1,
             2 => Instruction::Lstore_2,
             3 => Instruction::Lstore_3,
-            s => Instruction::Lstore(s as u8),
+            s if s <= 255 => Instruction::Lstore(s as u8),
+            s => Instruction::Lstore_w(s),
         },
         JvmType::Float => match slot {
             0 => Instruction::Fstore_0,
             1 => Instruction::Fstore_1,
             2 => Instruction::Fstore_2,
             3 => Instruction::Fstore_3,
-            s => Instruction::Fstore(s as u8),
+            s if s <= 255 => Instruction::Fstore(s as u8),
+            s => Instruction::Fstore_w(s),
         },
         JvmType::Double => match slot {
             0 => Instruction::Dstore_0,
             1 => Instruction::Dstore_1,
             2 => Instruction::Dstore_2,
             3 => Instruction::Dstore_3,
-            s => Instruction::Dstore(s as u8),
+            s if s <= 255 => Instruction::Dstore(s as u8),
+            s => Instruction::Dstore_w(s),
         },
         _ => match slot {
             0 => Instruction::Astore_0,
             1 => Instruction::Astore_1,
             2 => Instruction::Astore_2,
             3 => Instruction::Astore_3,
-            s => Instruction::Astore(s as u8),
+            s if s <= 255 => Instruction::Astore(s as u8),
+            s => Instruction::Astore_w(s),
         },
     }
 }
