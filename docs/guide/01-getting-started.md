@@ -109,6 +109,28 @@ let msg = f"Hello, {name}!";
 println(msg);  // Hello, world!
 ```
 
+## 命名規則
+
+Valen では以下の命名規則を推奨しています。
+
+| 対象 | 規則 | 例 |
+|------|------|-----|
+| 型（class, enum, trait） | PascalCase | `UserProfile`, `Shape` |
+| 関数・メソッド | camelCase | `findUser()`, `getValue()` |
+| 変数 | camelCase | `let myValue`, `let mut itemCount` |
+| パッケージ | lowercase.dot | `com.example.app` |
+
+snake_case（`find_user`）を使うとコンパイラが warning を出します。コンパイルは通りますが、camelCase への修正を推奨します。
+
+```valen
+fn findUser(id: Int) -> Option<User> { /* ... */ }  // OK
+fn find_user(id: Int) -> Option<User> { /* ... */ } // warning: should use camelCase
+```
+
+### JVM 名前変換
+
+デフォルトではソースコードの名前がそのまま JVM バイトコードに出力されます。Java から呼ぶときも同じ名前を使います。
+
 ## 次のステップ
 
 - [型システム](02-types.md) — Valen の型、リテラル、Option について

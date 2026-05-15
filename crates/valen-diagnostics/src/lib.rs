@@ -105,6 +105,8 @@ impl DiagCode {
     pub const SEALED_TRAIT_IMPL_BY_ENUM: DiagCode = DiagCode(407);
     pub const MATCH_NOT_EXHAUSTIVE: DiagCode = DiagCode(500);
     pub const JAVA_EXCEPTION_NOT_WRAPPED: DiagCode = DiagCode(600);
+    pub const NAMING_NOT_CAMEL_CASE: DiagCode = DiagCode(700);
+    pub const NAMING_NOT_PASCAL_CASE: DiagCode = DiagCode(701);
 }
 
 /// Accumulates diagnostics during a single compilation run.

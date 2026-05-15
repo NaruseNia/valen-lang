@@ -1,7 +1,7 @@
 package test;
 
 pub class TryOperator {
-    fn find_value(x: Int) -> Option<Int> {
+    fn findValue(x: Int) -> Option<Int> {
         if x > 0 {
             Some(x)
         } else {
@@ -9,8 +9,8 @@ pub class TryOperator {
         }
     }
 
-    fn use_option(self, x: Int) -> Option<Int> {
-        let v = TryOperator::find_value(x)?;
+    fn useOption(self, x: Int) -> Option<Int> {
+        let v = TryOperator::findValue(x)?;
         Some(v)
     }
 

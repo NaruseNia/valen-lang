@@ -40,7 +40,10 @@ import java.util.HashMap as HMap;
 
 ## 1.3 識別子
 - `[a-zA-Z_][a-zA-Z0-9_]*`
-- 型は CamelCase 推奨、関数と変数は snake_case 推奨（強制なし）
+- 型は PascalCase（`UserProfile`、`Shape`）
+- 関数・メソッド・変数は camelCase（`findUser`、`myValue`）
+- パッケージは lowercase.dot（`com.example.app`）
+- snake_case を使うとコンパイラが warning を出す（エラーにはならない）
 
 ## 1.4 コメント
 ```valen

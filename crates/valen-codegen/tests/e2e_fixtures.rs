@@ -225,7 +225,7 @@ fn fixture_java_import() {
 
     let c = ClassFile::from_bytes(&outputs[0].bytes).expect("parse classfile");
     assert_eq!(c.class_name().unwrap(), "com/example/Importer");
-    // <init> + create_list + create_file
+    // <init> + createList + createFile
     assert_eq!(c.methods.len(), 3);
 
     // Verify the constant pool contains the correct JVM internal names
@@ -255,7 +255,7 @@ fn fixture_safe_block() {
 
     let c = ClassFile::from_bytes(&outputs[0].bytes).expect("parse classfile");
     assert_eq!(c.class_name().unwrap(), "com/example/SafeDemo");
-    // <init> + safe_call + safe_string
+    // <init> + safeCall + safeString
     assert_eq!(c.methods.len(), 3);
 }
 
@@ -329,7 +329,7 @@ fn fixture_fn_for_range_inclusive() {
     assert_eq!(classes.len(), 1);
     let c = &classes[0];
     assert_eq!(c.class_name().unwrap(), "com/example/RangeTest");
-    // <init> + sum_inclusive
+    // <init> + sumInclusive
     assert_eq!(c.methods.len(), 2);
 }
 
@@ -339,7 +339,7 @@ fn fixture_fn_for_break_continue() {
     assert_eq!(classes.len(), 1);
     let c = &classes[0];
     assert_eq!(c.class_name().unwrap(), "com/example/BreakCont");
-    // <init> + find_first_even
+    // <init> + findFirstEven
     assert_eq!(c.methods.len(), 2);
 }
 
@@ -379,7 +379,7 @@ fn fixture_fn_range_standalone() {
     assert_eq!(classes.len(), 1);
     let c = &classes[0];
     assert_eq!(c.class_name().unwrap(), "com/example/Ranges");
-    // <init> + make_range + make_inclusive
+    // <init> + makeRange + makeInclusive
     assert_eq!(c.methods.len(), 3);
 }
 
@@ -617,12 +617,12 @@ fn fixture_try_operator() {
         })
         .collect();
     assert!(
-        methods.contains(&"find_value".to_string()),
-        "missing find_value"
+        methods.contains(&"findValue".to_string()),
+        "missing findValue"
     );
     assert!(
-        methods.contains(&"use_option".to_string()),
-        "missing use_option"
+        methods.contains(&"useOption".to_string()),
+        "missing useOption"
     );
     assert!(methods.contains(&"divide".to_string()), "missing divide");
     assert!(methods.contains(&"compute".to_string()), "missing compute");
@@ -657,11 +657,11 @@ fn fixture_operator_overload() {
         })
         .collect();
     assert!(
-        methods.contains(&"add_vectors".to_string()),
-        "missing add_vectors"
+        methods.contains(&"addVectors".to_string()),
+        "missing addVectors"
     );
     assert!(
-        methods.contains(&"sub_vectors".to_string()),
-        "missing sub_vectors"
+        methods.contains(&"subVectors".to_string()),
+        "missing subVectors"
     );
 }
