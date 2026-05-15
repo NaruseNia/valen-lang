@@ -613,6 +613,7 @@ impl Parser {
         let name = self.expect_ident()?;
         let generics = self.parse_generic_params()?;
         let ctor_params = self.parse_ctor_params()?;
+        let supertypes = self.parse_supertypes()?;
         let end = self.expect(TokenKind::Semi)?;
         Some(DataClassDecl {
             annotations,
@@ -620,7 +621,7 @@ impl Parser {
             name,
             generics,
             ctor_params,
-            supertypes: vec![],
+            supertypes,
             span: start.merge(end),
         })
     }
