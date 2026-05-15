@@ -219,8 +219,8 @@ fn parse_type_from_chars(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -
             jvm_class_to_tyref(&class_name)
         }
         Some('[') => {
-            let _elem = parse_type_from_chars(chars);
-            TyRef::Named(SmolStr::from("Array"))
+            let elem = parse_type_from_chars(chars);
+            TyRef::Generic(SmolStr::from("Array"), vec![elem])
         }
         _ => TyRef::Error,
     }

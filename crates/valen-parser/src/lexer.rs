@@ -138,7 +138,12 @@ enum RawTok {
     #[token("_", priority = 3)]
     Underscore,
 
-    // Operators
+    // Operators — triple-char operators must appear before their two-char prefixes
+    // so logos matches the longer token first.
+    #[token("===")]
+    EqEqEq,
+    #[token("!==")]
+    NotEqEq,
     #[token("==")]
     EqEq,
     #[token("!=")]
@@ -190,12 +195,22 @@ enum RawTok {
     #[token("%")]
     Percent,
 
-    // Literals
+    // Literals — longer/suffixed patterns must appear before shorter ones
+    // so logos prefers the more specific match.
+    #[regex(r"[0-9][0-9_]*[lL]", parse_long)]
+    LongLit(i64),
+
+    #[regex(r"[0-9][0-9_]*\.[0-9][0-9_]*([eE][+-]?[0-9]+)?[fF]", parse_float32)]
+    Float32Lit(f32),
+
     #[regex(r"[0-9][0-9_]*\.[0-9][0-9_]*([eE][+-]?[0-9]+)?", parse_float)]
     FloatLit(f64),
 
     #[regex(r"[0-9][0-9_]*", parse_int)]
     IntLit(i64),
+
+    #[regex(r"'([^'\\]|\\.)'", parse_char)]
+    CharLit(char),
 
     #[regex(r#""([^"\\]|\\.)*""#, parse_string)]
     StringLit(SmolStr),
@@ -208,8 +223,40 @@ fn parse_int(lex: &mut logos::Lexer<'_, RawTok>) -> Option<i64> {
     lex.slice().replace('_', "").parse::<i64>().ok()
 }
 
+fn parse_long(lex: &mut logos::Lexer<'_, RawTok>) -> Option<i64> {
+    let s = lex.slice();
+    // Strip trailing L/l suffix before parsing
+    s[..s.len() - 1].replace('_', "").parse::<i64>().ok()
+}
+
 fn parse_float(lex: &mut logos::Lexer<'_, RawTok>) -> Option<f64> {
     lex.slice().replace('_', "").parse::<f64>().ok()
+}
+
+fn parse_float32(lex: &mut logos::Lexer<'_, RawTok>) -> Option<f32> {
+    let s = lex.slice();
+    // Strip trailing f/F suffix before parsing
+    s[..s.len() - 1].replace('_', "").parse::<f32>().ok()
+}
+
+fn parse_char(lex: &mut logos::Lexer<'_, RawTok>) -> Option<char> {
+    let raw = lex.slice();
+    // Strip surrounding single quotes
+    let inner = &raw[1..raw.len() - 1];
+    let mut chars = inner.chars();
+    let c = chars.next()?;
+    if c != '\\' {
+        return Some(c);
+    }
+    match chars.next()? {
+        'n' => Some('\n'),
+        't' => Some('\t'),
+        'r' => Some('\r'),
+        '\\' => Some('\\'),
+        '\'' => Some('\''),
+        '0' => Some('\0'),
+        other => Some(other),
+    }
 }
 
 fn parse_string(lex: &mut logos::Lexer<'_, RawTok>) -> Option<SmolStr> {
@@ -365,6 +412,8 @@ fn map_token(raw: RawTok) -> TokenKind {
         RawTok::Underscore => TokenKind::Underscore,
         // Operators
         RawTok::Eq => TokenKind::Eq,
+        RawTok::EqEqEq => TokenKind::EqEqEq,
+        RawTok::NotEqEq => TokenKind::NotEqEq,
         RawTok::EqEq => TokenKind::EqEq,
         RawTok::NotEq => TokenKind::NotEq,
         RawTok::Lt => TokenKind::Lt,
@@ -390,8 +439,11 @@ fn map_token(raw: RawTok) -> TokenKind {
         RawTok::Slash => TokenKind::Slash,
         RawTok::Percent => TokenKind::Percent,
         // Literals
+        RawTok::LongLit(n) => TokenKind::LongLit(n),
+        RawTok::Float32Lit(n) => TokenKind::FloatLit(n),
         RawTok::FloatLit(n) => TokenKind::DoubleLit(n),
         RawTok::IntLit(n) => TokenKind::IntLit(n),
+        RawTok::CharLit(c) => TokenKind::CharLit(c),
         RawTok::StringLit(s) => TokenKind::StringLit(s),
         RawTok::Ident(s) => TokenKind::Ident(s),
     }

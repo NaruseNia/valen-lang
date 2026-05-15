@@ -21,3 +21,4 @@ Thumbs.db
 # Valen build artifacts (将来)
 *.class
 /build
+.claude/worktrees/

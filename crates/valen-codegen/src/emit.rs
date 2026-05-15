@@ -29,6 +29,20 @@ pub enum CodegenError {
     /// An arithmetic or negation operation on an unsupported type.
     #[error("unsupported operation: {0}")]
     UnsupportedOperation(String),
+    /// StackMapTable verification failed during class emission.
+    #[error("StackMapTable verification failed for class '{class_name}': {message}")]
+    StackMapVerification {
+        /// JVM internal name of the class that failed verification.
+        class_name: String,
+        /// Detail message from the verifier.
+        message: String,
+    },
+    /// A type that is invalid in the current context (e.g. Void where a value is expected).
+    #[error("invalid type: {0}")]
+    InvalidType(String),
+    /// An internal compiler error that should not occur under normal circumstances.
+    #[error("internal codegen error: {0}")]
+    InternalError(String),
 }
 
 /// Emits a single `JvmClass` IR node to classfile bytes.
@@ -160,7 +174,7 @@ pub fn emit_class(jvm_class: &JvmClass) -> Result<ClassFileOutput, CodegenError>
         access_flags |= ClassAccessFlags::SUPER;
     }
 
-    let mut class_file = ClassFile {
+    let class_file = ClassFile {
         version: JAVA_21,
         constant_pool: cp,
         access_flags,
@@ -176,19 +190,13 @@ pub fn emit_class(jvm_class: &JvmClass) -> Result<ClassFileOutput, CodegenError>
     match class_file.verify() {
         Ok(()) => {}
         Err(ristretto_classfile::Error::VerificationError(ref msg)) => {
-            // StackMapTable verification may fail for complex control flow;
-            // strip StackMapTable attributes and retry
-            eprintln!(
-                "[codegen] stripping StackMapTable from class '{}': {}",
-                jvm_class.name, msg
-            );
-            for method in &mut class_file.methods {
-                for attr in &mut method.attributes {
-                    if let Attribute::Code { attributes, .. } = attr {
-                        attributes.retain(|a| !matches!(a, Attribute::StackMapTable { .. }));
-                    }
-                }
-            }
+            // StackMapTable verification failure is a codegen bug — report it
+            // instead of silently stripping, which causes VerifyError at runtime
+            // on JVM 50.0+ where StackMapTable is mandatory.
+            return Err(CodegenError::StackMapVerification {
+                class_name: jvm_class.name.clone(),
+                message: msg.to_string(),
+            });
         }
         Err(e) => return Err(e.into()),
     }
@@ -443,16 +451,29 @@ fn emit_body(cp: &mut ConstantPool, body: &JvmMethodBody) -> Result<EmitBodyResu
     let mut instructions = Vec::new();
     let mut label_positions: HashMap<Label, usize> = HashMap::new();
     let mut fixups: Vec<(usize, Label)> = Vec::new();
-    let mut max_stack: i32 = 0;
-    let mut stack: i32 = 0;
     let mut frames: Vec<FrameInfo> = Vec::new();
     let mut pending_label = false;
+
+    // --- Phase 1: Emit instructions and collect label positions / frames ---
+    // Track stack depth per basic block for correct max_stack across branches.
+    let mut block_stack: i32 = 0;
+    let mut block_max: i32 = 0;
+    // Map from label → stack depth at entry (set by Frame ops and propagated by branches).
+    let mut label_entry_stack: HashMap<Label, i32> = HashMap::new();
+    let mut global_max_stack: i32 = 0;
 
     for op in &body.ops {
         match op {
             JvmOp::Label(label) => {
                 label_positions.insert(*label, instructions.len());
                 pending_label = true;
+                // If a predecessor already recorded the entry stack for this label, adopt it.
+                if let Some(&entry) = label_entry_stack.get(label) {
+                    // Commit the max of the previous block before switching.
+                    global_max_stack = global_max_stack.max(block_max);
+                    block_stack = entry;
+                    block_max = block_stack;
+                }
             }
             JvmOp::Frame {
                 locals,
@@ -466,7 +487,9 @@ fn emit_body(cp: &mut ConstantPool, body: &JvmMethodBody) -> Result<EmitBodyResu
                     });
                     pending_label = false;
                 }
-                stack = frame_stack.iter().map(|t| t.slot_count() as i32).sum();
+                // Frame explicitly declares the stack state — adopt it.
+                block_stack = frame_stack.iter().map(|t| t.slot_count() as i32).sum();
+                block_max = block_max.max(block_stack);
             }
             JvmOp::StubBody => {
                 pending_label = false;
@@ -478,20 +501,44 @@ fn emit_body(cp: &mut ConstantPool, body: &JvmMethodBody) -> Result<EmitBodyResu
                 instructions.push(Instruction::Ldc_w(msg));
                 instructions.push(Instruction::Invokespecial(exc_init));
                 instructions.push(Instruction::Athrow);
-                stack += 2;
-                max_stack = max_stack.max(stack);
-                stack = 0;
+                block_stack += 2;
+                block_max = block_max.max(block_stack);
+                global_max_stack = global_max_stack.max(block_max);
+                // After athrow, stack is effectively empty for the next block.
+                block_stack = 0;
+                block_max = 0;
             }
             _ => {
                 pending_label = false;
                 let instr = emit_op(cp, op, &mut fixups, instructions.len())?;
                 instructions.extend(instr);
-                stack += op.stack_delta();
-                debug_assert!(stack >= 0, "JVM stack underflow detected");
-                max_stack = max_stack.max(stack);
+                block_stack += op.stack_delta();
+                debug_assert!(block_stack >= 0, "JVM stack underflow detected");
+                block_max = block_max.max(block_stack);
+
+                // For branch ops, record the post-branch stack depth at the target label
+                // so that when we reach that label we start with the correct depth.
+                if let Some(target) = op.branch_target() {
+                    // The stack depth *after* this branch is consumed is the entry depth
+                    // for the target basic block (the branch itself pops its operands).
+                    let target_entry = block_stack;
+                    label_entry_stack
+                        .entry(target)
+                        .and_modify(|existing| *existing = (*existing).max(target_entry))
+                        .or_insert(target_entry);
+                }
+
+                // Unconditional control transfer: commit block and reset.
+                if matches!(op, JvmOp::Goto(_) | JvmOp::Return(_) | JvmOp::AThrow) {
+                    global_max_stack = global_max_stack.max(block_max);
+                    block_stack = 0;
+                    block_max = 0;
+                }
             }
         }
     }
+    // Commit the last block.
+    global_max_stack = global_max_stack.max(block_max);
 
     for (instr_idx, label) in &fixups {
         let target = label_positions
@@ -572,7 +619,7 @@ fn emit_body(cp: &mut ConstantPool, body: &JvmMethodBody) -> Result<EmitBodyResu
 
     Ok((
         instructions,
-        max_stack.max(1) as u16,
+        global_max_stack.max(1) as u16,
         stack_frames,
         exception_table,
     ))

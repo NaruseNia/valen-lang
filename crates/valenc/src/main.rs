@@ -8,6 +8,16 @@
 use clap::{Parser, Subcommand};
 use std::path::{Path, PathBuf};
 use valen_ast::FileId;
+use valen_codegen::JvmVersion;
+
+/// Parse and validate the --target flag into a JvmVersion.
+fn parse_jvm_version(s: &str) -> Result<JvmVersion, String> {
+    match s {
+        "21" => Ok(JvmVersion::Java21),
+        "25" => Ok(JvmVersion::Java25),
+        _ => Err(format!("invalid JVM target `{s}`: must be 21 or 25")),
+    }
+}
 
 #[derive(Parser)]
 #[command(name = "valenc", version, about = "Valen language compiler")]
@@ -29,8 +39,8 @@ enum Command {
         out: PathBuf,
 
         /// Target JVM version (21 = baseline, 25 = opt-in).
-        #[arg(long, default_value = "21")]
-        target: String,
+        #[arg(long, default_value = "21", value_parser = parse_jvm_version)]
+        target: JvmVersion,
 
         /// Classpath entries (directories or JARs) for Java import resolution.
         #[arg(long)]
@@ -122,6 +132,9 @@ fn run_pipeline_with_classpath(
         anyhow::bail!("parse errors");
     }
 
+    // TODO(#034): Multi-file diagnostics are attributed to the first file's path
+    // and line index. Each diagnostic should carry its own FileId so that the
+    // correct file path and line index are used for reporting.
     let first_path = inputs
         .first()
         .map(|p| p.as_path())
@@ -148,7 +161,10 @@ fn run_pipeline_with_classpath(
     }
 
     // --- Coherence ---
-    let coherence_result = valen_hir::coherence::check_coherence(&hir, &[]);
+    // Extract import short-names from the HIR so coherence can distinguish
+    // foreign types from locally-defined ones.
+    let import_names: Vec<smol_str::SmolStr> = hir.imports.keys().cloned().collect();
+    let coherence_result = valen_hir::coherence::check_coherence(&hir, &import_names);
     if let Some(li) = first_line_idx {
         emit_diagnostics(&coherence_result.diagnostics, first_path, li);
     }
@@ -194,7 +210,7 @@ fn emit_diagnostics(
 // Entry point
 // ---------------------------------------------------------------------------
 
-fn main() -> anyhow::Result<()> {
+fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -203,13 +219,13 @@ fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
-    match cli.command {
+    let result = match cli.command {
         Command::Compile {
             inputs,
             out,
+            target,
             classpath,
-            ..
-        } => compile(&inputs, &out, &classpath),
+        } => compile(&inputs, &out, target, &classpath),
         Command::Check {
             inputs, classpath, ..
         } => check(&inputs, &classpath),
@@ -218,14 +234,32 @@ fn main() -> anyhow::Result<()> {
             println!("valenc {}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
+    };
+
+    if let Err(e) = result {
+        eprintln!("error: {e}");
+        // Exit code 1 = compile error, 2 = CLI/IO error
+        let code = if e.to_string().ends_with("errors") {
+            1
+        } else {
+            2
+        };
+        std::process::exit(code);
     }
 }
 
-fn compile(inputs: &[PathBuf], out_dir: &PathBuf, classpath: &[PathBuf]) -> anyhow::Result<()> {
+fn compile(
+    inputs: &[PathBuf],
+    out_dir: &PathBuf,
+    _target: JvmVersion,
+    classpath: &[PathBuf],
+) -> anyhow::Result<()> {
     std::fs::create_dir_all(out_dir)?;
 
     let frontend = run_pipeline_with_classpath(inputs, classpath)?;
 
+    // TODO: Forward `_target` to compile_hir once the lowering pipeline
+    // accepts a JvmVersion parameter to emit the correct classfile version.
     let outputs = valen_codegen::compile_hir(&frontend.hir, &frontend.bodies)?;
     for output in &outputs {
         let parts: Vec<&str> = output.internal_name.split('/').collect();

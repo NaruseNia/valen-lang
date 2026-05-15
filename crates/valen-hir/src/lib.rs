@@ -89,17 +89,38 @@ impl Hir {
 
     /// Check whether `def_id` is visible from the given accessor type context.
     pub fn check_visibility(&self, def_id: DefId, accessor_type: Option<&str>) -> bool {
+        self.check_visibility_from_package(def_id, accessor_type, self.package.as_deref())
+    }
+
+    /// Check visibility with an explicit accessor package for module boundary checks.
+    pub fn check_visibility_from_package(
+        &self,
+        def_id: DefId,
+        accessor_type: Option<&str>,
+        accessor_package: Option<&[SmolStr]>,
+    ) -> bool {
         let Some(def) = self.defs.get(&def_id) else {
             return false;
         };
         match def.vis {
             Vis::Pub => true,
-            // TODO: Internal should be restricted to the same module scope.
-            // Currently treated identically to Pub because the module system
-            // (module DefId / package boundaries) is not yet implemented.
-            // Once modules are materialized, check that the accessor is in the
-            // same module as the definition.
-            Vis::Internal => true,
+            // Issue #016: Internal should be restricted to the same module/package.
+            // Basic check: compare the definition's package with the accessor's
+            // package. If both are in the same package (or both have no package),
+            // access is allowed. This is a first approximation — a full module
+            // system will refine the boundary check once modules are materialized.
+            Vis::Internal => {
+                let def_pkg = def.package.as_deref();
+                match (def_pkg, accessor_package) {
+                    (Some(dp), Some(ap)) => dp == ap,
+                    (None, None) => true,
+                    _ => {
+                        // Different package context → deny.
+                        // TODO(#016): Refine once full module system is implemented.
+                        false
+                    }
+                }
+            }
             Vis::Private => {
                 if let Some(accessor) = accessor_type {
                     self.is_member_of(def_id, accessor)
@@ -484,6 +505,9 @@ impl std::fmt::Display for TyRef {
 }
 
 /// Convert a syntactic [`TyRef`] into a semantic [`Ty`], mapping unresolvable refs to `Ty::Error`.
+///
+/// `TyRef::Unresolved` is mapped to `Ty::Error` by default — only the type checker
+/// should promote these to `Ty::TypeParam` when a generic context is known. (Issue #014)
 pub fn tyref_to_ty(tyref: &TyRef) -> Ty {
     match tyref {
         TyRef::Prim(p) => Ty::Prim(*p),
@@ -493,6 +517,27 @@ pub fn tyref_to_ty(tyref: &TyRef) -> Ty {
         TyRef::Fn(params, ret) => Ty::Fn(
             params.iter().map(tyref_to_ty).collect(),
             Box::new(tyref_to_ty(ret)),
+        ),
+        TyRef::Unresolved(_) => Ty::Error,
+        TyRef::SelfTy | TyRef::Error => Ty::Error,
+    }
+}
+
+/// Convert a [`TyRef`] to a [`Ty`], treating `TyRef::Unresolved` names as `Ty::TypeParam`.
+///
+/// Use this variant only when the calling context knows it is inside a generic scope
+/// (e.g. trait/impl definitions or the type checker with active type parameters).
+pub fn tyref_to_ty_generic(tyref: &TyRef) -> Ty {
+    match tyref {
+        TyRef::Prim(p) => Ty::Prim(*p),
+        TyRef::Named(n) => Ty::Named(n.clone()),
+        TyRef::Generic(n, args) => {
+            Ty::Generic(n.clone(), args.iter().map(tyref_to_ty_generic).collect())
+        }
+        TyRef::Nullable(inner) => Ty::Nullable(Box::new(tyref_to_ty_generic(inner))),
+        TyRef::Fn(params, ret) => Ty::Fn(
+            params.iter().map(tyref_to_ty_generic).collect(),
+            Box::new(tyref_to_ty_generic(ret)),
         ),
         TyRef::Unresolved(n) => Ty::TypeParam(n.clone()),
         TyRef::SelfTy | TyRef::Error => Ty::Error,

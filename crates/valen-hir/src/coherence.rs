@@ -14,9 +14,30 @@ pub struct CoherenceResult {
 
 /// Check all trait impls in the HIR for coherence violations.
 pub fn check_coherence(hir: &Hir, imports: &[SmolStr]) -> CoherenceResult {
+    // Issue #021: Build the set of locally-defined type/trait names from HIR defs
+    // instead of relying solely on import names. A name is "local" if it exists
+    // in the HIR defs and is NOT a prelude-injected synthetic type.
+    let local_defs: IndexSet<SmolStr> = hir
+        .defs
+        .values()
+        .filter(|d| {
+            !d.name.is_empty()
+                && !hir.prelude_ids.contains(&d.id)
+                && matches!(
+                    d.kind,
+                    DefKind::Class(_)
+                        | DefKind::DataClass(_)
+                        | DefKind::Enum(_)
+                        | DefKind::Trait(_)
+                )
+        })
+        .map(|d| d.name.clone())
+        .collect();
+
     let mut checker = CoherenceChecker {
         hir,
         foreign: imports.iter().cloned().collect(),
+        local_defs,
         diags: Diagnostics::new(),
     };
     checker.run();
@@ -28,6 +49,8 @@ pub fn check_coherence(hir: &Hir, imports: &[SmolStr]) -> CoherenceResult {
 struct CoherenceChecker<'h> {
     hir: &'h Hir,
     foreign: IndexSet<SmolStr>,
+    /// Names of types/traits defined locally in the current compilation unit.
+    local_defs: IndexSet<SmolStr>,
     diags: Diagnostics,
 }
 
@@ -80,9 +103,10 @@ impl<'h> CoherenceChecker<'h> {
                 continue;
             }
 
-            // Orphan rule: at least one of trait or type must be local
-            let trait_local = !self.foreign.contains(tn.as_str());
-            let type_local = !self.foreign.contains(tgt.as_str());
+            // Issue #021: Orphan rule — check HIR defs for local origin, not just import names.
+            // A name is local if it appears in local_defs (user-defined types/traits).
+            let trait_local = self.local_defs.contains(tn.as_str());
+            let type_local = self.local_defs.contains(tgt.as_str());
             if !trait_local && !type_local {
                 self.diags.error(
                     DiagCode::ORPHAN_RULE_VIOLATION,

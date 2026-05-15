@@ -537,6 +537,16 @@ impl Parser {
                 }
             }
             let start = self.peek_span();
+            // Check for variance annotation: `in T` (contravariant) or `out T` (covariant)
+            let variance = if self.at(&TokenKind::In) {
+                self.bump();
+                Variance::Contravariant
+            } else if self.peek_is_ident_matching("out") {
+                self.bump();
+                Variance::Covariant
+            } else {
+                Variance::Invariant
+            };
             let name = self.expect_ident()?;
             let mut bounds = Vec::new();
             if self.eat(&TokenKind::Colon).is_some() {
@@ -548,7 +558,7 @@ impl Parser {
             let end = bounds.last().map(type_span).unwrap_or(start);
             params.push(GenericParam {
                 name,
-                variance: Variance::Invariant,
+                variance,
                 bounds,
                 span: start.merge(end),
             });
@@ -603,6 +613,7 @@ impl Parser {
         let name = self.expect_ident()?;
         let generics = self.parse_generic_params()?;
         let ctor_params = self.parse_ctor_params()?;
+        let supertypes = self.parse_supertypes()?;
         let end = self.expect(TokenKind::Semi)?;
         Some(DataClassDecl {
             annotations,
@@ -610,6 +621,7 @@ impl Parser {
             name,
             generics,
             ctor_params,
+            supertypes,
             span: start.merge(end),
         })
     }
@@ -1002,6 +1014,8 @@ impl Parser {
         let mut lhs = self.parse_cmp()?;
         loop {
             let op = match self.peek() {
+                TokenKind::EqEqEq => BinaryOp::RefEq,
+                TokenKind::NotEqEq => BinaryOp::RefNe,
                 TokenKind::EqEq => BinaryOp::Eq,
                 TokenKind::NotEq => BinaryOp::Ne,
                 _ => break,
@@ -1204,9 +1218,21 @@ impl Parser {
                 self.bump();
                 Some(Expr::Literal(Literal::Int(n, span)))
             }
+            TokenKind::LongLit(n) => {
+                self.bump();
+                Some(Expr::Literal(Literal::Long(n, span)))
+            }
+            TokenKind::FloatLit(n) => {
+                self.bump();
+                Some(Expr::Literal(Literal::Float(n, span)))
+            }
             TokenKind::DoubleLit(n) => {
                 self.bump();
                 Some(Expr::Literal(Literal::Double(n, span)))
+            }
+            TokenKind::CharLit(c) => {
+                self.bump();
+                Some(Expr::Literal(Literal::Char(c, span)))
             }
             TokenKind::StringLit(s) => {
                 self.bump();
@@ -1383,6 +1409,26 @@ impl Parser {
                     return self.parse_range_pattern(Some(lit));
                 }
                 Some(Pattern::Literal(lit))
+            }
+            TokenKind::LongLit(n) => {
+                self.bump();
+                let lit = Literal::Long(n, span);
+                if self.at(&TokenKind::DotDot) || self.at(&TokenKind::DotDotEq) {
+                    return self.parse_range_pattern(Some(lit));
+                }
+                Some(Pattern::Literal(lit))
+            }
+            TokenKind::FloatLit(n) => {
+                self.bump();
+                Some(Pattern::Literal(Literal::Float(n, span)))
+            }
+            TokenKind::DoubleLit(n) => {
+                self.bump();
+                Some(Pattern::Literal(Literal::Double(n, span)))
+            }
+            TokenKind::CharLit(c) => {
+                self.bump();
+                Some(Pattern::Literal(Literal::Char(c, span)))
             }
             TokenKind::StringLit(s) => {
                 self.bump();
@@ -1794,6 +1840,11 @@ impl Parser {
         matches!(self.peek(), TokenKind::Ident(_))
     }
 
+    /// Returns `true` when the current token is an `Ident` whose text equals `s`.
+    fn peek_is_ident_matching(&self, s: &str) -> bool {
+        matches!(self.peek(), TokenKind::Ident(name) if name.as_str() == s)
+    }
+
     fn peek_ahead_is(&self, kind: &TokenKind) -> bool {
         self.lookahead(1) == kind
     }
@@ -1918,13 +1969,7 @@ fn type_span(ty: &Type) -> Span {
         Type::Path(p) => p.span,
         Type::Nullable { span, .. } => *span,
         Type::Fn(f) => f.span,
-        Type::Tuple(ts) => {
-            if let (Some(first), Some(last)) = (ts.first(), ts.last()) {
-                type_span(first).merge(type_span(last))
-            } else {
-                Span::DUMMY
-            }
-        }
+        Type::Tuple(_, span) => *span,
     }
 }
 

@@ -75,7 +75,7 @@ impl Resolver {
         if let Some(prev_id) = self.scope.define(name.clone(), id) {
             let prev_span = self.hir.defs.get(&prev_id).map(|d| d.span).unwrap_or(span);
             self.diagnostics.error(
-                DiagCode::NAME_NOT_FOUND,
+                DiagCode::DUPLICATE_DEFINITION,
                 span,
                 SmolStr::from(format!(
                     "duplicate definition `{}` (previously defined at {:?})",
@@ -1105,7 +1105,7 @@ fn lower_type_ref_with_params(ty: &valen_ast::Type, type_params: &[SmolStr]) -> 
             let ret = Box::new(lower_type_ref_with_params(&ft.return_type, type_params));
             TyRef::Fn(params, ret)
         }
-        valen_ast::Type::Tuple(_) => TyRef::Error,
+        valen_ast::Type::Tuple(..) => TyRef::Error,
     }
 }
 

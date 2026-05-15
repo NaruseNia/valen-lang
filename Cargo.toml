@@ -48,6 +48,8 @@ futures = "0.3"
 lsp-types = "0.97"
 # JVM bytecode emit (Phase 0 選定: ristretto_classfile — write API + Java 21-25 + sealed/record attrs)
 ristretto_classfile = "0.31"
+# File operations
+tempfile = "3"
 # Test
 insta = "1"
 expect-test = "1"

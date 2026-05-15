@@ -71,18 +71,24 @@ pub fn extract_comments(source: &str) -> Vec<Comment> {
                             kind: CommentKind::Line,
                         });
                     }
-                    // Block comment
+                    // Block comment (supports nesting: `/* /* inner */ */`)
                     b'*' => {
                         let start = i;
                         i += 2;
-                        while i + 1 < len {
-                            if bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                        let mut depth: u32 = 1;
+                        while i + 1 < len && depth > 0 {
+                            if bytes[i] == b'/' && bytes[i + 1] == b'*' {
+                                depth += 1;
                                 i += 2;
-                                break;
+                            } else if bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                                depth -= 1;
+                                i += 2;
+                            } else {
+                                i += 1;
                             }
-                            i += 1;
                         }
-                        if i >= len && !(i >= 2 && bytes[i - 2] == b'*' && bytes[i - 1] == b'/') {
+                        // Handle unterminated block comment at EOF
+                        if depth > 0 {
                             i = len;
                         }
                         comments.push(Comment {

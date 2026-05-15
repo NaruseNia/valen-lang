@@ -1435,6 +1435,7 @@ version = "0.1.0-dev"
 dependencies = [
  "anyhow",
  "clap",
+ "tempfile",
  "valen-ast",
  "valen-parser",
 ]

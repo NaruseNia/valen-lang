@@ -1,4 +1,12 @@
 //! Minimal class emitter for early prototyping (single empty class with default `<init>`).
+//!
+//! # Deprecated
+//!
+//! This module duplicates functionality now provided by [`crate::emit`] which handles
+//! all class emission via the JVM IR pipeline. This module is retained only because
+//! existing tests depend on it. **Do not add new functionality here** — use
+//! [`crate::emit::emit_class`] instead. This module will be removed once tests are
+//! migrated to the IR-based emitter.
 
 use ristretto_classfile::attributes::{Attribute, Instruction};
 use ristretto_classfile::{
@@ -8,6 +16,10 @@ use ristretto_classfile::{
 use crate::ClassFileOutput;
 
 /// Emit a minimal JVM class with only a default no-arg constructor.
+///
+/// # Deprecated
+/// Use [`crate::emit::emit_class`] instead, which handles all class emission via the JVM IR.
+#[deprecated(note = "use crate::emit::emit_class via the JVM IR pipeline instead")]
 pub fn emit_class(name: &str) -> Result<ClassFileOutput, ristretto_classfile::Error> {
     let mut cp = ConstantPool::default();
 
@@ -60,6 +72,7 @@ pub fn emit_class(name: &str) -> Result<ClassFileOutput, ristretto_classfile::Er
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 

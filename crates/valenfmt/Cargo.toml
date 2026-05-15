@@ -17,3 +17,4 @@ valen-ast = { workspace = true }
 valen-parser = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
+tempfile = { workspace = true }
