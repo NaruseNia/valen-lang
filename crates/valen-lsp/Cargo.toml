@@ -21,6 +21,7 @@ valen-ast = { workspace = true }
 valen-diagnostics = { workspace = true }
 valen-parser = { workspace = true }
 valen-hir = { workspace = true }
+indexmap = { workspace = true }
 async-lsp = { workspace = true }
 lsp-types = { workspace = true }
 tokio = { workspace = true }

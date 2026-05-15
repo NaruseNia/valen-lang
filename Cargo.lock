@@ -1322,6 +1322,7 @@ dependencies = [
  "anyhow",
  "async-lsp",
  "futures",
+ "indexmap",
  "lsp-types 0.97.0",
  "tokio",
  "tower",

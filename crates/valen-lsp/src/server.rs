@@ -8,7 +8,7 @@ use async_lsp::router::Router;
 use async_lsp::{ClientSocket, LanguageClient, LanguageServer, ResponseError};
 
 use valen_ast::token::TokenKind;
-use valen_hir::DefKind;
+use valen_hir::{DefKind, Ty, TypedBody, TypedExpr, TypedExprKind, TypedStmt};
 
 use crate::convert;
 
@@ -32,6 +32,8 @@ pub struct DocumentState {
     pub line_index: convert::LineIndex,
     pub items: Vec<valen_ast::Item>,
     pub hir: Option<valen_hir::Hir>,
+    /// Typed bodies from type checking, indexed by DefId.
+    pub bodies: Option<indexmap::IndexMap<valen_hir::DefId, valen_hir::TypedBody>>,
 }
 
 /// The Valen LSP server state.
@@ -220,7 +222,7 @@ impl ServerState {
             CompletionContext::TypePosition => self.build_type_completions(doc),
             CompletionContext::ImplTarget => self.build_impl_target_completions(doc),
             CompletionContext::NamingPosition => Vec::new(),
-            CompletionContext::General => self.build_general_completions(doc),
+            CompletionContext::General => self.build_general_completions(doc, offset as u32),
         }
     }
 
@@ -529,9 +531,25 @@ impl ServerState {
         items
     }
 
-    fn build_general_completions(&self, doc: &DocumentState) -> Vec<CompletionItem> {
+    fn build_general_completions(&self, doc: &DocumentState, offset: u32) -> Vec<CompletionItem> {
         let mut items = Vec::new();
         let mut seen = std::collections::HashSet::new();
+
+        // Local variables from typed bodies (sorted above keywords)
+        if let Some(bodies) = doc.bodies.as_ref() {
+            let locals = collect_local_variables(bodies, offset, doc.hir.as_ref());
+            for (name, ty) in locals {
+                if seen.insert(name.clone()) {
+                    items.push(CompletionItem {
+                        label: name,
+                        kind: Some(CompletionItemKind::VARIABLE),
+                        detail: Some(format!("{ty}")),
+                        sort_text: Some(format!("0_{}", items.len())),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
 
         for kw in VALEN_KEYWORDS {
             items.push(CompletionItem {
@@ -722,6 +740,24 @@ impl ServerState {
                 range: Some(doc.line_index.span_to_range(def.span)),
             });
         }
+
+        // Search typed bodies for expression type info at cursor
+        if let Some(bodies) = doc.bodies.as_ref() {
+            if let Some(expr) = find_expr_at_offset(bodies, offset) {
+                if let Some(hover_text) = format_typed_expr_hover(expr) {
+                    return Some(Hover {
+                        contents: HoverContents::Scalar(MarkedString::LanguageString(
+                            LanguageString {
+                                language: "valen".to_string(),
+                                value: hover_text,
+                            },
+                        )),
+                        range: Some(doc.line_index.span_to_range(expr.span)),
+                    });
+                }
+            }
+        }
+
         None
     }
 
@@ -823,12 +859,12 @@ pub fn analyze_document(
         &line_index,
     ));
 
-    let hir = if !resolve_result.diagnostics.has_errors() {
+    let (hir, bodies) = if !resolve_result.diagnostics.has_errors() {
         let tc = valen_hir::ty::type_check(&resolve_result.hir, &parse_result.items);
         diags.extend(convert::to_lsp_diagnostics(&tc.diagnostics, &line_index));
-        Some(resolve_result.hir)
+        (Some(resolve_result.hir), Some(tc.bodies))
     } else {
-        Some(resolve_result.hir)
+        (Some(resolve_result.hir), None)
     };
 
     let doc = DocumentState {
@@ -836,6 +872,7 @@ pub fn analyze_document(
         line_index,
         items: parse_result.items,
         hir,
+        bodies,
     };
 
     (doc, diags)
@@ -1345,6 +1382,566 @@ fn classify_token(kind: &TokenKind) -> Option<u32> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Inlay hints
+// ---------------------------------------------------------------------------
+
+/// Build inlay hints for the requested range of a document.
+fn build_inlay_hints(doc: &DocumentState, range: Range) -> Vec<InlayHint> {
+    let bodies = match doc.bodies.as_ref() {
+        Some(b) => b,
+        None => return Vec::new(),
+    };
+
+    let mut hints = Vec::new();
+
+    for body in bodies.values() {
+        collect_hints_from_body(body, doc, range, &mut hints);
+    }
+
+    hints
+}
+
+/// Recursively collect inlay hints from a typed body.
+fn collect_hints_from_body(
+    body: &TypedBody,
+    doc: &DocumentState,
+    range: Range,
+    hints: &mut Vec<InlayHint>,
+) {
+    for stmt in &body.stmts {
+        collect_hints_from_stmt(stmt, doc, range, hints);
+    }
+    if let Some(tail) = &body.tail {
+        collect_hints_from_expr(tail, doc, range, hints);
+    }
+}
+
+/// Collect inlay hints from a single typed statement.
+fn collect_hints_from_stmt(
+    stmt: &TypedStmt,
+    doc: &DocumentState,
+    range: Range,
+    hints: &mut Vec<InlayHint>,
+) {
+    match stmt {
+        TypedStmt::Let {
+            has_annotation: false,
+            name,
+            ty,
+            span,
+            init,
+            ..
+        } => {
+            if !ty.is_error() {
+                // Position hint after the variable name.
+                // The span covers the whole let statement; we find the name end
+                // by scanning from span.start for `let [mut] <name>`.
+                let let_text =
+                    &doc.text[span.start as usize..(span.end as usize).min(doc.text.len())];
+                if let Some(name_offset) = find_name_end_in_let(let_text, name) {
+                    let abs_offset = span.start + name_offset as u32;
+                    let pos = doc.line_index.offset_to_position(abs_offset);
+                    if position_in_range(pos, range) {
+                        hints.push(InlayHint {
+                            position: pos,
+                            label: InlayHintLabel::String(format!(": {ty}")),
+                            kind: Some(InlayHintKind::TYPE),
+                            text_edits: None,
+                            tooltip: None,
+                            padding_left: None,
+                            padding_right: None,
+                            data: None,
+                        });
+                    }
+                }
+            }
+            collect_hints_from_expr(init, doc, range, hints);
+        }
+        TypedStmt::Let { init, .. } => {
+            collect_hints_from_expr(init, doc, range, hints);
+        }
+        TypedStmt::Expr(e) | TypedStmt::ExprSemi(e) => {
+            collect_hints_from_expr(e, doc, range, hints);
+        }
+    }
+}
+
+/// Collect inlay hints from a typed expression (recursively).
+fn collect_hints_from_expr(
+    expr: &TypedExpr,
+    doc: &DocumentState,
+    range: Range,
+    hints: &mut Vec<InlayHint>,
+) {
+    match &expr.kind {
+        TypedExprKind::Lambda { params, body } => {
+            // Emit type hints for lambda params that lack an explicit annotation.
+            let lam_text =
+                &doc.text[expr.span.start as usize..(expr.span.end as usize).min(doc.text.len())];
+            for (pname, pty) in params {
+                if !pty.is_error() {
+                    if let Some(rel_end) = find_param_name_end(lam_text, pname) {
+                        // Heuristic: if the source text immediately after the param
+                        // name (before the next `,` or `|`) contains `:`, the user
+                        // wrote an explicit type annotation — skip the hint.
+                        if lambda_param_has_annotation(lam_text, rel_end) {
+                            continue;
+                        }
+                        let abs_offset = expr.span.start + rel_end as u32;
+                        let pos = doc.line_index.offset_to_position(abs_offset);
+                        if position_in_range(pos, range) {
+                            hints.push(InlayHint {
+                                position: pos,
+                                label: InlayHintLabel::String(format!(": {pty}")),
+                                kind: Some(InlayHintKind::TYPE),
+                                text_edits: None,
+                                tooltip: None,
+                                padding_left: None,
+                                padding_right: None,
+                                data: None,
+                            });
+                        }
+                    }
+                }
+            }
+            collect_hints_from_expr(body, doc, range, hints);
+        }
+        TypedExprKind::Block(body) | TypedExprKind::Safe(body) => {
+            collect_hints_from_body(body, doc, range, hints);
+        }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_hints_from_expr(cond, doc, range, hints);
+            collect_hints_from_body(then_branch, doc, range, hints);
+            if let Some(eb) = else_branch {
+                collect_hints_from_expr(eb, doc, range, hints);
+            }
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            collect_hints_from_expr(scrutinee, doc, range, hints);
+            for arm in arms {
+                if let Some(g) = &arm.guard {
+                    collect_hints_from_expr(g, doc, range, hints);
+                }
+                collect_hints_from_expr(&arm.body, doc, range, hints);
+            }
+        }
+        TypedExprKind::For { iter, body, .. } => {
+            collect_hints_from_expr(iter, doc, range, hints);
+            collect_hints_from_body(body, doc, range, hints);
+        }
+        TypedExprKind::While { cond, body } => {
+            collect_hints_from_expr(cond, doc, range, hints);
+            collect_hints_from_body(body, doc, range, hints);
+        }
+        TypedExprKind::Loop { body } => {
+            collect_hints_from_body(body, doc, range, hints);
+        }
+        TypedExprKind::Call { callee, args } => {
+            collect_hints_from_expr(callee, doc, range, hints);
+            for a in args {
+                collect_hints_from_expr(a, doc, range, hints);
+            }
+        }
+        TypedExprKind::MethodCall { receiver, args, .. } => {
+            collect_hints_from_expr(receiver, doc, range, hints);
+            for a in args {
+                collect_hints_from_expr(a, doc, range, hints);
+            }
+        }
+        TypedExprKind::Binary { lhs, rhs, .. } => {
+            collect_hints_from_expr(lhs, doc, range, hints);
+            collect_hints_from_expr(rhs, doc, range, hints);
+        }
+        TypedExprKind::Unary { expr: inner, .. } => {
+            collect_hints_from_expr(inner, doc, range, hints);
+        }
+        TypedExprKind::FieldAccess { receiver, .. } => {
+            collect_hints_from_expr(receiver, doc, range, hints);
+        }
+        TypedExprKind::Assign { target, value } => {
+            collect_hints_from_expr(target, doc, range, hints);
+            collect_hints_from_expr(value, doc, range, hints);
+        }
+        TypedExprKind::Return(Some(inner)) | TypedExprKind::Break(Some(inner)) => {
+            collect_hints_from_expr(inner, doc, range, hints);
+        }
+        TypedExprKind::Try { inner, .. } => {
+            collect_hints_from_expr(inner, doc, range, hints);
+        }
+        TypedExprKind::Range { start, end, .. } => {
+            if let Some(s) = start {
+                collect_hints_from_expr(s, doc, range, hints);
+            }
+            if let Some(e) = end {
+                collect_hints_from_expr(e, doc, range, hints);
+            }
+        }
+        TypedExprKind::StringInterp(parts) => {
+            for part in parts {
+                if let valen_hir::TypedStringPart::Expr(e) = part {
+                    collect_hints_from_expr(e, doc, range, hints);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Find the byte offset (relative to the let statement text) where the variable name ends.
+fn find_name_end_in_let(let_text: &str, name: &str) -> Option<usize> {
+    // Skip `let` keyword and optional `mut`
+    let rest = let_text.strip_prefix("let")?;
+    let rest = rest.trim_start();
+    let rest = rest.strip_prefix("mut ").unwrap_or(rest);
+    let rest = rest.trim_start();
+    if rest.starts_with(name.as_bytes().first().copied().unwrap_or(0) as char)
+        && rest.starts_with(name)
+    {
+        let after_name = &rest[name.len()..];
+        // Make sure the name isn't a prefix of a longer identifier
+        if after_name.is_empty()
+            || !after_name.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
+        {
+            let offset_in_let = let_text.len() - rest.len() + name.len();
+            return Some(offset_in_let);
+        }
+    }
+    None
+}
+
+/// Find the byte offset (relative to the lambda text) where a param name ends.
+fn find_param_name_end(lambda_text: &str, name: &str) -> Option<usize> {
+    // Search for the param name preceded by `|`, `(`, `,`, or whitespace
+    let mut search_from = 0;
+    while search_from < lambda_text.len() {
+        if let Some(pos) =
+            lambda_text[search_from..].find(name.as_bytes().first().copied().unwrap_or(0) as char)
+        {
+            let abs_pos = search_from + pos;
+            let candidate = &lambda_text[abs_pos..];
+            if let Some(after) = candidate.strip_prefix(name) {
+                let before_ok = abs_pos == 0
+                    || lambda_text.as_bytes()[abs_pos - 1].is_ascii_whitespace()
+                    || lambda_text.as_bytes()[abs_pos - 1] == b'|'
+                    || lambda_text.as_bytes()[abs_pos - 1] == b'('
+                    || lambda_text.as_bytes()[abs_pos - 1] == b',';
+                let after_ok = after.is_empty()
+                    || !after.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_');
+                if before_ok && after_ok {
+                    return Some(abs_pos + name.len());
+                }
+            }
+            search_from = abs_pos + 1;
+        } else {
+            break;
+        }
+    }
+    None
+}
+
+/// Check whether a lambda parameter at the given position has an explicit type annotation.
+///
+/// Looks at the source text after the param name (up to the next `,` or `|`) for a `:`.
+fn lambda_param_has_annotation(lambda_text: &str, name_end: usize) -> bool {
+    let rest = &lambda_text[name_end..];
+    for ch in rest.chars() {
+        match ch {
+            ':' => return true,
+            ',' | '|' | ')' => return false,
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Check whether a position falls within the given range (inclusive start, exclusive end).
+fn position_in_range(pos: Position, range: Range) -> bool {
+    if pos.line < range.start.line || pos.line > range.end.line {
+        return false;
+    }
+    if pos.line == range.start.line && pos.character < range.start.character {
+        return false;
+    }
+    if pos.line == range.end.line && pos.character > range.end.character {
+        return false;
+    }
+    true
+}
+
+// ---------------------------------------------------------------------------
+// Typed expression search (for hover / completion)
+// ---------------------------------------------------------------------------
+
+/// Find the narrowest typed expression whose span contains the given byte offset.
+fn find_expr_at_offset(
+    bodies: &indexmap::IndexMap<valen_hir::DefId, TypedBody>,
+    offset: u32,
+) -> Option<&TypedExpr> {
+    let mut best: Option<&TypedExpr> = None;
+    for body in bodies.values() {
+        find_expr_in_body(body, offset, &mut best);
+    }
+    best
+}
+
+fn find_expr_in_body<'a>(body: &'a TypedBody, offset: u32, best: &mut Option<&'a TypedExpr>) {
+    for stmt in &body.stmts {
+        match stmt {
+            TypedStmt::Let { init, .. } => find_expr_in_expr(init, offset, best),
+            TypedStmt::Expr(e) | TypedStmt::ExprSemi(e) => find_expr_in_expr(e, offset, best),
+        }
+    }
+    if let Some(tail) = &body.tail {
+        find_expr_in_expr(tail, offset, best);
+    }
+}
+
+fn find_expr_in_expr<'a>(expr: &'a TypedExpr, offset: u32, best: &mut Option<&'a TypedExpr>) {
+    // Spans are half-open intervals [start, end)
+    if offset < expr.span.start || offset >= expr.span.end {
+        return;
+    }
+    // This expression contains the offset — check if it's narrower than current best
+    let dominated = match best {
+        Some(prev) => expr.span.len() < prev.span.len(),
+        None => true,
+    };
+    if dominated {
+        *best = Some(expr);
+    }
+    // Recurse into sub-expressions
+    match &expr.kind {
+        TypedExprKind::Block(body) | TypedExprKind::Safe(body) => {
+            find_expr_in_body(body, offset, best);
+        }
+        TypedExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            find_expr_in_expr(cond, offset, best);
+            find_expr_in_body(then_branch, offset, best);
+            if let Some(eb) = else_branch {
+                find_expr_in_expr(eb, offset, best);
+            }
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            find_expr_in_expr(scrutinee, offset, best);
+            for arm in arms {
+                if let Some(g) = &arm.guard {
+                    find_expr_in_expr(g, offset, best);
+                }
+                find_expr_in_expr(&arm.body, offset, best);
+            }
+        }
+        TypedExprKind::For { iter, body, .. } => {
+            find_expr_in_expr(iter, offset, best);
+            find_expr_in_body(body, offset, best);
+        }
+        TypedExprKind::While { cond, body } => {
+            find_expr_in_expr(cond, offset, best);
+            find_expr_in_body(body, offset, best);
+        }
+        TypedExprKind::Loop { body } => {
+            find_expr_in_body(body, offset, best);
+        }
+        TypedExprKind::Lambda { body, .. } => {
+            find_expr_in_expr(body, offset, best);
+        }
+        TypedExprKind::Call { callee, args } => {
+            find_expr_in_expr(callee, offset, best);
+            for a in args {
+                find_expr_in_expr(a, offset, best);
+            }
+        }
+        TypedExprKind::MethodCall { receiver, args, .. } => {
+            find_expr_in_expr(receiver, offset, best);
+            for a in args {
+                find_expr_in_expr(a, offset, best);
+            }
+        }
+        TypedExprKind::Binary { lhs, rhs, .. } => {
+            find_expr_in_expr(lhs, offset, best);
+            find_expr_in_expr(rhs, offset, best);
+        }
+        TypedExprKind::Unary { expr: inner, .. } => {
+            find_expr_in_expr(inner, offset, best);
+        }
+        TypedExprKind::FieldAccess { receiver, .. } => {
+            find_expr_in_expr(receiver, offset, best);
+        }
+        TypedExprKind::Assign { target, value } => {
+            find_expr_in_expr(target, offset, best);
+            find_expr_in_expr(value, offset, best);
+        }
+        TypedExprKind::Return(Some(inner)) | TypedExprKind::Break(Some(inner)) => {
+            find_expr_in_expr(inner, offset, best);
+        }
+        TypedExprKind::Try { inner, .. } => {
+            find_expr_in_expr(inner, offset, best);
+        }
+        TypedExprKind::Range { start, end, .. } => {
+            if let Some(s) = start {
+                find_expr_in_expr(s, offset, best);
+            }
+            if let Some(e) = end {
+                find_expr_in_expr(e, offset, best);
+            }
+        }
+        TypedExprKind::StringInterp(parts) => {
+            for part in parts {
+                if let valen_hir::TypedStringPart::Expr(e) = part {
+                    find_expr_in_expr(e, offset, best);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Local variable collection (for completion)
+// ---------------------------------------------------------------------------
+
+/// Collect local variables visible at the given offset from typed bodies.
+///
+/// Only walks the body whose enclosing function's span contains `offset`,
+/// so variables from unrelated functions are excluded.
+fn collect_local_variables(
+    bodies: &indexmap::IndexMap<valen_hir::DefId, TypedBody>,
+    offset: u32,
+    hir: Option<&valen_hir::Hir>,
+) -> Vec<(String, Ty)> {
+    let mut vars: indexmap::IndexMap<String, Ty> = indexmap::IndexMap::new();
+
+    // Find which DefId's span contains the cursor, then walk only that body.
+    if let Some(hir) = hir {
+        for (&def_id, body) in bodies {
+            if let Some(def) = hir.defs.get(&def_id) {
+                if offset >= def.span.start && offset < def.span.end {
+                    let mut raw = Vec::new();
+                    collect_vars_from_body(body, offset, &mut raw);
+                    // IndexMap::insert overwrites, so the last (innermost) binding wins
+                    for (name, ty) in raw {
+                        vars.insert(name, ty);
+                    }
+                }
+            }
+        }
+    } else {
+        // Fallback: no HIR, walk all bodies (best effort)
+        for body in bodies.values() {
+            let mut raw = Vec::new();
+            collect_vars_from_body(body, offset, &mut raw);
+            for (name, ty) in raw {
+                vars.insert(name, ty);
+            }
+        }
+    }
+
+    vars.into_iter().collect()
+}
+
+fn collect_vars_from_body(body: &TypedBody, offset: u32, vars: &mut Vec<(String, Ty)>) {
+    for stmt in &body.stmts {
+        match stmt {
+            TypedStmt::Let {
+                name,
+                ty,
+                span,
+                init,
+                ..
+            } => {
+                // Only include let bindings after the initializer has ended,
+                // so the variable is not visible inside its own initializer.
+                if span.start < offset && offset >= init.span.end {
+                    vars.push((name.to_string(), ty.clone()));
+                }
+                // Also recurse into init expression for nested blocks
+                collect_vars_from_expr(init, offset, vars);
+            }
+            TypedStmt::Expr(e) | TypedStmt::ExprSemi(e) => {
+                collect_vars_from_expr(e, offset, vars);
+            }
+        }
+    }
+    if let Some(tail) = &body.tail {
+        collect_vars_from_expr(tail, offset, vars);
+    }
+}
+
+fn collect_vars_from_expr(expr: &TypedExpr, offset: u32, vars: &mut Vec<(String, Ty)>) {
+    // Only recurse into blocks/bodies that contain the offset (half-open [start, end))
+    if offset < expr.span.start || offset >= expr.span.end {
+        return;
+    }
+    match &expr.kind {
+        TypedExprKind::Block(body) | TypedExprKind::Safe(body) => {
+            collect_vars_from_body(body, offset, vars);
+        }
+        TypedExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_vars_from_body(then_branch, offset, vars);
+            if let Some(eb) = else_branch {
+                collect_vars_from_expr(eb, offset, vars);
+            }
+        }
+        TypedExprKind::For { var, iter, body } => {
+            // The iteration variable is in scope inside the body
+            if body.stmts.first().is_some_and(|s| match s {
+                TypedStmt::Let { span, .. } => span.start <= offset,
+                TypedStmt::Expr(e) | TypedStmt::ExprSemi(e) => e.span.start <= offset,
+            }) || body.tail.as_ref().is_some_and(|t| t.span.start <= offset)
+            {
+                vars.push((var.to_string(), iter.ty.clone()));
+            }
+            collect_vars_from_body(body, offset, vars);
+        }
+        TypedExprKind::While { body, .. } => {
+            collect_vars_from_body(body, offset, vars);
+        }
+        TypedExprKind::Loop { body } => {
+            collect_vars_from_body(body, offset, vars);
+        }
+        TypedExprKind::Match { arms, .. } => {
+            for arm in arms {
+                collect_vars_from_expr(&arm.body, offset, vars);
+            }
+        }
+        TypedExprKind::Lambda { body, .. } => {
+            collect_vars_from_expr(body, offset, vars);
+        }
+        _ => {}
+    }
+}
+
+/// Format a typed expression for hover display.
+fn format_typed_expr_hover(expr: &TypedExpr) -> Option<String> {
+    if expr.ty.is_error() {
+        return None;
+    }
+    match &expr.kind {
+        TypedExprKind::LocalVar(name) => Some(format!("(variable) {name}: {}", expr.ty)),
+        TypedExprKind::IntLit(v) => Some(format!("{v}: {}", expr.ty)),
+        TypedExprKind::LongLit(v) => Some(format!("{v}: {}", expr.ty)),
+        TypedExprKind::FloatLit(v) => Some(format!("{v}: {}", expr.ty)),
+        TypedExprKind::Float32Lit(v) => Some(format!("{v}: {}", expr.ty)),
+        TypedExprKind::CharLit(v) => Some(format!("'{v}': {}", expr.ty)),
+        TypedExprKind::StringLit(v) => Some(format!("\"{v}\": {}", expr.ty)),
+        TypedExprKind::BoolLit(v) => Some(format!("{v}: {}", expr.ty)),
+        TypedExprKind::UnitLit => Some(format!("(): {}", expr.ty)),
+        _ => Some(format!("{}", expr.ty)),
+    }
+}
+
 /// Valen language keywords offered for completion.
 const VALEN_KEYWORDS: &[&str] = &[
     "fn",
@@ -1418,6 +2015,7 @@ impl LanguageServer for ServerState {
                         ..Default::default()
                     }),
                     hover_provider: Some(HoverProviderCapability::Simple(true)),
+                    inlay_hint_provider: Some(OneOf::Left(true)),
                     semantic_tokens_provider: Some(
                         SemanticTokensServerCapabilities::SemanticTokensOptions(
                             SemanticTokensOptions {
@@ -1535,6 +2133,18 @@ impl LanguageServer for ServerState {
     {
         let uri = params.text_document.uri;
         let result = self.build_semantic_tokens(&uri);
+        Box::pin(async { Ok(result) })
+    }
+
+    fn inlay_hint(
+        &mut self,
+        params: InlayHintParams,
+    ) -> futures::future::BoxFuture<'static, Result<Option<Vec<InlayHint>>, Self::Error>> {
+        let uri = params.text_document.uri;
+        let result = self
+            .documents
+            .get(&uri)
+            .map(|doc| build_inlay_hints(doc, params.range));
         Box::pin(async { Ok(result) })
     }
 }
