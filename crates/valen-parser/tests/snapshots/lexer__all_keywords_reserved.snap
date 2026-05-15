@@ -1,6 +1,6 @@
 ---
 source: crates/valen-parser/tests/lexer.rs
-expression: "fmt(\"fn let mut self return if else match class data enum trait impl pub internal private open override abstract sealed package import for in while loop as\")"
+expression: "fmt(\"fn let mut self return if else match class data enum trait impl pub internal private open override abstract sealed package import for in while loop as static void new this super null throw try catch finally extends implements\")"
 ---
 Fn @ 0..2
 Let @ 3..6
@@ -29,3 +29,15 @@ In @ 134..136
 While @ 137..142
 Loop @ 143..147
 As @ 148..150
+Static @ 151..157
+Void @ 158..162
+New @ 163..166
+This @ 167..171
+Super @ 172..177
+Null @ 178..182
+Throw @ 183..188
+Try @ 189..192
+Catch @ 193..198
+Finally @ 199..206
+Extends @ 207..214
+Implements @ 215..225

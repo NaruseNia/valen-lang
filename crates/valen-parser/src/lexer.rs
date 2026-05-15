@@ -99,6 +99,31 @@ enum RawTok {
     Type,
     #[token("annotation")]
     Annotation,
+    // JVM reserved words — cannot be used as identifiers
+    #[token("static")]
+    Static,
+    #[token("void")]
+    Void,
+    #[token("new")]
+    New,
+    #[token("this")]
+    This,
+    #[token("super")]
+    Super,
+    #[token("null")]
+    Null,
+    #[token("throw")]
+    Throw,
+    #[token("try")]
+    Try,
+    #[token("catch")]
+    Catch,
+    #[token("finally")]
+    Finally,
+    #[token("extends")]
+    Extends,
+    #[token("implements")]
+    Implements,
 
     // Punctuation
     #[token("(")]
@@ -434,6 +459,18 @@ fn map_token(raw: RawTok) -> TokenKind {
         RawTok::TypeAlias => TokenKind::TypeAlias,
         RawTok::Type => TokenKind::Type,
         RawTok::Annotation => TokenKind::Annotation,
+        RawTok::Static => TokenKind::Static,
+        RawTok::Void => TokenKind::Void,
+        RawTok::New => TokenKind::New,
+        RawTok::This => TokenKind::This,
+        RawTok::Super => TokenKind::Super,
+        RawTok::Null => TokenKind::Null,
+        RawTok::Throw => TokenKind::Throw,
+        RawTok::Try => TokenKind::Try,
+        RawTok::Catch => TokenKind::Catch,
+        RawTok::Finally => TokenKind::Finally,
+        RawTok::Extends => TokenKind::Extends,
+        RawTok::Implements => TokenKind::Implements,
         // Punctuation
         RawTok::LParen => TokenKind::LParen,
         RawTok::RParen => TokenKind::RParen,

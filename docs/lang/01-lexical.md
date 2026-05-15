@@ -20,6 +20,12 @@ as safe annotation typealias type
 
 予約語（将来用）：`suspend async await yield`
 
+JVM 予約語（Valen では使わないが、識別子としても使用不可）：
+```
+static void new this super null
+throw try catch finally extends implements
+```
+
 ### `as` キーワードの用途
 
 MVP では `as` は **import alias 専用**:
