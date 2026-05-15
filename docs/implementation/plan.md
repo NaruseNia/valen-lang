@@ -63,7 +63,7 @@ Phase 0（基盤整備）完了済み。Phase 1（MVP）に向けて、コンパ
 | REQ-TRAIT-004 | UFCS 統一 | TASK-004 | Full |
 | REQ-FAIL-001 | 役割分離 | TASK-005, TASK-012 | Full |
 | REQ-FAIL-002 | Error trait | TASK-012 | Full |
-| REQ-FAIL-003 | ? 演算子 | TASK-005, TASK-010 | Full |
+| REQ-FAIL-003 | ? 演算子 | TASK-005, TASK-010 | Partial (型チェックのみ、codegen未実装) |
 | REQ-FAIL-004 | safe ブロック | TASK-011 | Full |
 | REQ-FAIL-005 | Java null → T? | TASK-011 | Full |
 | REQ-EMIT-001 | Java 21 class file | (Phase 0 完了) | Full |

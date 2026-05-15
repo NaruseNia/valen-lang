@@ -4,7 +4,7 @@
 
 Valen コンパイラのバイトコード生成（emit）に関する要件。JVM class file の生成、enum の ABI 戦略、Java 25 opt-in サポートを定義する。
 
-**関連仕様:** [spec/16-jvm-target.md](../spec/16-jvm-target.md)
+**関連仕様:** [lang/16-jvm-target.md](../lang/16-jvm-target.md)
 **Phase:** MVP（Phase 1）/ Phase 1.5
 
 ---

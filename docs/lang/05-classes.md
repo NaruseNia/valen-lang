@@ -162,12 +162,16 @@ impl ShowFmt for User {
 
 強制ではないため、コンパイルエラーにはしない（fmt / lint レベルで指摘する程度）。ただし、同一ファイルに `parse(s)` と `User::parse(s)` を並置するのは設計の赤信号。
 
-## 5.8 MVP 除外（Phase 1.5+ 送り）
+## 5.8 Phase 1.5 で実装済み
+
+- `sealed trait`（§7.5 参照）
+- `annotation class` 宣言構文／annotation 付与（§20 参照）
+- デフォルト引数（§4.3 参照）
+
+## 5.9 未実装（Phase 2+ 送り）
 
 - `init { ... }` ブロック
 - secondary constructor（`constructor(...) { ... }` 相当）
 - field override（`override val` 相当）
-- `sealed trait`
 - nested / inner class
 - primary constructor param の `internal` / `private` 個別指定
-- annotation 宣言構文／annotation 読み取り API

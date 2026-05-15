@@ -4,7 +4,7 @@
 
 Valen と Java の相互運用（interop）に関する要件。Java クラスの import・利用、`safe {}` による例外変換、`@valen.Closed` アノテーションによる Java sealed 型の exhaustive match を定義する。
 
-**関連仕様:** [LANGUAGE_SPEC.md](../LANGUAGE_SPEC.md) / [spec/08-failure.md](../spec/08-failure.md)
+**関連仕様:** [LANGUAGE_SPEC.md](../LANGUAGE_SPEC.md) / [lang/08-failure.md](../lang/08-failure.md)
 **Phase:** MVP（Phase 1）
 
 ---

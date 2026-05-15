@@ -28,49 +28,49 @@ Valen は JVM をターゲットとする新規プログラミング言語。ADT
 | ID | タイトル | 優先度 | ステータス |
 |----|---------|--------|-----------|
 | REQ-SYNTAX-001 | キーワード・識別子・リテラルの字句定義 | Must | Done |
-| REQ-SYNTAX-002 | セミコロンルール（Rust 流3分類） | Must | Draft |
+| REQ-SYNTAX-002 | セミコロンルール（Rust 流3分類） | Must | Done |
 | REQ-SYNTAX-003 | コメント（単行・ブロック・doc） | Must | Done |
 | REQ-TYPE-001 | プリミティブ名義型（Int〜Nothing） | Must | Done |
 | REQ-TYPE-002 | リテラルデフォルト型（42=Int, 3.14=Double, サフィックス） | Must | Done |
 | REQ-TYPE-003 | 暗黙数値変換なし・明示変換メソッド | Must | Done |
 | REQ-TYPE-004 | 等値比較（== 構造 / === 参照） | Must | Done |
 | REQ-TYPE-005 | Option<T> による null 一本化（T? 糖衣） | Must | Done |
-| REQ-TYPE-006 | ジェネリクス（erasure, in/out variance） | Must | Draft |
-| REQ-TYPE-007 | typealias（所有権なし） | Should | Draft |
+| REQ-TYPE-006 | ジェネリクス（erasure, in/out variance） | Must | Done |
+| REQ-TYPE-007 | typealias（所有権なし） | Should | Done |
 | REQ-TYPE-008 | ローカル型推論あり・fn シグネチャ明示 | Must | Done |
 | REQ-CLASS-001 | class + primary constructor | Must | Done |
 | REQ-CLASS-002 | data class（equals/hashCode/toString/copy 自動生成） | Must | Done |
-| REQ-CLASS-003 | 継承（open/abstract/sealed opt-in、単一継承+複数 trait） | Must | Draft |
-| REQ-CLASS-004 | sealed class（closed OOP hierarchy） | Must | Draft |
+| REQ-CLASS-003 | 継承（open/abstract/sealed opt-in、単一継承+複数 trait） | Must | Done |
+| REQ-CLASS-004 | sealed class（closed OOP hierarchy） | Must | Done |
 | REQ-CLASS-005 | メソッド解決規則（class 本体優先→trait→UFCS） | Must | Done |
 | REQ-CLASS-006 | 可視性（pub/internal/private、module 単位） | Must | Done |
-| REQ-CLASS-007 | package 宣言必須 | Must | Draft |
-| REQ-CLASS-008 | import（単一型 + alias、MVP） | Must | Draft |
+| REQ-CLASS-007 | package 宣言必須 | Must | Done |
+| REQ-CLASS-008 | import（単一型 + alias、MVP） | Must | Done |
 | REQ-ADT-001 | enum（Rust 型 ADT、payload あり/なし） | Must | Done |
 | REQ-ADT-002 | exhaustive match（リテラル/分解/ガード/範囲/or/@束縛） | Must | Done |
 | REQ-ADT-003 | enum Java ABI（sealed interface + record/singleton） | Must | Done |
-| REQ-TRAIT-001 | trait 定義と impl ブロック（inherent impl なし） | Must | Draft |
-| REQ-TRAIT-002 | trait 充足は impl ブロックのみ | Must | Draft |
+| REQ-TRAIT-001 | trait 定義と impl ブロック（inherent impl なし） | Must | Done |
+| REQ-TRAIT-002 | trait 充足は impl ブロックのみ | Must | Done |
 | REQ-TRAIT-003 | orphan rule（module 所有、blanket impl 禁止） | Must | Done |
-| REQ-TRAIT-004 | UFCS（Trait::method(receiver, args) 一本化） | Must | Draft |
-| REQ-FAIL-001 | Option/Result/panic/Exception の役割分離 | Must | Draft |
-| REQ-FAIL-002 | Error trait（E: Error 制約） | Must | Draft |
-| REQ-FAIL-003 | ? 演算子（同一E型のみ伝播） | Must | Draft |
-| REQ-FAIL-004 | safe {} ブロック（Java 例外→Result） | Must | Draft |
-| REQ-FAIL-005 | safe {} 内 Java 戻り値は T?（Option<T>） | Must | Draft |
+| REQ-TRAIT-004 | UFCS（Trait::method(receiver, args) 一本化） | Must | Done |
+| REQ-FAIL-001 | Option/Result/panic/Exception の役割分離 | Must | Done |
+| REQ-FAIL-002 | Error trait（E: Error 制約） | Must | Done |
+| REQ-FAIL-003 | ? 演算子（同一E型のみ伝播） | Must | Partial |
+| REQ-FAIL-004 | safe {} ブロック（Java 例外→Result） | Must | Done |
+| REQ-FAIL-005 | safe {} 内 Java 戻り値は T?（Option<T>） | Must | Done |
 | REQ-EMIT-001 | Java 21 class file 生成 | Must | Done |
 | REQ-EMIT-002 | enum → sealed interface + record/singleton emit | Must | Done |
-| REQ-EMIT-003 | class → .class emit（default constructor） | Must | Done |
+| REQ-EMIT-003 | class / data class → .class emit | Must | Done |
 | REQ-EMIT-004 | Java 25 opt-in サポート | Should | Draft |
 | REQ-TOOL-001 | valenc CLI（compile / check / version） | Must | Done |
 | REQ-TOOL-002 | Gradle プラグイン（compileValen タスク） | Must | Draft |
-| REQ-TOOL-003 | LSP サーバー（syntax error + diagnostics + goto def） | Must | Draft |
-| REQ-TOOL-004 | valenfmt（最小版） | Should | Draft |
-| REQ-INTEROP-001 | Java クラスの import と利用 | Must | Draft |
-| REQ-INTEROP-002 | safe {} による例外変換 | Must | Draft |
-| REQ-INTEROP-003 | @valen.Closed で Java sealed を exhaustive match | Must | Draft |
-| REQ-STDLIB-001 | valen.core（Option, Result, Error, Iterator） | Must | Draft |
-| REQ-STDLIB-002 | valen.collections（List/Map/Set = java.util alias） | Must | Draft |
+| REQ-TOOL-003 | LSP サーバー（syntax error + diagnostics + goto def） | Must | Done |
+| REQ-TOOL-004 | valenfmt（最小版） | Should | Done |
+| REQ-INTEROP-001 | Java クラスの import と利用 | Must | Done |
+| REQ-INTEROP-002 | safe {} による例外変換 | Must | Done |
+| REQ-INTEROP-003 | @valen.Closed で Java sealed を exhaustive match | Must | Done |
+| REQ-STDLIB-001 | valen.core（Option, Result, Error, Iterator） | Must | Done |
+| REQ-STDLIB-002 | valen.collections（List/Map/Set = java.util alias） | Must | Done |
 | REQ-STDLIB-003 | valen.io（基本IOラッパー） | Should | Draft |
 
 ## スコープ別要件定義書

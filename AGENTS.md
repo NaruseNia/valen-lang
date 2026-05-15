@@ -25,11 +25,12 @@ AI エージェント向け作業ガイドライン。Valen 言語プロジェ�
 ## 確定事項（2026-05 時点）
 
 - **要件定義:** [docs/requirements/overview.md](docs/requirements/overview.md) — 10 スコープ、45 要件（REQ-{SCOPE}-{SEQ} 形式）
-- **言語仕様:** [docs/LANGUAGE_SPEC.md](docs/LANGUAGE_SPEC.md) → [docs/spec/](docs/spec/) 配下の詳細仕様
-- **アーキテクチャ:** [docs/specifications/architecture.md](docs/specifications/architecture.md)
+- **言語仕様:** [docs/LANGUAGE_SPEC.md](docs/LANGUAGE_SPEC.md) → [docs/lang/](docs/lang/) 配下の詳細仕様
+- **アーキテクチャ:** [docs/internals/architecture.md](docs/internals/architecture.md)
 - **実装計画:** [docs/implementation/plan.md](docs/implementation/plan.md) — 17 タスク、5 マイルストーン、トレーサビリティマトリクス
 - **Phase 計画:** [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)
-- **grill-me 4巡確定事項:** [docs/spec/18-open-questions.md](docs/spec/18-open-questions.md) 末尾の決定サマリ表
+- **ユーザーガイド:** [docs/guide/](docs/guide/) — 言語ユーザー＋コントリビュータ向け
+- **grill-me 4巡確定事項:** [docs/lang/18-open-questions.md](docs/lang/18-open-questions.md) 末尾の決定サマリ表
 
 ## ディレクトリ構成
 
@@ -45,10 +46,14 @@ valen-lang/
 │   ├── valen-lsp/          # LSP サーバー
 │   └── valenfmt/           # コードフォーマッタ
 ├── docs/
+│   ├── guide/              # ユーザー＋コントリビュータ向けガイド
+│   ├── lang/               # 言語仕様詳細（01-lexical 〜 20-annotations）
+│   │   └── future/         # 未実装仕様（concurrency, DSL 等）
+│   ├── internals/          # コンパイラアーキテクチャ仕様
 │   ├── requirements/       # 要件定義書（REQ-{SCOPE}-{SEQ}）
-│   ├── specifications/     # アーキテクチャ仕様
-│   ├── implementation/     # 実装計画・タスク（TASK-{SEQ}）
-│   ├── spec/               # 言語仕様詳細（01-lexical 〜 20-annotations）
+│   ├── implementation/     # 実装計画（plan.md, phase-1.5-plan.md）
+│   ├── archive/            # 完了済みタスク・調査メモ
+│   ├── vep/                # Valen Enhancement Proposals
 │   ├── LANGUAGE_SPEC.md    # 仕様インデックス
 │   └── IMPLEMENTATION_PLAN.md # Phase 計画
 ├── gradle-plugin/          # Gradle プラグイン（Kotlin、未着手）
@@ -126,11 +131,11 @@ mise run build            # ビルド確認（リリース前は mise run build:
 作業完了時、以下のドキュメントに影響する変更がないか確認し、必要なら更新するかユーザーに確認すること:
 
 - `docs/requirements/` — 要件の追加・変更・ステータス更新（Draft → Done 等）
-- `docs/specifications/` — アーキテクチャ変更（crate 追加、パイプライン変更等）
+- `docs/internals/` — アーキテクチャ変更（crate 追加、パイプライン変更等）
 - `docs/implementation/plan.md` — タスク完了、新規タスク追加、マイルストーン進捗
-- `docs/spec/` — 言語仕様の変更・追加
+- `docs/lang/` — 言語仕様の変更・追加
 - `docs/IMPLEMENTATION_PLAN.md` — Phase 進捗の更新
-- `docs/spec/18-open-questions.md` — 仕様課題の解決・追加
+- `docs/lang/18-open-questions.md` — 仕様課題の解決・追加
 
 特に parser/HIR/codegen の実装が進んだ際は、対応する TASK の完了や REQ のステータス更新を忘れずに行う。
 
