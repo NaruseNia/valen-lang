@@ -236,7 +236,7 @@ impl ServerState {
         };
 
         let receiver = extract_receiver_before_dot(before);
-        let type_name = self.resolve_receiver_type(doc, hir, receiver);
+        let type_name = self.resolve_receiver_type(doc, hir, receiver, before);
 
         if let Some(tn) = &type_name {
             // Fields from class/data class ctor params
@@ -304,9 +304,10 @@ impl ServerState {
         doc: &DocumentState,
         hir: &valen_hir::Hir,
         receiver: &str,
+        before: &str,
     ) -> Option<String> {
         if receiver == "self" {
-            return self.find_enclosing_class(doc, hir);
+            return self.find_enclosing_type(doc, before);
         }
 
         // Check if receiver is a type name directly
@@ -340,20 +341,8 @@ impl ServerState {
         None
     }
 
-    fn find_enclosing_class(&self, _doc: &DocumentState, hir: &valen_hir::Hir) -> Option<String> {
-        // Heuristic: return the first user-defined class/data class
-        for def in hir.defs.values() {
-            if hir.prelude_ids.contains(&def.id) {
-                continue;
-            }
-            match &def.kind {
-                DefKind::Class(_) | DefKind::DataClass(_) => {
-                    return Some(def.name.to_string());
-                }
-                _ => {}
-            }
-        }
-        None
+    fn find_enclosing_type(&self, _doc: &DocumentState, before: &str) -> Option<String> {
+        find_enclosing_type_from_source(before)
     }
 
     fn build_type_completions(&self, doc: &DocumentState) -> Vec<CompletionItem> {
@@ -748,6 +737,57 @@ const BUILTIN_TYPES: &[&str] = &[
     "Option", "Result",
 ];
 
+fn find_enclosing_type_from_source(source: &str) -> Option<String> {
+    // Walk backwards from end of source (where cursor is during completion)
+    // looking for the nearest `impl ... for TypeName` or `class TypeName`
+    for line in source.lines().rev() {
+        let trimmed = line.trim();
+
+        // impl Trait for TypeName {
+        if let Some(rest) = trimmed.strip_prefix("impl ") {
+            if let Some(for_idx) = rest.find(" for ") {
+                let after_for = rest[for_idx + 5..].trim();
+                let type_name = after_for
+                    .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                    .next()
+                    .unwrap_or("");
+                if !type_name.is_empty() {
+                    return Some(type_name.to_string());
+                }
+            }
+        }
+
+        // [pub] [open|abstract|sealed] class TypeName
+        let rest = trimmed
+            .strip_prefix("pub ")
+            .unwrap_or(trimmed);
+        let rest = rest
+            .strip_prefix("open ")
+            .or_else(|| rest.strip_prefix("abstract "))
+            .or_else(|| rest.strip_prefix("sealed "))
+            .unwrap_or(rest);
+        if let Some(after_class) = rest.strip_prefix("class ") {
+            let type_name = after_class
+                .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                .next()
+                .unwrap_or("");
+            if !type_name.is_empty() {
+                return Some(type_name.to_string());
+            }
+        }
+        if let Some(after_data) = rest.strip_prefix("data class ") {
+            let type_name = after_data
+                .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                .next()
+                .unwrap_or("");
+            if !type_name.is_empty() {
+                return Some(type_name.to_string());
+            }
+        }
+    }
+    None
+}
+
 fn tyref_to_type_name(ty: &valen_hir::TyRef) -> Option<String> {
     match ty {
         valen_hir::TyRef::Named(n) => Some(n.to_string()),
@@ -1134,7 +1174,11 @@ impl LanguageServer for ServerState {
                     )),
                     definition_provider: Some(OneOf::Left(true)),
                     completion_provider: Some(CompletionOptions {
-                        trigger_characters: Some(vec![".".to_string(), ":".to_string()]),
+                        trigger_characters: Some(vec![
+                            ".".to_string(),
+                            ":".to_string(),
+                            " ".to_string(),
+                        ]),
                         ..Default::default()
                     }),
                     hover_provider: Some(HoverProviderCapability::Simple(true)),
