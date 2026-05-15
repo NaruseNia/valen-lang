@@ -529,10 +529,7 @@ fn emit_body(cp: &mut ConstantPool, body: &JvmMethodBody) -> Result<EmitBodyResu
                 }
 
                 // Unconditional control transfer: commit block and reset.
-                if matches!(
-                    op,
-                    JvmOp::Goto(_) | JvmOp::Return(_) | JvmOp::AThrow
-                ) {
+                if matches!(op, JvmOp::Goto(_) | JvmOp::Return(_) | JvmOp::AThrow) {
                     global_max_stack = global_max_stack.max(block_max);
                     block_stack = 0;
                     block_max = 0;

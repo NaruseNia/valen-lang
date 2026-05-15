@@ -152,8 +152,7 @@ impl ServerState {
                             // Prefer the def whose span is closest to (and contains) the cursor
                             let prev_contains =
                                 prev.span.start <= offset && offset <= prev.span.end;
-                            let this_contains =
-                                def.span.start <= offset && offset <= def.span.end;
+                            let this_contains = def.span.start <= offset && offset <= def.span.end;
                             if this_contains && !prev_contains {
                                 best = Some(def);
                             } else if this_contains
@@ -733,7 +732,11 @@ impl ServerState {
     /// Produce semantic tokens for the entire document using the lexer.
     fn build_semantic_tokens(&self, uri: &Url) -> Option<SemanticTokensResult> {
         let doc = self.documents.get(uri)?;
-        let file_id = self.file_ids.get(uri).copied().unwrap_or(valen_ast::FileId(0));
+        let file_id = self
+            .file_ids
+            .get(uri)
+            .copied()
+            .unwrap_or(valen_ast::FileId(0));
         let (tokens, _) = valen_parser::lexer::lex(&doc.text, file_id);
 
         let mut result: Vec<SemanticToken> = Vec::new();
@@ -748,8 +751,8 @@ impl ServerState {
 
             let start_pos = doc.line_index.offset_to_position(span.start);
             // LSP requires token length in UTF-16 code units, not bytes.
-            let token_text = &doc.text
-                [span.start as usize..(span.end as usize).min(doc.text.len())];
+            let token_text =
+                &doc.text[span.start as usize..(span.end as usize).min(doc.text.len())];
             let length = token_text.encode_utf16().count() as u32;
             if length == 0 {
                 continue;
@@ -1139,10 +1142,7 @@ fn find_vln_files_inner(
                 continue; // Cycle detection — already visited
             }
             if canonical.is_dir() {
-                let name = canonical
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("");
+                let name = canonical.file_name().and_then(|n| n.to_str()).unwrap_or("");
                 if !SKIP_DIRS.contains(&name) {
                     find_vln_files_inner(&canonical, workspace_root, seen, files);
                 }

@@ -6,8 +6,8 @@ use valen_ast::{self, BinaryOp, Span, UnaryOp};
 use valen_diagnostics::{DiagCode, Diagnostics};
 
 use crate::{
-    tyref_to_ty, tyref_to_ty_generic, DefId, DefKind, Hir, PrimTy, Ty, TyRef, TypedBody,
-    TypedExpr, TypedExprKind, TypedMatchArm, TypedStmt, TypedStringPart,
+    tyref_to_ty, tyref_to_ty_generic, DefId, DefKind, Hir, PrimTy, Ty, TyRef, TypedBody, TypedExpr,
+    TypedExprKind, TypedMatchArm, TypedStmt, TypedStringPart,
 };
 
 /// Output of the type checking pass.
@@ -699,18 +699,21 @@ impl<'hir> TypeChecker<'hir> {
         if path.segments.len() == 2 {
             let variant_name = &path.segments[1].name;
             // Check if the first segment is an enum type and the second is a variant
-            if let Some(enum_def) = self.hir.defs.values().find(|d| {
-                d.name == *first && matches!(d.kind, DefKind::Enum(_))
-            }) {
+            if let Some(enum_def) = self
+                .hir
+                .defs
+                .values()
+                .find(|d| d.name == *first && matches!(d.kind, DefKind::Enum(_)))
+            {
                 if let DefKind::Enum(edef) = &enum_def.kind {
                     if let Some(_variant) = edef.variants.iter().find(|v| v.name == *variant_name) {
                         // Return the enum type — the variant is valid
                         return TypedExpr {
                             kind: TypedExprKind::Call {
                                 callee: Box::new(TypedExpr {
-                                    kind: TypedExprKind::LocalVar(
-                                        SmolStr::from(format!("{first}::{variant_name}")),
-                                    ),
+                                    kind: TypedExprKind::LocalVar(SmolStr::from(format!(
+                                        "{first}::{variant_name}"
+                                    ))),
                                     ty: Ty::Named(first.clone()),
                                     span: path.span,
                                 }),
@@ -1173,8 +1176,11 @@ impl<'hir> TypeChecker<'hir> {
                             )),
                         );
                     } else {
-                        let param_tys: Vec<Ty> =
-                            c.ctor_params.iter().map(|p| tyref_to_ty_generic(&p.ty)).collect();
+                        let param_tys: Vec<Ty> = c
+                            .ctor_params
+                            .iter()
+                            .map(|p| tyref_to_ty_generic(&p.ty))
+                            .collect();
                         let has_tp = param_tys.iter().any(|t| matches!(t, Ty::TypeParam(_)));
                         if has_tp {
                             let bindings = infer_type_bindings(&param_tys, args);

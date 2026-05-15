@@ -52,7 +52,10 @@ fn diagnostic_range_is_valid() {
 
 #[test]
 fn goto_def_finds_function() {
-    let (doc, _) = analyze_document("fn greet() -> String { \"hi\" }\nfn main() -> Int { 42 }", FileId(0));
+    let (doc, _) = analyze_document(
+        "fn greet() -> String { \"hi\" }\nfn main() -> Int { 42 }",
+        FileId(0),
+    );
     let hir = doc.hir.as_ref().unwrap();
     let def = hir.defs.values().find(|d| d.name == "greet");
     assert!(def.is_some(), "greet should be in HIR defs");
