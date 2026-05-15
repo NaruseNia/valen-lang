@@ -145,7 +145,12 @@ impl ServerState {
             return self.build_dot_completions(doc, before);
         }
 
-        self.build_general_completions(doc)
+        match detect_context(before) {
+            CompletionContext::TypePosition => self.build_type_completions(doc),
+            CompletionContext::ImplTarget => self.build_impl_target_completions(doc),
+            CompletionContext::NamingPosition => Vec::new(),
+            CompletionContext::General => self.build_general_completions(doc),
+        }
     }
 
     fn build_path_completions(&self, doc: &DocumentState, before: &str) -> Vec<CompletionItem> {
@@ -349,6 +354,104 @@ impl ServerState {
             }
         }
         None
+    }
+
+    fn build_type_completions(&self, doc: &DocumentState) -> Vec<CompletionItem> {
+        let mut items = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+
+        for ty in BUILTIN_TYPES {
+            let label = ty.to_string();
+            if seen.insert(label.clone()) {
+                items.push(CompletionItem {
+                    label,
+                    kind: Some(CompletionItemKind::TYPE_PARAMETER),
+                    ..Default::default()
+                });
+            }
+        }
+
+        if let Some(hir) = doc.hir.as_ref() {
+            for def in hir.defs.values() {
+                if hir.prelude_ids.contains(&def.id) || def.name.is_empty() {
+                    continue;
+                }
+                let kind = match &def.kind {
+                    DefKind::Class(_) | DefKind::DataClass(_) => CompletionItemKind::CLASS,
+                    DefKind::Enum(_) => CompletionItemKind::ENUM,
+                    DefKind::Trait(_) => CompletionItemKind::INTERFACE,
+                    DefKind::TypeAlias(_) => CompletionItemKind::CLASS,
+                    _ => continue,
+                };
+                let label = def.name.to_string();
+                if seen.insert(label.clone()) {
+                    items.push(CompletionItem {
+                        label,
+                        kind: Some(kind),
+                        ..Default::default()
+                    });
+                }
+            }
+
+            // Generic type params from fn defs
+            for def in hir.defs.values() {
+                if let DefKind::Fn(f) = &def.kind {
+                    for (tp, bounds) in &f.generic_bounds {
+                        let label = tp.to_string();
+                        if seen.insert(label.clone()) {
+                            let detail = if bounds.is_empty() {
+                                None
+                            } else {
+                                Some(format!("{tp}: {}", bounds.join(" + ")))
+                            };
+                            items.push(CompletionItem {
+                                label,
+                                kind: Some(CompletionItemKind::TYPE_PARAMETER),
+                                detail,
+                                ..Default::default()
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        items
+    }
+
+    fn build_impl_target_completions(&self, doc: &DocumentState) -> Vec<CompletionItem> {
+        let mut items = Vec::new();
+
+        if let Some(hir) = doc.hir.as_ref() {
+            for def in hir.defs.values() {
+                if hir.prelude_ids.contains(&def.id) || def.name.is_empty() {
+                    continue;
+                }
+                match &def.kind {
+                    DefKind::Class(c) => {
+                        let sig = format_class_signature(&def.name, &c.ctor_params);
+                        items.push(CompletionItem {
+                            label: def.name.to_string(),
+                            kind: Some(CompletionItemKind::CLASS),
+                            detail: Some(sig),
+                            ..Default::default()
+                        });
+                    }
+                    DefKind::DataClass(dc) => {
+                        let sig = format_class_signature(&def.name, &dc.ctor_params);
+                        items.push(CompletionItem {
+                            label: def.name.to_string(),
+                            kind: Some(CompletionItemKind::CLASS),
+                            detail: Some(sig),
+                            ..Default::default()
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        items
     }
 
     fn build_general_completions(&self, doc: &DocumentState) -> Vec<CompletionItem> {
@@ -681,6 +784,58 @@ fn find_let_type_annotation(source: &str, var_name: &str) -> Option<String> {
         }
     }
     None
+}
+
+enum CompletionContext {
+    TypePosition,
+    ImplTarget,
+    NamingPosition,
+    General,
+}
+
+fn detect_context(before: &str) -> CompletionContext {
+    let trimmed = before.trim_end();
+    // Strip partial identifier being typed
+    let base = trimmed.trim_end_matches(|c: char| c.is_ascii_alphanumeric() || c == '_');
+    let base = base.trim_end();
+
+    if base.ends_with("for") || base.ends_with("for ") {
+        // Check if this is `impl Trait for ` pattern
+        let prefix = base.trim_end_matches("for").trim_end();
+        if prefix.ends_with(|c: char| c.is_ascii_alphanumeric() || c == '>' || c == '_') {
+            // Looks like `impl Something for`
+            return CompletionContext::ImplTarget;
+        }
+    }
+
+    if base.ends_with(':') && !base.ends_with("::") {
+        return CompletionContext::TypePosition;
+    }
+    if base.ends_with("->") {
+        return CompletionContext::TypePosition;
+    }
+    if base.ends_with("<") {
+        return CompletionContext::TypePosition;
+    }
+    if base.ends_with(",") {
+        // Could be in param list type position — check for `:`
+        let before_comma = &base[..base.len() - 1].trim_end();
+        if before_comma
+            .rfind(':')
+            .is_some_and(|i| before_comma[i..].find('(').is_none())
+        {
+            return CompletionContext::TypePosition;
+        }
+    }
+
+    // After keywords that expect a name — suppress completions
+    for kw in &["fn ", "let ", "let mut ", "class ", "data class ", "enum ", "trait ", "typealias "] {
+        if base.ends_with(kw) {
+            return CompletionContext::NamingPosition;
+        }
+    }
+
+    CompletionContext::General
 }
 
 fn is_double_colon_context(before: &str) -> bool {
