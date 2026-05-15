@@ -385,7 +385,7 @@ impl<'hir> TypeChecker<'hir> {
         let Some(body) = &f.body else { return };
 
         let prev_type_params = self.type_params.clone();
-        let prev_bounds = std::mem::take(&mut self.type_param_bounds);
+        let prev_bounds = self.type_param_bounds.clone();
         for g in &f.generics {
             self.type_params.insert(g.name.clone());
             let bounds: Vec<SmolStr> = g
@@ -458,8 +458,24 @@ impl<'hir> TypeChecker<'hir> {
 
     fn check_class(&mut self, c: &valen_ast::ClassDecl) {
         let prev_type_params = std::mem::take(&mut self.type_params);
+        let prev_bounds = std::mem::take(&mut self.type_param_bounds);
         for g in &c.generics {
             self.type_params.insert(g.name.clone());
+            let bounds: Vec<SmolStr> = g
+                .bounds
+                .iter()
+                .filter_map(|b| {
+                    if let valen_ast::Type::Path(tp) = b {
+                        if tp.segments.len() == 1 {
+                            return Some(tp.segments[0].name.clone());
+                        }
+                    }
+                    None
+                })
+                .collect();
+            if !bounds.is_empty() {
+                self.type_param_bounds.insert(g.name.clone(), bounds);
+            }
         }
         let self_ty = Ty::Named(c.name.clone());
         for member in &c.body {
@@ -469,15 +485,31 @@ impl<'hir> TypeChecker<'hir> {
             }
         }
         self.type_params = prev_type_params;
+        self.type_param_bounds = prev_bounds;
     }
 
     fn check_impl(&mut self, imp: &valen_ast::ImplBlock) {
         let prev_type_params = std::mem::take(&mut self.type_params);
+        let prev_bounds = std::mem::take(&mut self.type_param_bounds);
         for g in &imp.generics {
             self.type_params.insert(g.name.clone());
+            let bounds: Vec<SmolStr> = g
+                .bounds
+                .iter()
+                .filter_map(|b| {
+                    if let valen_ast::Type::Path(tp) = b {
+                        if tp.segments.len() == 1 {
+                            return Some(tp.segments[0].name.clone());
+                        }
+                    }
+                    None
+                })
+                .collect();
+            if !bounds.is_empty() {
+                self.type_param_bounds.insert(g.name.clone(), bounds);
+            }
         }
         let self_ty = self.resolve_ast_type(&imp.target);
-        // Issue #017: Extract actual type name from impl target instead of passing "".
         let target_type_name = self.impl_target_name(&imp.target);
         for item in &imp.items {
             if let valen_ast::ImplItem::Fn(m) = item {
@@ -490,6 +522,7 @@ impl<'hir> TypeChecker<'hir> {
             }
         }
         self.type_params = prev_type_params;
+        self.type_param_bounds = prev_bounds;
     }
 
     fn check_trait(&mut self, t: &valen_ast::TraitDecl) {
@@ -2701,6 +2734,36 @@ mod tests {
     #[test]
     fn type_param_object_method() {
         let r = check_source("fn describe<T>(x: T) -> String { x.toString() }");
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn type_param_bound_method_in_class() {
+        let r = check_source(
+            r#"
+            trait Shape { fn area(self) -> Float; }
+            class Wrapper<T: Shape>() {
+                fn getArea(shape: T) -> Float {
+                    shape.area()
+                }
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn type_param_bound_method_in_impl() {
+        let r = check_source(
+            r#"
+            trait Shape { fn area(self) -> Float; }
+            trait HasArea { fn computeArea(self) -> Float; }
+            class Box() {}
+            impl<T: Shape> HasArea for Box {
+                fn computeArea(self) -> Float { 0.0f }
+            }
+            "#,
+        );
         assert_no_errors(&r);
     }
 
