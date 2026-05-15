@@ -1,0 +1,35 @@
+package ecs.systems;
+
+import java.util.ArrayList;
+
+/// System that removes dead entities at end of frame.
+/// Processes EntityDied events and despawns the targets.
+pub class CleanupSystem {}
+
+impl System for CleanupSystem {
+    fn update(self, world: World, dt: Float) -> Unit {
+        let events = world.drainEvents();
+        let toRemove = ArrayList();
+
+        let mut i = 0;
+        while i < events.size() {
+            let event = events.get(i);
+            match event {
+                Event::EntityDied(entity) => {
+                    toRemove.add(entity);
+                },
+                _ => {},
+            }
+            i = i + 1;
+        }
+
+        let mut j = 0;
+        while j < toRemove.size() {
+            let entity = toRemove.get(j);
+            if world.isAlive(entity) {
+                world.despawn(entity);
+            }
+            j = j + 1;
+        }
+    }
+}

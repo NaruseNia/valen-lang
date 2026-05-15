@@ -1,0 +1,41 @@
+package ecs.systems;
+
+import java.util.ArrayList;
+
+/// Processes damage events and updates health components.
+/// Emits EntityDied events when health reaches zero.
+pub class HealthSystem {
+    fn applyDamage(world: World, target: Entity, amount: Int) -> Unit {
+        match world.getComponent(target, "Health") {
+            Option::Some(healthObj) => {
+                let newCurrent = healthObj.current - amount;
+                if newCurrent <= 0 {
+                    let newHealth = Health(current = 0, max = healthObj.max);
+                    world.addComponent(target, "Health", newHealth);
+                    world.events.push(Event::EntityDied(entity = target));
+                } else {
+                    let newHealth = Health(current = newCurrent, max = healthObj.max);
+                    world.addComponent(target, "Health", newHealth);
+                }
+            },
+            Option::None => {},
+        }
+    }
+}
+
+impl System for HealthSystem {
+    fn update(self, world: World, dt: Float) -> Unit {
+        let events = world.drainEvents();
+        let mut i = 0;
+        while i < events.size() {
+            let event = events.get(i);
+            match event {
+                Event::DamageTaken(target, amount) => {
+                    HealthSystem::applyDamage(world, target, amount);
+                },
+                _ => {},
+            }
+            i = i + 1;
+        }
+    }
+}
