@@ -460,6 +460,17 @@ impl ServerState {
             }
         }
 
+        // Look up variable type from typed bodies (handles inferred types)
+        let offset = before.len() as u32;
+        if let Some(bodies) = doc.bodies.as_ref() {
+            let locals = collect_local_variables(bodies, offset, doc.hir.as_ref());
+            for (name, ty) in &locals {
+                if name == receiver {
+                    return ty_to_type_name(ty);
+                }
+            }
+        }
+
         // Look up variable type from fn params
         for def in hir.defs.values() {
             if let DefKind::Fn(f) = &def.kind {
@@ -998,13 +1009,9 @@ pub fn analyze_document(
         &line_index,
     ));
 
-    let (hir, bodies) = if !resolve_result.diagnostics.has_errors() {
-        let tc = valen_hir::ty::type_check(&resolve_result.hir, &parse_result.items);
-        diags.extend(convert::to_lsp_diagnostics(&tc.diagnostics, &line_index));
-        (Some(resolve_result.hir), Some(tc.bodies))
-    } else {
-        (Some(resolve_result.hir), None)
-    };
+    let tc = valen_hir::ty::type_check(&resolve_result.hir, &parse_result.items);
+    diags.extend(convert::to_lsp_diagnostics(&tc.diagnostics, &line_index));
+    let (hir, bodies) = (Some(resolve_result.hir), Some(tc.bodies));
 
     let doc = DocumentState {
         text: text.to_string(),
@@ -1406,6 +1413,16 @@ fn tyref_to_type_name(ty: &valen_hir::TyRef) -> Option<String> {
         valen_hir::TyRef::Named(n) => Some(n.to_string()),
         valen_hir::TyRef::Generic(n, _) => Some(n.to_string()),
         valen_hir::TyRef::Prim(p) => Some(format!("{p}")),
+        _ => None,
+    }
+}
+
+fn ty_to_type_name(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Named(n) => Some(n.to_string()),
+        Ty::Generic(n, _) => Some(n.to_string()),
+        Ty::Prim(p) => Some(format!("{p}")),
+        Ty::Nullable(inner) => ty_to_type_name(inner),
         _ => None,
     }
 }
