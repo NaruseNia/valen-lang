@@ -5,7 +5,9 @@ use valen_ast::Span;
 use valen_diagnostics::{Diagnostics, Severity};
 
 /// Pre-computed line offset table for converting byte offsets to LSP positions.
+/// Handles UTF-16 code unit conversion as required by the LSP specification.
 pub struct LineIndex {
+    source: String,
     line_starts: Vec<u32>,
 }
 
@@ -17,7 +19,10 @@ impl LineIndex {
                 line_starts.push((i + 1) as u32);
             }
         }
-        Self { line_starts }
+        Self {
+            source: source.to_string(),
+            line_starts,
+        }
     }
 
     pub fn offset_to_position(&self, offset: u32) -> lsp_types::Position {
@@ -25,17 +30,34 @@ impl LineIndex {
             Ok(exact) => exact,
             Err(next) => next.saturating_sub(1),
         };
-        let col = offset.saturating_sub(self.line_starts[line]);
-        lsp_types::Position::new(line as u32, col)
+        let line_start = self.line_starts[line] as usize;
+        let byte_col = (offset as usize).saturating_sub(line_start);
+        let line_text = &self.source[line_start..line_start + byte_col];
+        let utf16_col = line_text.encode_utf16().count() as u32;
+        lsp_types::Position::new(line as u32, utf16_col)
     }
 
     pub fn position_to_offset(&self, pos: lsp_types::Position) -> u32 {
         let line = pos.line as usize;
-        if line < self.line_starts.len() {
-            self.line_starts[line] + pos.character
-        } else {
-            *self.line_starts.last().unwrap_or(&0)
+        if line >= self.line_starts.len() {
+            return *self.line_starts.last().unwrap_or(&0);
         }
+        let line_start = self.line_starts[line] as usize;
+        let line_end = self
+            .line_starts
+            .get(line + 1)
+            .map(|&s| s as usize)
+            .unwrap_or(self.source.len());
+        let line_text = &self.source[line_start..line_end];
+        let target_utf16 = pos.character as usize;
+        let mut utf16_count = 0;
+        for (byte_idx, ch) in line_text.char_indices() {
+            if utf16_count >= target_utf16 {
+                return (line_start + byte_idx) as u32;
+            }
+            utf16_count += ch.len_utf16();
+        }
+        line_end as u32
     }
 
     pub fn span_to_range(&self, span: Span) -> lsp_types::Range {
