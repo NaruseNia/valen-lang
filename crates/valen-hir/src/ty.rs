@@ -625,7 +625,7 @@ impl<'hir> TypeChecker<'hir> {
     fn synth_expr(&mut self, expr: &valen_ast::Expr, expected: Option<&Ty>) -> TypedExpr {
         match expr {
             valen_ast::Expr::Literal(lit) => self.synth_literal(lit),
-            valen_ast::Expr::Path(path) => self.synth_path(path),
+            valen_ast::Expr::Path(path) => self.synth_path(path, expected),
             valen_ast::Expr::Binary(bin) => self.synth_binary(bin),
             valen_ast::Expr::Unary(un) => self.synth_unary(un),
             valen_ast::Expr::Call(call) => self.synth_call(call),
@@ -706,7 +706,7 @@ impl<'hir> TypeChecker<'hir> {
 
     // -- path (variable reference) ------------------------------------------
 
-    fn synth_path(&mut self, path: &valen_ast::Path) -> TypedExpr {
+    fn synth_path(&mut self, path: &valen_ast::Path, expected: Option<&Ty>) -> TypedExpr {
         if path.segments.len() == 1 {
             let name = &path.segments[0].name;
             if let Some(ty) = self.env.lookup(name).cloned() {
@@ -741,18 +741,24 @@ impl<'hir> TypeChecker<'hir> {
                 if let DefKind::Enum(edef) = &enum_def.kind {
                     if let Some(variant) = edef.variants.iter().find(|v| v.name == *second) {
                         if variant.fields.is_empty() {
+                            let ty = match expected {
+                                Some(Ty::Generic(n, args)) if n == first => {
+                                    Ty::Generic(n.clone(), args.clone())
+                                }
+                                _ => Ty::Named(first.clone()),
+                            };
                             return TypedExpr {
                                 kind: TypedExprKind::Call {
                                     callee: Box::new(TypedExpr {
                                         kind: TypedExprKind::LocalVar(SmolStr::from(format!(
                                             "{first}::{second}"
                                         ))),
-                                        ty: Ty::Named(first.clone()),
+                                        ty: ty.clone(),
                                         span: path.span,
                                     }),
                                     args: vec![],
                                 },
-                                ty: Ty::Named(first.clone()),
+                                ty,
                                 span: path.span,
                             };
                         }
@@ -2890,6 +2896,43 @@ mod tests {
                 Point
             }
             fn make() -> Shape { Shape::Point }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn unit_variant_infers_generic_from_expected() {
+        let r = check_source(
+            r#"
+            enum Option<T> {
+                Some(value: T),
+                None
+            }
+            class Rect(w: Float, h: Float) {}
+            fn maybe() -> Option<Rect> {
+                Option::None
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn unit_variant_infers_in_if_else() {
+        let r = check_source(
+            r#"
+            enum Option<T> {
+                Some(value: T),
+                None
+            }
+            fn test(x: Int) -> Option<Int> {
+                if x > 0 {
+                    Option::Some(x)
+                } else {
+                    Option::None
+                }
+            }
             "#,
         );
         assert_no_errors(&r);
