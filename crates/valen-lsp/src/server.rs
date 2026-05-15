@@ -1427,11 +1427,13 @@ fn ty_to_type_name(ty: &Ty) -> Option<String> {
     }
 }
 
+pub fn find_let_type_annotation_pub(source: &str, var_name: &str) -> Option<String> {
+    find_let_type_annotation(source, var_name)
+}
+
 fn find_let_type_annotation(source: &str, var_name: &str) -> Option<String> {
     for line in source.lines() {
         let trimmed = line.trim();
-        // Match: let [mut] name: Type = ...
-        // or:    let [mut] name: Type;
         let rest = match trimmed
             .strip_prefix("let mut ")
             .or_else(|| trimmed.strip_prefix("let "))
@@ -1443,16 +1445,29 @@ fn find_let_type_annotation(source: &str, var_name: &str) -> Option<String> {
             continue;
         }
         let after_name = &rest[var_name.len()..];
-        if !after_name.starts_with(':') {
-            continue;
+
+        // Match: let [mut] name: Type = ... / let [mut] name: Type;
+        if let Some(stripped) = after_name.strip_prefix(':') {
+            let ty_part = stripped.trim_start();
+            let ty_end = ty_part.find(['=', ';', '{']).unwrap_or(ty_part.len());
+            let ty_str = ty_part[..ty_end].trim();
+            let base = ty_str.split('<').next().unwrap_or(ty_str).trim();
+            if !base.is_empty() {
+                return Some(base.to_string());
+            }
         }
-        let ty_part = after_name[1..].trim_start();
-        let ty_end = ty_part.find(['=', ';', '{']).unwrap_or(ty_part.len());
-        let ty_str = ty_part[..ty_end].trim();
-        // Strip generics for simple lookup
-        let base = ty_str.split('<').next().unwrap_or(ty_str).trim();
-        if !base.is_empty() {
-            return Some(base.to_string());
+
+        // Match: let [mut] name = ConstructorName(...) — infer from RHS
+        let after_eq = after_name.trim_start();
+        if let Some(rhs) = after_eq.strip_prefix('=') {
+            let rhs = rhs.trim_start();
+            let ctor_end = rhs
+                .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                .unwrap_or(rhs.len());
+            let ctor_name = &rhs[..ctor_end];
+            if !ctor_name.is_empty() && ctor_name.starts_with(|c: char| c.is_ascii_uppercase()) {
+                return Some(ctor_name.to_string());
+            }
         }
     }
     None
@@ -2337,6 +2352,14 @@ fn find_expr_in_expr<'a>(expr: &'a TypedExpr, offset: u32, best: &mut Option<&'a
 ///
 /// Only walks the body whose enclosing function's span contains `offset`,
 /// so variables from unrelated functions are excluded.
+pub fn collect_local_variables_pub(
+    bodies: &indexmap::IndexMap<valen_hir::DefId, TypedBody>,
+    offset: u32,
+    hir: Option<&valen_hir::Hir>,
+) -> Vec<(String, Ty)> {
+    collect_local_variables(bodies, offset, hir)
+}
+
 fn collect_local_variables(
     bodies: &indexmap::IndexMap<valen_hir::DefId, TypedBody>,
     offset: u32,
