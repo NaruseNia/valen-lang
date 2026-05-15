@@ -2554,10 +2554,10 @@ fn format_typed_expr_hover(expr: &TypedExpr) -> Option<String> {
 }
 
 /// Valen language keywords offered for completion.
-/// Keywords shown in expression position (General context).
+/// Keywords shown in the General context (expression + statement start).
 const EXPR_KEYWORDS: &[&str] = &[
     "if", "else", "match", "for", "while", "loop", "return", "break", "continue", "true", "false",
-    "safe",
+    "safe", "let", "mut", "fn", "pub", "class", "data", "enum", "trait", "impl", "import",
 ];
 
 // ---------------------------------------------------------------------------
