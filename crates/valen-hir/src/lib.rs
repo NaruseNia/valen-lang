@@ -297,6 +297,8 @@ pub struct TraitDef {
     pub is_sealed: bool,
     pub methods: Vec<DefId>,
     pub associated_types: Vec<HirAssocType>,
+    /// Generic type parameter names (e.g. `T` in `trait Foo<T>`).
+    pub generics: Vec<SmolStr>,
 }
 
 /// A type alias mapping a name to another type.

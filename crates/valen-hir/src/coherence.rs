@@ -189,6 +189,19 @@ impl<'h> CoherenceChecker<'h> {
             return;
         };
 
+        // Build substitution map: trait generic params → impl type args
+        // e.g. trait Satisfied<T> + impl Satisfied<String> → {T: String}
+        let trait_type_args = match &imp.trait_ref {
+            TyRef::Generic(_, args) => args.clone(),
+            _ => vec![],
+        };
+        let subst: Vec<(SmolStr, TyRef)> = tdef
+            .generics
+            .iter()
+            .zip(trait_type_args.iter())
+            .map(|(name, arg)| (name.clone(), arg.clone()))
+            .collect();
+
         for &required_id in &tdef.methods {
             let Some(required_def) = self.hir.defs.get(&required_id) else {
                 continue;
@@ -197,13 +210,13 @@ impl<'h> CoherenceChecker<'h> {
                 continue;
             };
 
-            // Only check methods without bodies (abstract/required)
-            if required_fn.has_body {
-                // Default method — check if impl overrides it, but don't require it
+            let substituted = substitute_fn_def(required_fn, &subst);
+
+            if substituted.has_body {
                 if let Some((_, impl_fn)) = self.find_impl_method(imp, &required_def.name) {
                     self.check_signature_match(
                         &required_def.name,
-                        required_fn,
+                        &substituted,
                         &impl_fn,
                         impl_span,
                     );
@@ -212,7 +225,7 @@ impl<'h> CoherenceChecker<'h> {
             }
 
             if let Some((_, impl_fn)) = self.find_impl_method(imp, &required_def.name) {
-                self.check_signature_match(&required_def.name, required_fn, &impl_fn, impl_span);
+                self.check_signature_match(&required_def.name, &substituted, &impl_fn, impl_span);
             } else {
                 self.diags.error(
                     DiagCode::MISSING_TRAIT_METHOD,
@@ -294,6 +307,55 @@ fn format_opt_tyref(ty: &Option<TyRef>) -> String {
     match ty {
         Some(t) => format!("{t}"),
         None => "Unit".to_string(),
+    }
+}
+
+fn substitute_fn_def(f: &FnDef, subst: &[(SmolStr, TyRef)]) -> FnDef {
+    if subst.is_empty() {
+        return f.clone();
+    }
+    FnDef {
+        params: f
+            .params
+            .iter()
+            .map(|p| crate::ParamDef {
+                ty: substitute_tyref(&p.ty, subst),
+                ..p.clone()
+            })
+            .collect(),
+        return_ty: f.return_ty.as_ref().map(|t| substitute_tyref(t, subst)),
+        has_body: f.has_body,
+        generic_bounds: f.generic_bounds.clone(),
+    }
+}
+
+fn substitute_tyref(ty: &TyRef, subst: &[(SmolStr, TyRef)]) -> TyRef {
+    match ty {
+        TyRef::Named(n) | TyRef::Unresolved(n) => {
+            for (param, replacement) in subst {
+                if n == param {
+                    return replacement.clone();
+                }
+            }
+            ty.clone()
+        }
+        TyRef::Generic(n, args) => {
+            for (param, replacement) in subst {
+                if n == param {
+                    return replacement.clone();
+                }
+            }
+            TyRef::Generic(
+                n.clone(),
+                args.iter().map(|a| substitute_tyref(a, subst)).collect(),
+            )
+        }
+        TyRef::Nullable(inner) => TyRef::Nullable(Box::new(substitute_tyref(inner, subst))),
+        TyRef::Fn(params, ret) => TyRef::Fn(
+            params.iter().map(|p| substitute_tyref(p, subst)).collect(),
+            Box::new(substitute_tyref(ret, subst)),
+        ),
+        _ => ty.clone(),
     }
 }
 

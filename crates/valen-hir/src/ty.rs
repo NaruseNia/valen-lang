@@ -628,7 +628,7 @@ impl<'hir> TypeChecker<'hir> {
             valen_ast::Expr::Path(path) => self.synth_path(path, expected),
             valen_ast::Expr::Binary(bin) => self.synth_binary(bin),
             valen_ast::Expr::Unary(un) => self.synth_unary(un),
-            valen_ast::Expr::Call(call) => self.synth_call(call),
+            valen_ast::Expr::Call(call) => self.synth_call(call, expected),
             valen_ast::Expr::MethodCall(mc) => self.synth_method_call(mc),
             valen_ast::Expr::Field(fa) => self.synth_field_access(fa),
             valen_ast::Expr::If(ife) => self.synth_if(ife, expected),
@@ -1087,7 +1087,7 @@ impl<'hir> TypeChecker<'hir> {
 
     // -- function call ------------------------------------------------------
 
-    fn synth_call(&mut self, call: &valen_ast::CallExpr) -> TypedExpr {
+    fn synth_call(&mut self, call: &valen_ast::CallExpr, expected: Option<&Ty>) -> TypedExpr {
         let callee = self.infer_expr(&call.callee);
         let args: Vec<TypedExpr> = call
             .args
@@ -1187,6 +1187,35 @@ impl<'hir> TypeChecker<'hir> {
                             call.span,
                         ) {
                             return result;
+                        }
+
+                        // Unit variant called with parens: Option::None()
+                        if args.is_empty() {
+                            if let Some(edef) = self.hir.defs.values().find(|d| {
+                                d.name == *class_name && matches!(d.kind, DefKind::Enum(_))
+                            }) {
+                                if let DefKind::Enum(e) = &edef.kind {
+                                    if e.variants
+                                        .iter()
+                                        .any(|v| v.name == *member_name && v.fields.is_empty())
+                                    {
+                                        let ty = match expected {
+                                            Some(Ty::Generic(n, ga)) if n == class_name => {
+                                                Ty::Generic(n.clone(), ga.clone())
+                                            }
+                                            _ => Ty::Named(class_name.clone()),
+                                        };
+                                        return TypedExpr {
+                                            kind: TypedExprKind::Call {
+                                                callee: Box::new(callee),
+                                                args,
+                                            },
+                                            ty,
+                                            span: call.span,
+                                        };
+                                    }
+                                }
+                            }
                         }
 
                         // Class::method(args) — check associated function params
@@ -2931,6 +2960,27 @@ mod tests {
                     Option::Some(x)
                 } else {
                     Option::None
+                }
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn unit_variant_with_parens_infers_generic() {
+        let r = check_source(
+            r#"
+            enum Option<T> {
+                Some(value: T),
+                None
+            }
+            class Rect(w: Float, h: Float) {}
+            fn maybe(r: Rect) -> Option<Rect> {
+                if r.w > 0.0f {
+                    Option::Some(r)
+                } else {
+                    Option::None()
                 }
             }
             "#,
