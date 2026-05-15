@@ -62,6 +62,19 @@ pub enum TokenKind {
     Yield,
     TypeAlias,
     Type,
+    // JVM reserved words
+    Static,
+    Void,
+    New,
+    This,
+    Super,
+    Null,
+    Throw,
+    Try,
+    Catch,
+    Finally,
+    Extends,
+    Implements,
 
     // Punctuation
     LParen,

@@ -62,7 +62,7 @@ fn class_keywords() {
 #[test]
 fn all_keywords_reserved() {
     assert_snapshot!(fmt(
-        "fn let mut self return if else match class data enum trait impl pub internal private open override abstract sealed package import for in while loop as"
+        "fn let mut self return if else match class data enum trait impl pub internal private open override abstract sealed package import for in while loop as static void new this super null throw try catch finally extends implements"
     ));
 }
 

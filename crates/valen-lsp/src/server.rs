@@ -1843,6 +1843,18 @@ fn classify_token(kind: &TokenKind) -> Option<u32> {
         | TokenKind::TypeAlias
         | TokenKind::Type
         | TokenKind::Annotation
+        | TokenKind::Static
+        | TokenKind::Void
+        | TokenKind::New
+        | TokenKind::This
+        | TokenKind::Super
+        | TokenKind::Null
+        | TokenKind::Throw
+        | TokenKind::Try
+        | TokenKind::Catch
+        | TokenKind::Finally
+        | TokenKind::Extends
+        | TokenKind::Implements
         | TokenKind::True
         | TokenKind::False
         | TokenKind::BoolLit(_) => Some(ST_KEYWORD),
