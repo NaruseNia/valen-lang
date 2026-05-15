@@ -251,6 +251,162 @@ pub trait T {
     assert_format(input, input);
 }
 
+// ── Sealed Trait ────────────────────────────────────────────────────
+
+#[test]
+fn sealed_trait() {
+    let input = "\
+package x;
+
+sealed trait Expr {
+    fn eval(self) -> Int;
+}
+
+pub class Lit {}
+
+impl Expr for Lit {
+    fn eval(self) -> Int {
+        0
+    }
+}
+";
+    assert_format(input, input);
+}
+
+// ── Annotation Class ───────────────────────────────────────────────
+
+#[test]
+fn annotation_class() {
+    let input = "\
+package x;
+
+pub annotation class Deprecated(pub message: String)
+
+annotation class Marker
+";
+    assert_format(input, input);
+}
+
+// ── Associated Type ────────────────────────────────────────────────
+
+#[test]
+fn associated_type_in_trait() {
+    let input = "\
+package x;
+
+pub trait Container {
+    type Item;
+    fn get(self, index: Int) -> Int;
+}
+";
+    assert_format(input, input);
+}
+
+#[test]
+fn associated_type_in_impl() {
+    let input = "\
+package x;
+
+pub data class Vec2(pub x: Float, pub y: Float);
+
+impl Add<Vec2> for Vec2 {
+    type Output = Vec2;
+    fn add(self, rhs: Vec2) -> Vec2 {
+        Vec2(x = self.x + rhs.x, y = self.y + rhs.y)
+    }
+}
+";
+    assert_format(input, input);
+}
+
+// ── Default Arguments ──────────────────────────────────────────────
+
+#[test]
+fn default_args() {
+    let input = "\
+package x;
+
+pub class Greeter {
+    fn greet(self, msg: String = \"hello\", count: Int = 1) -> String {
+        msg
+    }
+}
+";
+    assert_format(input, input);
+}
+
+// ── Try Operator ───────────────────────────────────────────────────
+
+#[test]
+fn try_operator() {
+    let input = "\
+package x;
+
+pub class C {
+    fn f(self, x: Option<Int>) -> Option<Int> {
+        let v = x?;
+        Some(v)
+    }
+}
+";
+    assert_format(input, input);
+}
+
+// ── Consecutive Blank Lines ────────────────────────────────────────
+
+#[test]
+fn consecutive_blank_lines_collapsed() {
+    let input = "\
+package x;
+
+
+
+pub class A {}
+
+
+
+pub class B {}
+";
+    let expected = "\
+package x;
+
+pub class A {}
+
+pub class B {}
+";
+    assert_format(input, expected);
+}
+
+// ── Trailing Whitespace ────────────────────────────────────────────
+
+#[test]
+fn trailing_whitespace_removed() {
+    let input = "package x;   \n\npub class Foo {}   \n";
+    let expected = "package x;\n\npub class Foo {}\n";
+    assert_format(input, expected);
+}
+
+// ── Import Sorting ─────────────────────────────────────────────────
+
+#[test]
+fn imports_sorted() {
+    let input = "\
+package x;
+
+import java.util.Map;
+import java.io.File;
+import java.util.List;
+";
+    let expected = "\
+package x;
+
+import java.io.File;
+import java.util.List;
+import java.util.Map;
+";
+    assert_format(input, expected);
+}
+
 // ── Idempotency ─────────────────────────────────────────────────────
 
 #[test]

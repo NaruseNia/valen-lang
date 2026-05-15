@@ -32,7 +32,33 @@ impl<'a> Printer<'a> {
         }
     }
 
+    fn sort_imports(&self, items: &[Item]) -> Vec<Item> {
+        let mut result: Vec<Item> = Vec::with_capacity(items.len());
+        let mut i = 0;
+        while i < items.len() {
+            if matches!(&items[i], Item::Import(_)) {
+                let start = i;
+                while i < items.len() && matches!(&items[i], Item::Import(_)) {
+                    i += 1;
+                }
+                let mut group: Vec<&Item> = items[start..i].iter().collect();
+                group.sort_by(|a, b| {
+                    let ka = import_sort_key(a);
+                    let kb = import_sort_key(b);
+                    ka.cmp(&kb)
+                });
+                result.extend(group.iter().map(|&item| item.clone()));
+            } else {
+                result.push(items[i].clone());
+                i += 1;
+            }
+        }
+        result
+    }
+
     pub fn print(mut self, items: &[Item]) -> String {
+        let sorted_items = self.sort_imports(items);
+        let items = &sorted_items;
         let mut prev_kind: Option<ItemKind> = None;
 
         for item in items {
@@ -1160,6 +1186,25 @@ fn item_kind(item: &Item) -> ItemKind {
         Item::Package(_) => ItemKind::Package,
         Item::Import(_) => ItemKind::Import,
         _ => ItemKind::Other,
+    }
+}
+
+fn import_sort_key(item: &Item) -> String {
+    match item {
+        Item::Import(i) => {
+            let mut key = i
+                .path
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(".");
+            if let Some(alias) = &i.alias {
+                key.push_str(" as ");
+                key.push_str(alias);
+            }
+            key
+        }
+        _ => String::new(),
     }
 }
 
