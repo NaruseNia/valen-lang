@@ -664,6 +664,22 @@ impl ServerState {
             }
         }
 
+        // Fallback: extract let bindings from source text before the cursor.
+        // Covers the case where parse errors cause the enclosing function to
+        // be dropped from the AST (no typed body available).
+        let before = &doc.text[..offset.min(doc.text.len() as u32) as usize];
+        for local in extract_let_names_from_text(before) {
+            if seen.insert(local.name.clone()) {
+                items.push(CompletionItem {
+                    label: local.name,
+                    kind: Some(CompletionItemKind::VARIABLE),
+                    detail: local.ty,
+                    sort_text: Some(format!("0_{}", items.len())),
+                    ..Default::default()
+                });
+            }
+        }
+
         for kw in VALEN_KEYWORDS {
             items.push(CompletionItem {
                 label: kw.to_string(),
@@ -1406,6 +1422,70 @@ fn find_enclosing_type_from_source(source: &str) -> Option<String> {
         }
     }
     None
+}
+
+struct TextLocal {
+    name: String,
+    ty: Option<String>,
+}
+
+fn extract_let_names_from_text(before: &str) -> Vec<TextLocal> {
+    let mut results = Vec::new();
+    for line in before.lines() {
+        let trimmed = line.trim();
+        let rest = match trimmed
+            .strip_prefix("let mut ")
+            .or_else(|| trimmed.strip_prefix("let "))
+        {
+            Some(r) => r,
+            None => continue,
+        };
+        let name_end = rest
+            .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .unwrap_or(rest.len());
+        let name = &rest[..name_end];
+        if name.is_empty() {
+            continue;
+        }
+        let after = rest[name_end..].trim_start();
+
+        // Try explicit annotation: let name: Type
+        if let Some(stripped) = after.strip_prefix(':') {
+            let ty_part = stripped.trim_start();
+            let ty_end = ty_part.find(['=', ';', '{']).unwrap_or(ty_part.len());
+            let ty_str = ty_part[..ty_end].trim();
+            let base = ty_str.split('<').next().unwrap_or(ty_str).trim();
+            if !base.is_empty() {
+                results.push(TextLocal {
+                    name: name.to_string(),
+                    ty: Some(base.to_string()),
+                });
+                continue;
+            }
+        }
+
+        // Try RHS constructor: let name = TypeName(...)
+        if let Some(rhs) = after.strip_prefix('=') {
+            let rhs = rhs.trim_start();
+            let ctor_end = rhs
+                .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                .unwrap_or(rhs.len());
+            let ctor_name = &rhs[..ctor_end];
+            if !ctor_name.is_empty() && ctor_name.starts_with(|c: char| c.is_ascii_uppercase()) {
+                results.push(TextLocal {
+                    name: name.to_string(),
+                    ty: Some(ctor_name.to_string()),
+                });
+                continue;
+            }
+        }
+
+        results.push(TextLocal {
+            name: name.to_string(),
+            ty: None,
+        });
+    }
+    results
 }
 
 fn tyref_to_type_name(ty: &valen_hir::TyRef) -> Option<String> {
