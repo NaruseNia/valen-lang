@@ -115,6 +115,10 @@ impl<'hir> TypeChecker<'hir> {
 
     fn check_items(&mut self, items: &[valen_ast::Item]) {
         self.register_top_level_types(items);
+        for name in self.hir.foreign_types.keys() {
+            self.env
+                .define(name.clone(), Ty::Named(name.clone()), false);
+        }
 
         for item in items {
             match item {
@@ -3210,6 +3214,33 @@ mod tests {
             }
             "#,
         );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn foreign_type_constructor_in_expression() {
+        let src = r#"
+            import java.util.ArrayList;
+            fn test() -> ArrayList { ArrayList() }
+        "#;
+        let parsed = parse(src, FileId(0));
+        assert!(!parsed.diagnostics.has_errors());
+        let mut resolved = resolve::resolve(&parsed.items);
+        assert!(!resolved.diagnostics.has_errors());
+        resolved.hir.foreign_types.insert(
+            SmolStr::from("ArrayList"),
+            crate::ForeignClassInfo {
+                internal_name: "java/util/ArrayList".to_string(),
+                methods: vec![],
+                constructors: vec![crate::ForeignCtorInfo { params: vec![] }],
+                fields: vec![],
+                super_class: None,
+                interfaces: vec![],
+                permitted_subclasses: vec![],
+                has_valen_closed: false,
+            },
+        );
+        let r = type_check(&resolved.hir, &parsed.items);
         assert_no_errors(&r);
     }
 }
