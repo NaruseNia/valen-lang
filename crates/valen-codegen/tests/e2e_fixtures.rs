@@ -665,3 +665,39 @@ fn fixture_operator_overload() {
         "missing subVectors"
     );
 }
+
+#[test]
+fn fixture_enum_destructure_bind() {
+    let classes = compile_fixture("enum_destructure_bind.vln");
+    assert!(
+        classes.len() >= 2,
+        "expected Color enum + Matcher class, got {}",
+        classes.len()
+    );
+
+    let matcher = classes
+        .iter()
+        .find(|c| {
+            c.class_name()
+                .ok()
+                .and_then(|n| n.as_str().map(|s| s.contains("Matcher")))
+                .unwrap_or(false)
+        })
+        .expect("Matcher class not found");
+
+    let methods: Vec<String> = matcher
+        .methods
+        .iter()
+        .filter_map(|m| {
+            matcher
+                .constant_pool
+                .try_get_utf8(m.name_index)
+                .ok()
+                .and_then(|n| n.as_str().map(|s| s.to_string()))
+        })
+        .collect();
+    assert!(
+        methods.contains(&"describeColor".to_string()),
+        "missing describeColor method"
+    );
+}

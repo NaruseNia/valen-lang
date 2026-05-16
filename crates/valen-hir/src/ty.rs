@@ -2066,6 +2066,9 @@ impl<'hir> TypeChecker<'hir> {
         let mut result_ty: Option<Ty> = expected.cloned();
 
         for arm in &me.arms {
+            self.env.push_scope();
+            self.bind_pattern(&arm.pattern, &scrutinee.ty);
+
             let guard = arm
                 .guard
                 .as_ref()
@@ -2075,6 +2078,8 @@ impl<'hir> TypeChecker<'hir> {
             } else {
                 self.infer_expr(&arm.body)
             };
+
+            self.env.pop_scope();
 
             if result_ty.is_none() && !body.ty.is_error() {
                 result_ty = Some(body.ty.clone());
@@ -2096,6 +2101,141 @@ impl<'hir> TypeChecker<'hir> {
             ty,
             span: me.span,
         }
+    }
+
+    /// Walk a pattern and register all binding variables in the current scope.
+    fn bind_pattern(&mut self, pattern: &valen_ast::Pattern, scrutinee_ty: &Ty) {
+        use valen_ast::Pattern;
+        match pattern {
+            Pattern::Wildcard(_) | Pattern::Literal(_) | Pattern::Range(_) | Pattern::Path(_) => {}
+            Pattern::Binding(binding) => {
+                self.env
+                    .define(binding.name.clone(), scrutinee_ty.clone(), binding.mutable);
+            }
+            Pattern::Struct(sp) => {
+                self.bind_struct_pattern(sp, scrutinee_ty);
+            }
+            Pattern::Tuple(pats, _) => {
+                for pat in pats {
+                    self.bind_pattern(pat, scrutinee_ty);
+                }
+            }
+            Pattern::Or(pats, _) => {
+                if let Some(first) = pats.first() {
+                    self.bind_pattern(first, scrutinee_ty);
+                }
+            }
+            Pattern::At(at) => {
+                self.env
+                    .define(at.name.clone(), scrutinee_ty.clone(), false);
+                self.bind_pattern(&at.pattern, scrutinee_ty);
+            }
+        }
+    }
+
+    /// Resolve field types from an enum variant pattern and bind variables.
+    fn bind_struct_pattern(&mut self, sp: &valen_ast::StructPattern, scrutinee_ty: &Ty) {
+        let segments: Vec<&str> = sp.path.segments.iter().map(|s| s.name.as_str()).collect();
+        let (enum_name, variant_name) = match segments.len() {
+            2 => (segments[0], segments[1]),
+            1 => {
+                let vn = segments[0];
+                let en = self.find_enum_for_variant(vn);
+                if let Some(ref name) = en {
+                    // Re-borrow to avoid lifetime issue: copy into local
+                    let name = name.clone();
+                    return self.bind_variant_fields(sp, &name, vn, scrutinee_ty);
+                }
+                return;
+            }
+            _ => return,
+        };
+        self.bind_variant_fields(sp, enum_name, variant_name, scrutinee_ty);
+    }
+
+    fn find_enum_for_variant(&self, variant_name: &str) -> Option<SmolStr> {
+        for def in self.hir.defs.values() {
+            if let DefKind::Enum(enum_def) = &def.kind {
+                if enum_def.variants.iter().any(|v| v.name == variant_name) {
+                    return Some(def.name.clone());
+                }
+            }
+        }
+        None
+    }
+
+    fn bind_variant_fields(
+        &mut self,
+        sp: &valen_ast::StructPattern,
+        enum_name: &str,
+        variant_name: &str,
+        scrutinee_ty: &Ty,
+    ) {
+        let type_args = match scrutinee_ty {
+            Ty::Generic(_, args) => args.clone(),
+            _ => vec![],
+        };
+
+        let field_types = self.resolve_variant_field_types(enum_name, variant_name, &type_args);
+
+        for field in &sp.fields {
+            let field_ty = field_types
+                .get(field.name.as_str())
+                .cloned()
+                .unwrap_or(Ty::Error);
+
+            if let Some(ref sub_pat) = field.pattern {
+                self.bind_pattern(sub_pat, &field_ty);
+            } else {
+                self.env.define(field.name.clone(), field_ty, false);
+            }
+        }
+    }
+
+    fn resolve_variant_field_types(
+        &self,
+        enum_name: &str,
+        variant_name: &str,
+        type_args: &[Ty],
+    ) -> IndexMap<SmolStr, Ty> {
+        let mut result = IndexMap::new();
+        for def in self.hir.defs.values() {
+            if def.name != enum_name {
+                continue;
+            }
+            if let DefKind::Enum(enum_def) = &def.kind {
+                for variant in &enum_def.variants {
+                    if variant.name != variant_name {
+                        continue;
+                    }
+                    let all_field_tys: Vec<Ty> = variant
+                        .fields
+                        .iter()
+                        .map(|(_, tyref)| tyref_to_ty_generic(tyref))
+                        .collect();
+                    let type_params = collect_type_params_ordered(&all_field_tys);
+                    let bindings: IndexMap<SmolStr, Ty> = type_params
+                        .iter()
+                        .filter_map(|tp| {
+                            if let Ty::TypeParam(name) = tp {
+                                Some(name.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .zip(type_args.iter().cloned())
+                        .collect();
+
+                    for (fname, tyref) in &variant.fields {
+                        let ty = tyref_to_ty_generic(tyref);
+                        let resolved = substitute_ty(&ty, &bindings);
+                        result.insert(fname.clone(), resolved);
+                    }
+                    return result;
+                }
+            }
+        }
+        result
     }
 
     // -- assign -------------------------------------------------------------
@@ -3015,6 +3155,59 @@ mod tests {
                 }
             }
             fn test() -> Shape { Shape::detect(42) }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn enum_destructure_bind_variable() {
+        let r = check_source(
+            r#"
+            enum Color {
+                Red,
+                Blue(value: Int),
+            }
+            fn describe(c: Color) -> Int {
+                match c {
+                    Color::Red => 0,
+                    Color::Blue(value) => value,
+                }
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn enum_destructure_multiple_fields() {
+        let r = check_source(
+            r#"
+            enum Shape {
+                Point,
+                Rect(w: Int, h: Int),
+            }
+            fn area(s: Shape) -> Int {
+                match s {
+                    Shape::Point => 0,
+                    Shape::Rect(w, h) => w,
+                }
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn generic_enum_destructure_bind() {
+        let r = check_source(
+            r#"
+            fn unwrap_or(opt: Option<Int>, default: Int) -> Int {
+                match opt {
+                    Option::Some(value) => value,
+                    Option::None => default,
+                }
+            }
             "#,
         );
         assert_no_errors(&r);
