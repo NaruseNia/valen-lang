@@ -3,27 +3,27 @@ package test;
 pub class TryOperator {
     fn findValue(x: Int) -> Option<Int> {
         if x > 0 {
-            Some(x)
+            Option::Some(x)
         } else {
-            None
+            Option::None
         }
     }
 
     fn useOption(self, x: Int) -> Option<Int> {
         let v = TryOperator::findValue(x)?;
-        Some(v)
+        Option::Some(v)
     }
 
     fn divide(a: Int, b: Int) -> Result<Int, String> {
         if b == 0 {
-            Err("division by zero")
+            Result::Err("division by zero")
         } else {
-            Ok(a / b)
+            Result::Ok(a / b)
         }
     }
 
     fn compute(self, a: Int, b: Int) -> Result<Int, String> {
         let v = TryOperator::divide(a, b)?;
-        Ok(v)
+        Result::Ok(v)
     }
 }

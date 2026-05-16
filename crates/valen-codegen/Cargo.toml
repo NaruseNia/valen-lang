@@ -18,3 +18,4 @@ indexmap = { workspace = true }
 
 [dev-dependencies]
 valen-parser = { workspace = true }
+valen-diagnostics = { workspace = true }
