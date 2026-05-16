@@ -24,9 +24,9 @@ use valen_ast::{
     EnumField, EnumVariant, EnumVariantFields, Expr, FieldAccess, FileId, FnDecl, ForExpr,
     GenericParam, IfExpr, ImplBlock, ImplItem, ImportDecl, Item, LambdaExpr, LambdaParam, LetStmt,
     Literal, LoopExpr, MatchArm, MatchExpr, MethodCallExpr, PackageDecl, Param, Path, PathSegment,
-    Pattern, RangeExpr, RangePattern, ReturnExpr, Span, Stmt, StructPattern, StructPatternField,
-    TraitDecl, TraitItem, TryExpr, Type, TypeAliasDecl, TypePath, TypePathSegment, UnaryExpr,
-    UnaryOp, Variance, Visibility, WhileExpr,
+    Pattern, RangeExpr, RangePattern, ReturnExpr, Span, Stmt, StringInterpExpr, StructPattern,
+    StructPatternField, TraitDecl, TraitItem, TryExpr, Type, TypeAliasDecl, TypePath,
+    TypePathSegment, UnaryExpr, UnaryOp, Variance, Visibility, WhileExpr,
 };
 use valen_diagnostics::{DiagCode, Diagnostics};
 
@@ -1238,6 +1238,10 @@ impl Parser {
                 self.bump();
                 Some(Expr::Literal(Literal::String(s, span)))
             }
+            TokenKind::FStringLit(raw) => {
+                self.bump();
+                Some(Expr::StringInterp(self.parse_fstring_parts(&raw, span)))
+            }
             TokenKind::BoolLit(b) => {
                 self.bump();
                 Some(Expr::Literal(Literal::Bool(b, span)))
@@ -1847,6 +1851,83 @@ impl Parser {
 
     fn peek_ahead_is(&self, kind: &TokenKind) -> bool {
         self.lookahead(1) == kind
+    }
+
+    fn parse_fstring_parts(&mut self, raw: &str, span: Span) -> StringInterpExpr {
+        use valen_ast::StringInterpPart;
+        let mut parts = Vec::new();
+        let mut text = String::new();
+        let mut chars = raw.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '{' {
+                if !text.is_empty() {
+                    parts.push(StringInterpPart::Text(SmolStr::from(text.as_str())));
+                    text.clear();
+                }
+                let mut expr_str = String::new();
+                let mut depth = 1u32;
+                for c2 in chars.by_ref() {
+                    match c2 {
+                        '{' => {
+                            depth += 1;
+                            expr_str.push(c2);
+                        }
+                        '}' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                break;
+                            }
+                            expr_str.push(c2);
+                        }
+                        _ => expr_str.push(c2),
+                    }
+                }
+                let file_id = span.file_id;
+                let expr_source = format!("fn __fstring__() -> String {{ {expr_str} }}");
+                let reparsed = crate::parse(&expr_source, file_id);
+                if reparsed.diagnostics.has_errors() {
+                    self.diagnostics.error(
+                        DiagCode::PARSE_EXPECTED_EXPR,
+                        span,
+                        SmolStr::from(format!(
+                            "invalid expression in f-string interpolation: `{expr_str}`"
+                        )),
+                    );
+                    continue;
+                }
+                if let Some(valen_ast::Item::Fn(f)) = reparsed.items.first() {
+                    if let Some(block) = &f.body {
+                        if let Some(tail) = &block.tail {
+                            parts.push(StringInterpPart::Expr(*tail.clone()));
+                            continue;
+                        }
+                    }
+                }
+            } else if c == '\\' {
+                if let Some(&next) = chars.peek() {
+                    chars.next();
+                    match next {
+                        'n' => text.push('\n'),
+                        't' => text.push('\t'),
+                        'r' => text.push('\r'),
+                        '\\' => text.push('\\'),
+                        '"' => text.push('"'),
+                        '{' => text.push('{'),
+                        '}' => text.push('}'),
+                        other => {
+                            text.push('\\');
+                            text.push(other);
+                        }
+                    }
+                }
+            } else {
+                text.push(c);
+            }
+        }
+        if !text.is_empty() {
+            parts.push(StringInterpPart::Text(SmolStr::from(text.as_str())));
+        }
+        StringInterpExpr { parts, span }
     }
 
     fn parse_literal(&mut self) -> Option<Literal> {

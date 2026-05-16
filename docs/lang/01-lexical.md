@@ -44,21 +44,38 @@ import java.util.HashMap as HMap;
 
 **Valen 仕様で使わないキーワード:** `static` は導入しない。instance method と associated function の区別は `self` レシーバの有無のみで行う（§5.1 参照）。
 
-## 1.3 識別子
+## 1.3 リテラル
+
+### 文字列補間（f-string）
+
+`f"..."` で文字列補間リテラルを記述する。`{expr}` の位置に式を埋め込める。
+
+```valen
+let name = "Alice";
+let msg = f"Hello, {name}!";           // "Hello, Alice!"
+let calc = f"1 + 2 = {1 + 2}";         // "1 + 2 = 3"
+```
+
+エスケープ: `\{` / `\}` でリテラルの `{` / `}` を記述。
+
+**制限（MVP）:** 補間式内でブロック式 `{ ... }` やネストした f-string は使用不可。変数参照、フィールドアクセス、メソッドチェーン、二項演算などの単純な式を使用すること。
+
+## 1.4 識別子
+
 - `[a-zA-Z_][a-zA-Z0-9_]*`
 - 型は PascalCase（`UserProfile`、`Shape`）
 - 関数・メソッド・変数は camelCase（`findUser`、`myValue`）
 - パッケージは lowercase.dot（`com.example.app`）
 - snake_case を使うとコンパイラが warning を出す（エラーにはならない）
 
-## 1.4 コメント
+## 1.5 コメント
 ```valen
 // 単行コメント
 /* ブロックコメント */
 /// ドキュメントコメント（将来 rustdoc 相当）
 ```
 
-## 1.5 セミコロン
+## 1.6 セミコロン
 
 Valen の `;` は Rust 流の 3 分類に従う。
 
