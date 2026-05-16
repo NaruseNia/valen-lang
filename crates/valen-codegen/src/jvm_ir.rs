@@ -361,9 +361,22 @@ pub enum JvmOp {
 
     /// `iinc` — increment a local int variable by a constant.
     IInc(u16, i32),
+}
 
-    /// Placeholder body that emits `throw new UnsupportedOperationException`.
-    StubBody,
+/// Generate ops that throw `UnsupportedOperationException` with the given message.
+pub fn throw_unsupported_ops(message: &str) -> Vec<JvmOp> {
+    vec![
+        JvmOp::New(crate::jvm_const::JVM_UNSUPPORTED_OP.to_string()),
+        JvmOp::Dup,
+        JvmOp::PushString(message.to_string()),
+        JvmOp::InvokeSpecial {
+            owner: crate::jvm_const::JVM_UNSUPPORTED_OP.to_string(),
+            name: crate::jvm_const::INIT.to_string(),
+            params: vec![JvmType::Object(crate::jvm_const::JVM_STRING.to_string())],
+            ret: JvmType::Void,
+        },
+        JvmOp::AThrow,
+    ]
 }
 
 /// Arithmetic binary operation kind.
@@ -502,7 +515,6 @@ impl JvmOp {
             // No-capture lambda: consumes 0, produces 1 functional interface reference.
             JvmOp::InvokeDynamic { .. } => 1,
             JvmOp::IInc(_, _) => 0,
-            JvmOp::StubBody => 0,
         }
     }
 }

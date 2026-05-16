@@ -533,7 +533,11 @@ impl<'a> ExprLowering<'a> {
                  arity limit (max 2). Emitting UnsupportedOperationException.",
                 params.len()
             );
-            self.ops.push(JvmOp::StubBody);
+            self.ops
+                .extend(crate::jvm_ir::throw_unsupported_ops(&format!(
+                    "lambda with {} parameters exceeds arity limit (max 2)",
+                    params.len()
+                )));
             return;
         }
 
@@ -678,7 +682,7 @@ impl<'a> ExprLowering<'a> {
                 )
             }
             _ => {
-                // 3+ params are rejected earlier in lower_lambda() with a StubBody.
+                // 3+ params are rejected earlier in lower_lambda().
                 // This branch should be unreachable, but provide a safe fallback.
                 unreachable!(
                     "lambda_functional_interface called with {} params; \
@@ -754,7 +758,11 @@ impl<'a> ExprLowering<'a> {
                  arity limit (max 2). Emitting UnsupportedOperationException.",
                 args.len()
             );
-            self.ops.push(JvmOp::StubBody);
+            self.ops
+                .extend(crate::jvm_ir::throw_unsupported_ops(&format!(
+                    "lambda call with {} arguments exceeds arity limit (max 2)",
+                    args.len()
+                )));
             return;
         }
         let (func_iface, sam_name) = match args.len() {
