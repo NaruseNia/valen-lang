@@ -99,6 +99,7 @@ impl DiagCode {
     pub const PRIVATE_FIELD: DiagCode = DiagCode(316);
     pub const TRY_INVALID_TYPE: DiagCode = DiagCode(317);
     pub const FOR_LOOP_UNKNOWN_ELEM: DiagCode = DiagCode(318);
+    pub const TRY_RETURN_MISMATCH: DiagCode = DiagCode(319);
     pub const ORPHAN_RULE_VIOLATION: DiagCode = DiagCode(400);
     pub const BLANKET_IMPL_NOT_ALLOWED: DiagCode = DiagCode(401);
     pub const IMPL_CONFLICT: DiagCode = DiagCode(402);

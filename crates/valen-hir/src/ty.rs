@@ -2509,14 +2509,15 @@ impl<'hir> TypeChecker<'hir> {
         let inner = self.infer_expr(&t.expr);
         let (ty, is_option) = match &inner.ty {
             Ty::Generic(name, args) if name == "Option" && !args.is_empty() => {
+                self.check_try_return_type("Option", t.span);
                 (args[0].clone(), true)
             }
             Ty::Generic(name, args) if name == "Result" && !args.is_empty() => {
+                self.check_try_return_type("Result", t.span);
                 (args[0].clone(), false)
             }
             Ty::Error => (Ty::Error, false),
             _ => {
-                // Issue #018: `?` operator is only valid on Option<T> or Result<T, E>.
                 self.diags.error(
                     DiagCode::TRY_INVALID_TYPE,
                     t.span,
@@ -2535,6 +2536,26 @@ impl<'hir> TypeChecker<'hir> {
             },
             ty,
             span: t.span,
+        }
+    }
+
+    fn check_try_return_type(&mut self, expected_wrapper: &str, span: Span) {
+        if let Some(ret_ty) = &self.return_ty {
+            let ok = match ret_ty {
+                Ty::Generic(name, _) if name == expected_wrapper => true,
+                Ty::Error => true,
+                _ => false,
+            };
+            if !ok {
+                self.diags.error(
+                    DiagCode::TRY_RETURN_MISMATCH,
+                    span,
+                    SmolStr::from(format!(
+                        "`?` on `{expected_wrapper}` requires the function to return \
+                         `{expected_wrapper}<..>`, found `{ret_ty}`"
+                    )),
+                );
+            }
         }
     }
 
@@ -3242,5 +3263,63 @@ mod tests {
         );
         let r = type_check(&resolved.hir, &parsed.items);
         assert_no_errors(&r);
+    }
+
+    #[test]
+    fn try_operator_option() {
+        let r = check_source(
+            r#"
+            fn get_value(x: Int) -> Option<Int> {
+                if x > 0 {
+                    Option::Some(x)
+                } else {
+                    Option::None
+                }
+            }
+            fn use_option(x: Int) -> Option<Int> {
+                let v = get_value(x)?;
+                Option::Some(v)
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn try_operator_result_return_type_validated() {
+        let r = check_source(
+            r#"
+            fn get_result() -> Result<Int, String> { Result::Ok(42) }
+            fn test() -> Int {
+                get_result()?
+            }
+            "#,
+        );
+        assert_has_error(&r, DiagCode::TRY_RETURN_MISMATCH);
+    }
+
+    #[test]
+    fn try_operator_on_non_option_result_errors() {
+        let r = check_source(
+            r#"
+            fn test(x: Int) -> Int {
+                x?
+            }
+            "#,
+        );
+        assert_has_error(&r, DiagCode::TRY_INVALID_TYPE);
+    }
+
+    #[test]
+    fn try_operator_option_return_type_validated() {
+        let r = check_source(
+            r#"
+            fn get_value() -> Option<Int> { Option::Some(42) }
+            fn test() -> Int {
+                get_value()?
+            }
+            "#,
+        );
+        assert_has_error(&r, DiagCode::TRY_RETURN_MISMATCH);
     }
 }
