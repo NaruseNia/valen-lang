@@ -1,0 +1,8 @@
+package com.example;
+
+pub class PrintDemo {
+    fn demo(self) -> Unit {
+        println("hello world");
+        print("no newline");
+    }
+}

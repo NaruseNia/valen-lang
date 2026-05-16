@@ -119,6 +119,7 @@ impl<'hir> TypeChecker<'hir> {
             self.env
                 .define(name.clone(), Ty::Named(name.clone()), false);
         }
+        self.register_prelude_functions();
 
         for item in items {
             match item {
@@ -317,6 +318,14 @@ impl<'hir> TypeChecker<'hir> {
                 _ => {}
             }
         }
+    }
+
+    fn register_prelude_functions(&mut self) {
+        let string_to_unit = Ty::Fn(vec![Ty::Prim(PrimTy::String)], Box::new(Ty::unit()));
+        self.env
+            .define(SmolStr::from("println"), string_to_unit.clone(), false);
+        self.env
+            .define(SmolStr::from("print"), string_to_unit, false);
     }
 
     fn fn_decl_ty(&self, f: &valen_ast::FnDecl) -> Ty {

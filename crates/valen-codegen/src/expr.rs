@@ -465,6 +465,10 @@ impl<'a> ExprLowering<'a> {
 
         match &callee.kind {
             TypedExprKind::LocalVar(name) => {
+                if name == "println" || name == "print" {
+                    self.lower_builtin_print(name, args);
+                    return;
+                }
                 // Check if the callee is a function-typed local variable (lambda).
                 if matches!(callee.ty, Ty::Fn(_, _)) {
                     self.lower_lambda_call(callee, args, result_ty);
@@ -1592,6 +1596,25 @@ impl<'a> ExprLowering<'a> {
             owner: range_class.to_string(),
             name: INIT.to_string(),
             params: vec![obj.clone(), obj, JvmType::Boolean],
+            ret: JvmType::Void,
+        });
+    }
+
+    fn lower_builtin_print(&mut self, name: &str, args: &[TypedExpr]) {
+        self.ops.push(JvmOp::GetStatic {
+            owner: "java/lang/System".to_string(),
+            name: "out".to_string(),
+            descriptor: JvmType::Object("java/io/PrintStream".to_string()),
+        });
+        if let Some(arg) = args.first() {
+            self.lower_expr(arg);
+        } else {
+            self.ops.push(JvmOp::PushString(String::new()));
+        }
+        self.ops.push(JvmOp::InvokeVirtual {
+            owner: "java/io/PrintStream".to_string(),
+            name: name.to_string(),
+            params: vec![JvmType::Object(JVM_STRING.to_string())],
             ret: JvmType::Void,
         });
     }
