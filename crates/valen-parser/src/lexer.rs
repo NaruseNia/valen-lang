@@ -368,7 +368,15 @@ impl<'src> Lexer<'src> {
             self.file_id,
         );
         let kind = match raw {
-            Ok(tok) => map_token(tok),
+            Ok(tok) => {
+                let mapped = map_token(tok);
+                if matches!(&mapped, TokenKind::Ident(n) if n == "f")
+                    && self.inner.remainder().starts_with('"')
+                {
+                    return self.scan_fstring(span.start);
+                }
+                mapped
+            }
             Err(()) => {
                 let slice = self.inner.slice();
                 if slice.bytes().all(|b| b.is_ascii_digit() || b == b'_') && !slice.is_empty() {
@@ -382,6 +390,54 @@ impl<'src> Lexer<'src> {
             }
         };
         Some((kind, span))
+    }
+
+    /// Scan an f-string literal: `f"text {expr} text"`.
+    /// Called after logos consumed `f`; remainder starts with `"`.
+    fn scan_fstring(&mut self, f_start: u32) -> Option<(TokenKind, Span)> {
+        let rem = self.inner.remainder();
+        debug_assert!(rem.starts_with('"'));
+        let bytes = rem.as_bytes();
+        let mut i = 1; // skip opening "
+        let mut depth = 0u32;
+        let mut closed = false;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'\\' if i + 1 < bytes.len() => {
+                    i += 2;
+                    continue;
+                }
+                b'\\' => break,
+                b'{' => depth += 1,
+                b'}' if depth > 0 => depth -= 1,
+                b'"' if depth == 0 => {
+                    i += 1;
+                    closed = true;
+                    break;
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        let consumed = i.min(rem.len());
+        if !closed {
+            let end = f_start + 1 + consumed as u32;
+            let span = Span::new(f_start, end, self.file_id);
+            self.diagnostics.error(
+                DiagCode::LEX_UNKNOWN_CHAR,
+                span,
+                SmolStr::from("unterminated f-string literal"),
+            );
+            self.inner.bump(consumed);
+            return Some((TokenKind::Error(SmolStr::from(&rem[..consumed])), span));
+        }
+        let content = SmolStr::from(&rem[1..i - 1]);
+        self.inner.bump(i);
+        let end = f_start + 1 + i as u32;
+        Some((
+            TokenKind::FStringLit(content),
+            Span::new(f_start, end, self.file_id),
+        ))
     }
 
     /// Consume the lexer and return accumulated diagnostics.
