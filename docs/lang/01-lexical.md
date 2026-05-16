@@ -20,11 +20,15 @@ as safe annotation typealias type
 
 予約語（将来用）：`suspend async await yield`
 
+コンテキストキーワード（特定の位置でのみキーワード、他は識別子）：`data`（`data class` の位置でのみキーワード）
+
 JVM 予約語（Valen では使わないが、識別子としても使用不可）：
 ```
-static void new this super null
+static void this super null
 throw try catch finally extends implements
 ```
+
+`new` は Valen のキーワードではなく、識別子として使用可能。
 
 ### `as` キーワードの用途
 
