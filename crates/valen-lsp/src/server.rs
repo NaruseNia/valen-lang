@@ -928,10 +928,21 @@ impl ServerState {
         let mut prev_line: u32 = 0;
         let mut prev_start: u32 = 0;
 
-        for (kind, span) in &tokens {
-            let token_type = match classify_token(kind) {
-                Some(t) => t,
-                None => continue,
+        for (idx, (kind, span)) in tokens.iter().enumerate() {
+            let token_type = if matches!(kind, TokenKind::Data) {
+                let next_is_class = tokens
+                    .get(idx + 1)
+                    .is_some_and(|(next, _)| matches!(next, TokenKind::Class));
+                if next_is_class {
+                    ST_KEYWORD
+                } else {
+                    ST_VARIABLE
+                }
+            } else {
+                match classify_token(kind) {
+                    Some(t) => t,
+                    None => continue,
+                }
             };
 
             let start_pos = doc.line_index.offset_to_position(span.start);
@@ -1911,7 +1922,6 @@ fn classify_token(kind: &TokenKind) -> Option<u32> {
         | TokenKind::Else
         | TokenKind::Match
         | TokenKind::Class
-        | TokenKind::Data
         | TokenKind::Enum
         | TokenKind::Trait
         | TokenKind::Impl
@@ -1941,7 +1951,6 @@ fn classify_token(kind: &TokenKind) -> Option<u32> {
         | TokenKind::Annotation
         | TokenKind::Static
         | TokenKind::Void
-        | TokenKind::New
         | TokenKind::This
         | TokenKind::Super
         | TokenKind::Null

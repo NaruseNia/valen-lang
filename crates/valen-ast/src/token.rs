@@ -62,10 +62,9 @@ pub enum TokenKind {
     Yield,
     TypeAlias,
     Type,
-    // JVM reserved words
+    // JVM reserved words (`new` is not reserved — Valen has no `new` keyword)
     Static,
     Void,
-    New,
     This,
     Super,
     Null,

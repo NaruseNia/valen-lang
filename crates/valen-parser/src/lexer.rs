@@ -99,7 +99,7 @@ enum RawTok {
     Type,
     #[token("annotation")]
     Annotation,
-    // JVM reserved words — cannot be used as identifiers
+    // JVM reserved words — cannot be used as identifiers (`new` excluded: see map_token)
     #[token("static")]
     Static,
     #[token("void")]
@@ -461,7 +461,7 @@ fn map_token(raw: RawTok) -> TokenKind {
         RawTok::Annotation => TokenKind::Annotation,
         RawTok::Static => TokenKind::Static,
         RawTok::Void => TokenKind::Void,
-        RawTok::New => TokenKind::New,
+        RawTok::New => TokenKind::Ident(SmolStr::from("new")),
         RawTok::This => TokenKind::This,
         RawTok::Super => TokenKind::Super,
         RawTok::Null => TokenKind::Null,

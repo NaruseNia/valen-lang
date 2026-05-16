@@ -1242,7 +1242,7 @@ impl Parser {
                 self.bump();
                 Some(Expr::Literal(Literal::Bool(b, span)))
             }
-            TokenKind::Ident(_) => self.parse_path_expr(),
+            TokenKind::Ident(_) | TokenKind::Data => self.parse_path_expr(),
             TokenKind::SelfKw => {
                 self.bump();
                 Some(Expr::Path(valen_ast::Path {
@@ -1448,7 +1448,7 @@ impl Parser {
                     span: bind_span,
                 }))
             }
-            TokenKind::Ident(_) => self.parse_ident_pattern(),
+            TokenKind::Ident(_) | TokenKind::Data => self.parse_ident_pattern(),
             _ => {
                 self.diagnostics.error(
                     DiagCode::PARSE_EXPECTED_EXPR,
@@ -1788,6 +1788,11 @@ impl Parser {
         if let TokenKind::Ident(name) = self.peek().clone() {
             self.bump();
             return Some(name);
+        }
+        // `data` is a context keyword: only a keyword before `class`, otherwise an identifier
+        if matches!(self.peek(), TokenKind::Data) {
+            self.bump();
+            return Some(SmolStr::from("data"));
         }
         let span = self.peek_span();
         self.diagnostics.error(
