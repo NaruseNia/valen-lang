@@ -121,7 +121,8 @@ fn run_pipeline_with_classpath(
         let file_id = FileId(idx as u32);
         let line_idx = LineIndex::new(&source);
         let result = valen_parser::parse(&source, file_id);
-        emit_diagnostics(&result.diagnostics, input, &line_idx);
+        let parse_file_map = [(input.as_path(), &line_idx)];
+        emit_diagnostics(&result.diagnostics, &parse_file_map);
         if result.diagnostics.has_errors() {
             had_parse_errors = true;
         }
@@ -132,20 +133,15 @@ fn run_pipeline_with_classpath(
         anyhow::bail!("parse errors");
     }
 
-    // TODO(#034): Multi-file diagnostics are attributed to the first file's path
-    // and line index. Each diagnostic should carry its own FileId so that the
-    // correct file path and line index are used for reporting.
-    let first_path = inputs
-        .first()
+    let file_map: Vec<(&std::path::Path, &LineIndex)> = inputs
+        .iter()
         .map(|p| p.as_path())
-        .unwrap_or(std::path::Path::new("<unknown>"));
-    let first_line_idx = line_indexes.first();
+        .zip(line_indexes.iter())
+        .collect();
 
     // --- Resolve (merged) ---
     let resolve_result = valen_hir::resolve::resolve_with_classpath(&all_items, classpath);
-    if let Some(li) = first_line_idx {
-        emit_diagnostics(&resolve_result.diagnostics, first_path, li);
-    }
+    emit_diagnostics(&resolve_result.diagnostics, &file_map);
     if resolve_result.diagnostics.has_errors() {
         anyhow::bail!("resolve errors");
     }
@@ -153,30 +149,22 @@ fn run_pipeline_with_classpath(
 
     // --- Type check (merged) ---
     let tc = valen_hir::ty::type_check(&hir, &all_items);
-    if let Some(li) = first_line_idx {
-        emit_diagnostics(&tc.diagnostics, first_path, li);
-    }
+    emit_diagnostics(&tc.diagnostics, &file_map);
     if tc.diagnostics.has_errors() {
         anyhow::bail!("type errors");
     }
 
     // --- Coherence ---
-    // Extract import short-names from the HIR so coherence can distinguish
-    // foreign types from locally-defined ones.
     let import_names: Vec<smol_str::SmolStr> = hir.imports.keys().cloned().collect();
     let coherence_result = valen_hir::coherence::check_coherence(&hir, &import_names);
-    if let Some(li) = first_line_idx {
-        emit_diagnostics(&coherence_result.diagnostics, first_path, li);
-    }
+    emit_diagnostics(&coherence_result.diagnostics, &file_map);
     if coherence_result.diagnostics.has_errors() {
         anyhow::bail!("coherence errors");
     }
 
     // --- Exhaustiveness ---
     let exhaustiveness_result = valen_hir::exhaustive::check_exhaustiveness(&hir, &all_items);
-    if let Some(li) = first_line_idx {
-        emit_diagnostics(&exhaustiveness_result.diagnostics, first_path, li);
-    }
+    emit_diagnostics(&exhaustiveness_result.diagnostics, &file_map);
     if exhaustiveness_result.diagnostics.has_errors() {
         anyhow::bail!("exhaustiveness errors");
     }
@@ -187,13 +175,20 @@ fn run_pipeline_with_classpath(
     })
 }
 
-/// Emit diagnostics as `file:line:col: V0xxx: message`.
+/// Emit diagnostics using FileId from each span to select the correct file path and line index.
 fn emit_diagnostics(
     diags: &valen_diagnostics::Diagnostics,
-    path: &std::path::Path,
-    line_idx: &LineIndex,
+    file_map: &[(&std::path::Path, &LineIndex)],
 ) {
     for diag in diags.iter() {
+        let fid = diag.primary.file_id.0 as usize;
+        let (path, line_idx) = if fid < file_map.len() {
+            file_map[fid]
+        } else if let Some(first) = file_map.first() {
+            *first
+        } else {
+            continue;
+        };
         let (line, col) = line_idx.line_col(diag.primary.start);
         eprintln!(
             "{}:{}:{}: V{:04}: {}",
