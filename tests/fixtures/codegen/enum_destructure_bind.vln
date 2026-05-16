@@ -1,0 +1,17 @@
+package com.example;
+
+pub enum Color {
+    Red,
+    Green,
+    Blue(value: Int),
+}
+
+pub class Matcher {
+    fn describeColor(self, c: Color) -> Int {
+        match c {
+            Color::Red => 1,
+            Color::Green => 2,
+            Color::Blue(value) => value,
+        }
+    }
+}
