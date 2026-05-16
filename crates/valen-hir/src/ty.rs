@@ -565,7 +565,16 @@ impl<'hir> TypeChecker<'hir> {
             let t = te.ty.clone();
             (Some(Box::new(te)), t)
         } else {
-            (None, Ty::unit())
+            let last_diverges = stmts.last().is_some_and(|s| match s {
+                TypedStmt::Expr(e) | TypedStmt::ExprSemi(e) => e.ty == Ty::nothing(),
+                _ => false,
+            });
+            let ty = if last_diverges {
+                Ty::nothing()
+            } else {
+                Ty::unit()
+            };
+            (None, ty)
         };
 
         self.env.pop_scope();
@@ -3321,5 +3330,38 @@ mod tests {
             "#,
         );
         assert_has_error(&r, DiagCode::TRY_RETURN_MISMATCH);
+    }
+
+    #[test]
+    fn return_with_value() {
+        let r = check_source("fn test() -> Int { return 42; }");
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn return_no_value_in_unit_fn() {
+        let r = check_source("fn test() -> Unit { return; }");
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn return_early_in_if() {
+        let r = check_source(
+            r#"
+            fn test(x: Int) -> Int {
+                if x < 0 {
+                    return 0;
+                }
+                x
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn return_value_type_mismatch() {
+        let r = check_source(r#"fn test() -> Int { return "hello"; }"#);
+        assert_has_error(&r, DiagCode::TYPE_MISMATCH);
     }
 }
