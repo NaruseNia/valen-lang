@@ -491,23 +491,6 @@ fn emit_body(cp: &mut ConstantPool, body: &JvmMethodBody) -> Result<EmitBodyResu
                 block_stack = frame_stack.iter().map(|t| t.slot_count() as i32).sum();
                 block_max = block_max.max(block_stack);
             }
-            JvmOp::StubBody => {
-                pending_label = false;
-                let exc_class = cp.add_class(crate::jvm_const::JVM_UNSUPPORTED_OP)?;
-                let exc_init = cp.add_method_ref(exc_class, "<init>", "(Ljava/lang/String;)V")?;
-                let msg = cp.add_string("not yet implemented")?;
-                instructions.push(Instruction::New(exc_class));
-                instructions.push(Instruction::Dup);
-                instructions.push(Instruction::Ldc_w(msg));
-                instructions.push(Instruction::Invokespecial(exc_init));
-                instructions.push(Instruction::Athrow);
-                block_stack += 2;
-                block_max = block_max.max(block_stack);
-                global_max_stack = global_max_stack.max(block_max);
-                // After athrow, stack is effectively empty for the next block.
-                block_stack = 0;
-                block_max = 0;
-            }
             _ => {
                 pending_label = false;
                 let instr = emit_op(cp, op, &mut fixups, instructions.len())?;
@@ -958,7 +941,7 @@ fn emit_op(
             }
         }
 
-        JvmOp::Label(_) | JvmOp::StubBody | JvmOp::Frame { .. } => vec![],
+        JvmOp::Label(_) | JvmOp::Frame { .. } => vec![],
     })
 }
 
@@ -1412,7 +1395,7 @@ mod tests {
             return_type: JvmType::Object("java/lang/String".to_string()),
             body: Some(JvmMethodBody {
                 max_locals: 1,
-                ops: vec![JvmOp::StubBody],
+                ops: crate::jvm_ir::throw_unsupported_ops("not yet implemented"),
                 exception_handlers: vec![],
             }),
         };

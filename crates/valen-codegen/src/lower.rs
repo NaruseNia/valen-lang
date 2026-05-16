@@ -552,7 +552,7 @@ fn lower_method(
             (if has_self { 1u16 } else { 0 }) + params.iter().map(|t| t.slot_count()).sum::<u16>();
         Some(JvmMethodBody {
             max_locals,
-            ops: vec![JvmOp::StubBody],
+            ops: crate::jvm_ir::throw_unsupported_ops("not yet implemented"),
             exception_handlers: vec![],
         })
     };
@@ -1118,9 +1118,11 @@ mod tests {
         assert!(!greet.access.is_static); // has self
         assert!(greet.params.is_empty()); // self is not in JVM params
         assert!(greet.body.is_some());
-        // body is StubBody for now
         let body = greet.body.as_ref().unwrap();
-        assert!(matches!(body.ops[0], JvmOp::StubBody));
+        assert!(
+            matches!(body.ops[0], JvmOp::New(_)),
+            "expected throw ops for unimplemented body"
+        );
     }
 
     #[test]
