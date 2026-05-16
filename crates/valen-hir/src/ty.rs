@@ -729,6 +729,9 @@ impl<'hir> TypeChecker<'hir> {
                     span: path.span,
                 };
             }
+            if let Some(expr) = self.resolve_bare_variant(name, expected, path.span) {
+                return expr;
+            }
             self.diags.error(
                 DiagCode::UNDECLARED_VAR,
                 path.span,
@@ -1239,6 +1242,19 @@ impl<'hir> TypeChecker<'hir> {
                             &callee,
                             &args,
                             call.span,
+                        ) {
+                            return result;
+                        }
+                    }
+                }
+
+                // Bare variant call (e.g. `Some(42)` → `Option::Some(42)`)
+                if let TypedExprKind::LocalVar(ref qname) = callee.kind {
+                    if let Some((en, vn)) = qname.split_once("::") {
+                        let en = SmolStr::from(en);
+                        let vn = SmolStr::from(vn);
+                        if let Some(result) = self.resolve_enum_variant_call(
+                            &en, &vn, &callee, &args, call.span, expected,
                         ) {
                             return result;
                         }
@@ -2187,6 +2203,51 @@ impl<'hir> TypeChecker<'hir> {
             _ => return,
         };
         self.bind_variant_fields(sp, enum_name, variant_name, scrutinee_ty);
+    }
+
+    /// Resolve a bare variant name (e.g. `Some`, `None`, `Ok`, `Err`) to its
+    /// qualified enum path. Produces the same typed expression as `Enum::Variant`.
+    fn resolve_bare_variant(
+        &self,
+        name: &SmolStr,
+        expected: Option<&Ty>,
+        span: Span,
+    ) -> Option<TypedExpr> {
+        for def in self.hir.defs.values() {
+            if let DefKind::Enum(enum_def) = &def.kind {
+                let Some(variant) = enum_def.variants.iter().find(|v| v.name == *name) else {
+                    continue;
+                };
+                let enum_name = &def.name;
+                let qualified = SmolStr::from(format!("{enum_name}::{name}"));
+                if variant.fields.is_empty() {
+                    let ty = match expected {
+                        Some(Ty::Generic(n, args)) if n == enum_name => {
+                            Ty::Generic(n.clone(), args.clone())
+                        }
+                        _ => Ty::Named(enum_name.clone()),
+                    };
+                    return Some(TypedExpr {
+                        kind: TypedExprKind::Call {
+                            callee: Box::new(TypedExpr {
+                                kind: TypedExprKind::LocalVar(qualified),
+                                ty: ty.clone(),
+                                span,
+                            }),
+                            args: vec![],
+                        },
+                        ty,
+                        span,
+                    });
+                }
+                return Some(TypedExpr {
+                    kind: TypedExprKind::LocalVar(qualified),
+                    ty: Ty::Named(enum_name.clone()),
+                    span,
+                });
+            }
+        }
+        None
     }
 
     fn find_enum_for_variant(&self, variant_name: &str) -> Option<SmolStr> {
@@ -3386,5 +3447,44 @@ mod tests {
     fn return_value_type_mismatch() {
         let r = check_source(r#"fn test() -> Int { return "hello"; }"#);
         assert_has_error(&r, DiagCode::TYPE_MISMATCH);
+    }
+
+    #[test]
+    fn bare_some_none_in_option() {
+        let r = check_source(
+            r#"
+            fn test(x: Int) -> Option<Int> {
+                if x > 0 { Some(x) } else { None }
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn bare_ok_err_in_result() {
+        let r = check_source(
+            r#"
+            fn test(x: Int) -> Result<Int, String> {
+                if x > 0 { Ok(x) } else { Err("negative") }
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn bare_none_in_match_pattern_position() {
+        let r = check_source(
+            r#"
+            fn test(opt: Option<Int>) -> Int {
+                match opt {
+                    Option::Some(v) => v,
+                    Option::None => 0,
+                }
+            }
+            "#,
+        );
+        assert_no_errors(&r);
     }
 }
