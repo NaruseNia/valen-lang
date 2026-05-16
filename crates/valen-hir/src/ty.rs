@@ -1189,6 +1189,7 @@ impl<'hir> TypeChecker<'hir> {
                             &callee,
                             &args,
                             call.span,
+                            expected,
                         ) {
                             return result;
                         }
@@ -1387,6 +1388,7 @@ impl<'hir> TypeChecker<'hir> {
         callee: &TypedExpr,
         args: &[TypedExpr],
         span: Span,
+        expected: Option<&Ty>,
     ) -> Option<TypedExpr> {
         let enum_def = self
             .hir
@@ -1419,12 +1421,12 @@ impl<'hir> TypeChecker<'hir> {
                 )),
             );
         } else {
-            for (arg, expected) in args.iter().zip(field_tys.iter()) {
+            for (arg, exp_ty) in args.iter().zip(field_tys.iter()) {
                 let resolved = if field_tys.iter().any(|t| matches!(t, Ty::TypeParam(_))) {
                     let bindings = infer_type_bindings(&field_tys, args);
-                    substitute_ty(expected, &bindings)
+                    substitute_ty(exp_ty, &bindings)
                 } else {
-                    expected.clone()
+                    exp_ty.clone()
                 };
                 if !arg.ty.is_error()
                     && !resolved.is_error()
@@ -1441,15 +1443,14 @@ impl<'hir> TypeChecker<'hir> {
         }
 
         let bindings = infer_type_bindings(&field_tys, args);
-        let type_params: Vec<Ty> = collect_type_params_ordered(&field_tys);
-        let ret_ty = if type_params.is_empty() {
-            Ty::Named(enum_name.clone())
+        let ret_ty = if let Some(Ty::Generic(n, expected_args)) = expected {
+            if n == enum_name {
+                Ty::Generic(n.clone(), expected_args.clone())
+            } else {
+                self.infer_variant_return_type(enum_name, &edef.variants, &bindings)
+            }
         } else {
-            let resolved_params: Vec<Ty> = type_params
-                .iter()
-                .map(|p| substitute_ty(p, &bindings))
-                .collect();
-            Ty::Generic(enum_name.clone(), resolved_params)
+            self.infer_variant_return_type(enum_name, &edef.variants, &bindings)
         };
 
         Some(TypedExpr {
@@ -1460,6 +1461,28 @@ impl<'hir> TypeChecker<'hir> {
             ty: ret_ty,
             span,
         })
+    }
+
+    fn infer_variant_return_type(
+        &self,
+        enum_name: &SmolStr,
+        variants: &[crate::EnumVariantDef],
+        bindings: &IndexMap<SmolStr, Ty>,
+    ) -> Ty {
+        let all_field_tys: Vec<Ty> = variants
+            .iter()
+            .flat_map(|v| v.fields.iter().map(|(_, tyref)| tyref_to_ty_generic(tyref)))
+            .collect();
+        let type_params = collect_type_params_ordered(&all_field_tys);
+        if type_params.is_empty() {
+            Ty::Named(enum_name.clone())
+        } else {
+            let resolved_params: Vec<Ty> = type_params
+                .iter()
+                .map(|p| substitute_ty(p, bindings))
+                .collect();
+            Ty::Generic(enum_name.clone(), resolved_params)
+        }
     }
 
     fn resolve_associated_fn_call(

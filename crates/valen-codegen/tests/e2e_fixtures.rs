@@ -14,6 +14,14 @@ fn fixture_path(name: &str) -> std::path::PathBuf {
 }
 
 fn compile_fixture_outputs(name: &str) -> Vec<valen_codegen::ClassFileOutput> {
+    compile_fixture_impl(name, true)
+}
+
+fn compile_fixture_outputs_skip_typecheck(name: &str) -> Vec<valen_codegen::ClassFileOutput> {
+    compile_fixture_impl(name, false)
+}
+
+fn compile_fixture_impl(name: &str, assert_typecheck: bool) -> Vec<valen_codegen::ClassFileOutput> {
     let path = fixture_path(name);
     let source = std::fs::read_to_string(&path).expect("read fixture");
     let file_id = FileId(0);
@@ -35,6 +43,18 @@ fn compile_fixture_outputs(name: &str) -> Vec<valen_codegen::ClassFileOutput> {
     );
 
     let tc = valen_hir::ty::type_check(&resolve_result.hir, &parse_result.items);
+    if assert_typecheck {
+        let errors: Vec<_> = tc
+            .diagnostics
+            .iter()
+            .filter(|d| d.severity == valen_diagnostics::Severity::Error)
+            .collect();
+        assert!(
+            errors.is_empty(),
+            "type errors in {name}: {:?}",
+            errors.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
 
     let outputs =
         valen_codegen::compile_hir(&resolve_result.hir, &tc.bodies).expect("codegen failed");
@@ -219,7 +239,9 @@ fn fixture_fn_string_interp() {
 
 #[test]
 fn fixture_java_import() {
-    let outputs = compile_fixture_outputs("java_import.vln");
+    // Skip type_check assertion: foreign types require classpath scanning which
+    // is not available in the test harness (resolve::resolve vs resolve_with_classpath).
+    let outputs = compile_fixture_outputs_skip_typecheck("java_import.vln");
     assert_eq!(outputs.len(), 1);
     assert_eq!(outputs[0].internal_name, "com/example/Importer");
 
