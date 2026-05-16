@@ -723,3 +723,20 @@ fn fixture_enum_destructure_bind() {
         "missing describeColor method"
     );
 }
+
+#[test]
+fn fixture_println_print() {
+    let classes = compile_fixture("println_print.vln");
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+    assert_eq!(c.class_name().unwrap(), "com/example/PrintDemo");
+
+    let cp_strings: Vec<String> = (1..c.constant_pool.len())
+        .filter_map(|i| c.constant_pool.try_get_utf8(i as u16).ok())
+        .map(|s| s.to_string())
+        .collect();
+    assert!(
+        cp_strings.iter().any(|s| s == "java/io/PrintStream"),
+        "should reference PrintStream"
+    );
+}
