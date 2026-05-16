@@ -126,18 +126,28 @@ mise run build            # ビルド確認（リリース前は mise run build:
 
 新機能提案時は自己診断として上記5軸でチェック。
 
-## ドキュメント整合性
+## ドキュメント・LSP 整合性
 
-作業完了時、以下のドキュメントに影響する変更がないか確認し、必要なら更新するかユーザーに確認すること:
+`crates/` 配下のコードを変更したら、**コミット前に毎回**以下を確認すること。「あとで」は禁止。
 
-- `docs/requirements/` — 要件の追加・変更・ステータス更新（Draft → Done 等）
-- `docs/internals/` — アーキテクチャ変更（crate 追加、パイプライン変更等）
-- `docs/implementation/plan.md` — タスク完了、新規タスク追加、マイルストーン進捗
-- `docs/lang/` — 言語仕様の変更・追加
-- `docs/IMPLEMENTATION_PLAN.md` — Phase 進捗の更新
-- `docs/lang/18-open-questions.md` — 仕様課題の解決・追加
+### 言語仕様 (`docs/lang/`)
+言語の挙動を変える変更は、対応する仕様を**実際に読んで**乖離を確認し、必要なら修正する。新しい言語機能は `docs/LANGUAGE_SPEC.md` のインデックスにも追記。
 
-特に parser/HIR/codegen の実装が進んだ際は、対応する TASK の完了や REQ のステータス更新を忘れずに行う。
+### ユーザーガイド (`docs/guide/`)
+ユーザーが書くコードに影響する変更は、対応するガイド章にも反映する。ガイドは「その機能を初めて使う人」向けなので、仕様書とは粒度が異なる。
+
+### LSP 影響確認
+parser / HIR に変更を加えた場合:
+- 新 AST ノード追加 → `crates/valen-lsp/src/` で処理されているか確認
+- 新キーワード・構文追加 → completion 候補に追加が必要か確認
+- 型推論・名前解決変更 → hover / goto-definition が壊れていないか確認
+- 最低限 `cargo check -p valen-lsp` が通ることを確認
+
+### 実装計画・要件
+- タスク完了 → `docs/implementation/comprehensive-plan.md`、`plan.md`、`phase-1.5-plan.md` のステータス更新
+- 要件充足 → `docs/requirements/overview.md` のステータス列を更新
+- 新 crate 追加 → `docs/internals/architecture.md` と `AGENTS.md` のディレクトリ構成を更新
+- 仕様課題の解決 → `docs/lang/18-open-questions.md` を更新
 
 ## 利用可能なスキル（共有手順書）
 
