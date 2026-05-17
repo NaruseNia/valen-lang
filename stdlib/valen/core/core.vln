@@ -150,6 +150,98 @@ pub enum Ordering {
 
 pub data class Pair<A, B>(pub first: A, pub second: B);
 
+// --- Option methods ---
+
+impl Option<T> {
+    fn map<U>(self, f: fn(T) -> U) -> Option<U> {
+        match self {
+            Option::Some(v) => Option::Some(f(v)),
+            Option::None => Option::None,
+        }
+    }
+
+    fn flatMap<U>(self, f: fn(T) -> Option<U>) -> Option<U> {
+        match self {
+            Option::Some(v) => f(v),
+            Option::None => Option::None,
+        }
+    }
+
+    fn unwrapOr(self, default: T) -> T {
+        match self {
+            Option::Some(v) => v,
+            Option::None => default,
+        }
+    }
+
+    fn filter(self, predicate: fn(T) -> Bool) -> Option<T> {
+        match self {
+            Option::Some(v) => if predicate(v) { Option::Some(v) } else { Option::None },
+            Option::None => Option::None,
+        }
+    }
+
+    fn isSome(self) -> Bool {
+        match self {
+            Option::Some(v) => true,
+            Option::None => false,
+        }
+    }
+
+    fn isNone(self) -> Bool {
+        match self {
+            Option::Some(v) => false,
+            Option::None => true,
+        }
+    }
+}
+
+// --- Result methods ---
+
+impl Result<T, E> {
+    fn map<U>(self, f: fn(T) -> U) -> Result<U, E> {
+        match self {
+            Result::Ok(v) => Result::Ok(f(v)),
+            Result::Err(e) => Result::Err(e),
+        }
+    }
+
+    fn mapErr<F>(self, f: fn(E) -> F) -> Result<T, F> {
+        match self {
+            Result::Ok(v) => Result::Ok(v),
+            Result::Err(e) => Result::Err(f(e)),
+        }
+    }
+
+    fn flatMap<U>(self, f: fn(T) -> Result<U, E>) -> Result<U, E> {
+        match self {
+            Result::Ok(v) => f(v),
+            Result::Err(e) => Result::Err(e),
+        }
+    }
+
+    fn unwrapOr(self, default: T) -> T {
+        match self {
+            Result::Ok(v) => v,
+            Result::Err(e) => default,
+        }
+    }
+
+    fn isOk(self) -> Bool {
+        match self {
+            Result::Ok(v) => true,
+            Result::Err(e) => false,
+        }
+    }
+
+    fn isErr(self) -> Bool {
+        match self {
+            Result::Ok(v) => false,
+            Result::Err(e) => true,
+        }
+    }
+}
+
 // --- Range ---
 
 pub data class Range<T>(

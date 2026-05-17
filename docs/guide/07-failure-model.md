@@ -34,6 +34,19 @@ match user {
 }
 ```
 
+### Option のメソッド
+
+`Option<T>` には以下の inherent メソッドがあります。
+
+| メソッド | シグネチャ | 説明 |
+|----------|-----------|------|
+| `map` | `fn map<U>(self, f: fn(T) -> U) -> Option<U>` | Some の中身を変換 |
+| `flatMap` | `fn flatMap<U>(self, f: fn(T) -> Option<U>) -> Option<U>` | Some の中身を Option に変換して flatten |
+| `unwrapOr` | `fn unwrapOr(self, default: T) -> T` | Some なら中身、None ならデフォルト値 |
+| `filter` | `fn filter(self, predicate: fn(T) -> Bool) -> Option<T>` | 条件を満たさなければ None |
+| `isSome` | `fn isSome(self) -> Bool` | Some なら true |
+| `isNone` | `fn isNone(self) -> Bool` | None なら true |
+
 ### T? 構文
 
 型注釈で `T?` と書くと `Option<T>` と同じ意味になります。短く書きたい場合に便利です。
@@ -50,6 +63,19 @@ fn first_name(full_name: String?) -> String {
 ## Result — 回復可能な失敗
 
 `Result<T, E>` は「成功（`Ok(T)`）か失敗（`Err(E)`）のどちらか」を表す型です。`E` は `Error` trait を実装している必要があります。
+
+### Result のメソッド
+
+`Result<T, E>` には以下の inherent メソッドがあります。
+
+| メソッド | シグネチャ | 説明 |
+|----------|-----------|------|
+| `map` | `fn map<U>(self, f: fn(T) -> U) -> Result<U, E>` | Ok の中身を変換 |
+| `mapErr` | `fn mapErr<F>(self, f: fn(E) -> F) -> Result<T, F>` | Err の中身を変換 |
+| `flatMap` | `fn flatMap<U>(self, f: fn(T) -> Result<U, E>) -> Result<U, E>` | Ok をチェーン |
+| `unwrapOr` | `fn unwrapOr(self, default: T) -> T` | Ok なら中身、Err ならデフォルト値 |
+| `isOk` | `fn isOk(self) -> Bool` | Ok なら true |
+| `isErr` | `fn isErr(self) -> Bool` | Err なら true |
 
 ### Error trait の定義
 

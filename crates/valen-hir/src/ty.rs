@@ -2725,28 +2725,29 @@ impl<'hir> TypeChecker<'hir> {
                 continue;
             }
             if let DefKind::Enum(enum_def) = &def.kind {
+                // Collect type params from ALL variants to match enum-level ordering
+                let all_variant_field_tys: Vec<Ty> = enum_def
+                    .variants
+                    .iter()
+                    .flat_map(|v| v.fields.iter().map(|(_, tyref)| tyref_to_ty_generic(tyref)))
+                    .collect();
+                let enum_type_params = collect_type_params_ordered(&all_variant_field_tys);
+                let bindings: IndexMap<SmolStr, Ty> = enum_type_params
+                    .iter()
+                    .filter_map(|tp| {
+                        if let Ty::TypeParam(name) = tp {
+                            Some(name.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .zip(type_args.iter().cloned())
+                    .collect();
+
                 for variant in &enum_def.variants {
                     if variant.name != variant_name {
                         continue;
                     }
-                    let all_field_tys: Vec<Ty> = variant
-                        .fields
-                        .iter()
-                        .map(|(_, tyref)| tyref_to_ty_generic(tyref))
-                        .collect();
-                    let type_params = collect_type_params_ordered(&all_field_tys);
-                    let bindings: IndexMap<SmolStr, Ty> = type_params
-                        .iter()
-                        .filter_map(|tp| {
-                            if let Ty::TypeParam(name) = tp {
-                                Some(name.clone())
-                            } else {
-                                None
-                            }
-                        })
-                        .zip(type_args.iter().cloned())
-                        .collect();
-
                     for (fname, tyref) in &variant.fields {
                         let ty = tyref_to_ty_generic(tyref);
                         let resolved = substitute_ty(&ty, &bindings);

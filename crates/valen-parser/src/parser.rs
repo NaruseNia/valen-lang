@@ -383,6 +383,29 @@ impl Parser {
 
     fn parse_type(&mut self) -> Option<Type> {
         let start = self.peek_span();
+
+        // Function type: `fn(A, B) -> C`
+        if self.at(&TokenKind::Fn) {
+            self.bump();
+            self.expect(TokenKind::LParen)?;
+            let mut params = Vec::new();
+            while !self.at(&TokenKind::RParen) && !self.at_eof() {
+                if !params.is_empty() {
+                    self.expect(TokenKind::Comma)?;
+                }
+                params.push(self.parse_type()?);
+            }
+            self.expect(TokenKind::RParen)?;
+            self.expect(TokenKind::Arrow)?;
+            let return_type = self.parse_type()?;
+            let end = type_span(&return_type);
+            return Some(Type::Fn(valen_ast::FnType {
+                params,
+                return_type: Box::new(return_type),
+                span: start.merge(end),
+            }));
+        }
+
         let name = self.expect_ident()?;
         let mut segments = vec![self.parse_type_path_segment(name, start)?];
 
