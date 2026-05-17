@@ -2400,11 +2400,31 @@ impl<'hir> TypeChecker<'hir> {
 
         let field_types = self.resolve_variant_field_types(enum_name, variant_name, &type_args);
 
-        for field in &sp.fields {
-            let field_ty = field_types
-                .get(field.name.as_str())
-                .cloned()
-                .unwrap_or(Ty::Error);
+        if !sp.rest && sp.fields.len() > field_types.len() {
+            self.diags.error(
+                DiagCode::ARG_COUNT_MISMATCH,
+                sp.span,
+                SmolStr::from(format!(
+                    "`{enum_name}::{variant_name}` pattern expects {} field(s), found {}",
+                    field_types.len(),
+                    sp.fields.len(),
+                )),
+            );
+            return;
+        }
+
+        for (idx, field) in sp.fields.iter().enumerate() {
+            let field_ty = if field.pattern.is_some() {
+                field_types
+                    .get(field.name.as_str())
+                    .cloned()
+                    .unwrap_or(Ty::Error)
+            } else {
+                field_types
+                    .get_index(idx)
+                    .map(|(_, ty)| ty.clone())
+                    .unwrap_or(Ty::Error)
+            };
 
             if let Some(ref sub_pat) = field.pattern {
                 self.bind_pattern(sub_pat, &field_ty);
