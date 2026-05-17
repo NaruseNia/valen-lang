@@ -222,7 +222,7 @@ ECS テストプロジェクトが示した最大の痛点「match のネスト�
 |--------|------|-------------|--------|-----------|------|
 | TASK-046 | if let / while let | [#111](https://github.com/NaruseNia/valen-lang/issues/111), [VEP-029](https://github.com/NaruseNia/valen-lang/discussions/123) | Must | parser, hir, codegen | L |
 | TASK-047 | let-else | [VEP-028](https://github.com/NaruseNia/valen-lang/discussions/124) | Must | parser, hir, codegen | L |
-| TASK-048 | derive（Eq, Hash, Debug, Clone） | [VEP-013](https://github.com/NaruseNia/valen-lang/discussions/125) | Must | parser, hir, codegen | L |
+| TASK-048 | derive（Eq, Hash, Display, Clone） | [VEP-013](https://github.com/NaruseNia/valen-lang/discussions/125) | Must | parser, hir, codegen | L |
 | TASK-049 | enum variant 省略構文（.Some(x) 形式） | [#110](https://github.com/NaruseNia/valen-lang/issues/110) | Should | parser, hir (type inference) | M |
 
 **実装順序:** TASK-046/047 → TASK-049（variant shorthand は if let との組み合わせが重要）。TASK-048 は独立して並行可。
@@ -279,22 +279,22 @@ let Ok(data) = readFile(path) else { panic("read failed"); };
 
 **構文:**
 ```valen
-#[derive(Eq, Hash, Debug, Clone)]
+#[derive(Eq, Hash, Display, Clone)]
 pub data class Entity(pub id: Int);
 
-#[derive(Eq, Debug)]
+#[derive(Eq, Display)]
 pub enum Color { Red, Green, Blue(value: Int) }
 ```
 
 **設計決定:**
-- **data class は暗黙に Eq/Hash/Debug/Clone を持つ**: data class の既存 Java `equals()`/`hashCode()`/`toString()` への trait ブリッジ。新規バイトコード生成なし
+- **data class は暗黙に Eq/Hash/Display/Clone を持つ**: data class の既存 Java `equals()`/`hashCode()`/`toString()` への trait ブリッジ。新規バイトコード生成なし
 - **通常の class / enum**: `derive(Eq)` で Java `equals()` メソッド生成 + Eq trait impl を同時に emit
-- **対応 trait（初期セット）:** `Eq`, `Hash`, `Debug`, `Clone`
+- **対応 trait（初期セット）:** `Eq`, `Hash`, `Display`, `Clone`
 
 **実装方針:**
 1. parser: `#[derive(...)]` は TASK-030（annotation）基盤で既にパース可能
 2. HIR: derive 対象の trait を特定し、フィールド構造から impl を自動生成
-3. data class: `equals()` → `Eq::eq()` ブリッジ、`hashCode()` → `Hash::hash()` ブリッジ、`toString()` → `Debug::fmt()` ブリッジ
+3. data class: `equals()` → `Eq::eq()` ブリッジ、`hashCode()` → `Hash::hash()` ブリッジ、`toString()` → `Display::display()` ブリッジ
 4. class/enum: フィールド比較コードを生成し Java メソッド + trait impl として emit
 
 ### TASK-049: enum variant shorthand
@@ -598,7 +598,7 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 | S6 | List リテラル構文 | `[1, 2, 3]` — 衝突なし | TASK-051 |
 | S7 | Pipeline desugar | 第1引数挿入: `x \|> f(a, b)` → `f(x, a, b)` | TASK-052 |
 | S8 | newtype ラップ/アンラップ | コンストラクタ `EntityId(42)` + `Into/From` trait 自動生成 | TASK-053 |
-| S9 | derive × data class | data class は暗黙に Eq/Hash/Debug/Clone 保持。Java equals() 等へのブリッジ | TASK-048 |
+| S9 | derive × data class | data class は暗黙に Eq/Hash/Display/Clone 保持。Java equals() 等へのブリッジ | TASK-048 |
 | S10 | unsafe 許可操作 | unchecked cast + exception 無視 + null 使用 | TASK-055 |
 | S11 | Intersection constraints | 既存 `+` 構文のまま。`&` は追加しない | TASK-054 |
 

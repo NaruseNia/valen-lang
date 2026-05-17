@@ -830,7 +830,7 @@ fn lower_record_variant(
                 variant_internal,
                 &field_info,
             )),
-            "Debug" => methods.push(data_class_methods::generate_to_string(
+            "Display" => methods.push(data_class_methods::generate_to_string(
                 variant_internal,
                 variant_name_str,
                 &field_info,

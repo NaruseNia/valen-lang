@@ -91,7 +91,7 @@ prelude に含まれる型・trait:
 - `Option` / `Result` / `Error` / `Iterator` / `Range` / `JavaException`
 - 演算子 trait: `Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, `Not`
 - 比較 trait: `Eq`, `Ord`
-- ユーティリティ trait: `Hash`, `Debug`, `Clone`
+- ユーティリティ trait: `Hash`, `Display`, `Clone`
 
 ### 型検査（typecheck）
 

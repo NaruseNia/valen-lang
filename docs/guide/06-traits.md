@@ -339,7 +339,7 @@ impl Eq for CaseInsensitiveString {
 ```valen
 pub data class Entity(pub id: Int) derives(Eq, Hash);
 
-pub enum Shape derives(Eq, Hash, Debug) {
+pub enum Shape derives(Eq, Hash, Display) {
     Circle(r: Float),
     Rect(w: Float, h: Float),
     Point,
@@ -352,12 +352,12 @@ pub enum Shape derives(Eq, Hash, Debug) {
 |-------|----------------|
 | `Eq` | `equals` — フィールドを1つずつ比較 |
 | `Hash` | `hashCode` — フィールドから一意のハッシュ値を計算 |
-| `Debug` | `toString` — `TypeName(field=value)` 形式の文字列表現 |
+| `Display` | `toString` — `TypeName(field=value)` 形式の文字列表現 |
 | `Clone` | `copy` — 全フィールドを指定して複製 |
 
 ### data class は暗黙に derive 済み
 
-`data class` は `derives(...)` を書かなくても `Eq`, `Hash`, `Debug`, `Clone` が自動生成されます。これは data class の設計意図（値型としての振る舞い）に基づいています。
+`data class` は `derives(...)` を書かなくても `Eq`, `Hash`, `Display`, `Clone` が自動生成されます。これは data class の設計意図（値型としての振る舞い）に基づいています。
 
 ```valen
 // derives を書かなくても equals/hashCode/toString/copy が使える

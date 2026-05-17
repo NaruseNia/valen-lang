@@ -26,10 +26,10 @@ pub trait Hash {
     fn hash(self) -> Int;
 }
 
-// --- Debug trait ---
+// --- Display trait ---
 
-pub trait Debug {
-    fn fmt(self) -> String;
+pub trait Display {
+    fn display(self) -> String;
 }
 
 // --- Clone trait ---
@@ -48,6 +48,49 @@ pub trait Error {
 
 pub trait Iterator<T> {
     fn next(mut self) -> Option<T>;
+}
+
+// --- Conversion traits ---
+
+pub trait Into<T> {
+    fn into(self) -> T;
+}
+
+pub trait From<T> {
+    fn from(value: T) -> Self;
+}
+
+pub trait TryInto<T> {
+    fn tryInto(self) -> Result<T, String>;
+}
+
+pub trait TryFrom<T> {
+    fn tryFrom(value: T) -> Result<Self, String>;
+}
+
+// --- Default trait ---
+
+pub trait Default {
+    fn default() -> Self;
+}
+
+// --- IntoIterator trait ---
+
+pub trait IntoIterator<T> {
+    fn intoIter(self) -> Iterator<T>;
+}
+
+// --- Index trait ---
+
+pub trait Index<Idx> {
+    type Output;
+    fn index(self, idx: Idx) -> Self;
+}
+
+// --- ToString trait ---
+
+pub trait ToString {
+    fn toString(self) -> String;
 }
 
 // --- Operator traits (arithmetic) ---
@@ -94,6 +137,18 @@ pub trait Not {
 pub trait Ord {
     fn cmp(self, rhs: Self) -> Int;
 }
+
+// --- Ordering ---
+
+pub enum Ordering {
+    Less,
+    Equal,
+    Greater,
+}
+
+// --- Pair ---
+
+pub data class Pair<A, B>(pub first: A, pub second: B);
 
 // --- Range ---
 
