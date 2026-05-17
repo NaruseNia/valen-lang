@@ -1216,6 +1216,14 @@ impl<'a> ExprLowering<'a> {
                 self.ops.push(JvmOp::StoreLocal(cast_slot, cast_ty.clone()));
 
                 let variant_field_types = self.resolve_variant_field_types(&sp.path);
+
+                // Two-phase pattern lowering: check phase uses temp slots only,
+                // publish phase promotes bindings to lexical locals after all
+                // checks pass. This prevents uninitialized locals from appearing
+                // in StackMapTable frames when a later field's pattern fails.
+                let mut deferred_bindings: Vec<(SmolStr, JvmType, u16)> = Vec::new();
+
+                // Phase 1: Check — all field tests use temp slots.
                 for field in &sp.fields {
                     self.ops.push(JvmOp::LoadLocal(cast_slot, cast_ty.clone()));
                     let field_ty = variant_field_types
@@ -1234,9 +1242,21 @@ impl<'a> ExprLowering<'a> {
                             .push(JvmOp::StoreLocal(inner_slot, field_ty.clone()));
                         self.lower_pattern_check(pat, inner_slot, &field_ty, fail_label);
                     } else {
-                        let slot = self.alloc_local(field.name.clone(), field_ty.clone());
-                        self.ops.push(JvmOp::StoreLocal(slot, field_ty));
+                        // Store to a temp slot; defer alloc_local to the publish phase.
+                        let temp = self.next_slot;
+                        self.next_slot += field_ty.slot_count();
+                        self.ops.push(JvmOp::StoreLocal(temp, field_ty.clone()));
+                        deferred_bindings.push((field.name.clone(), field_ty, temp));
                     }
+                }
+
+                // Phase 2: Publish — all checks passed, promote temp slots to
+                // lexical locals so locals_snapshot() reflects only initialized
+                // bindings.
+                for (name, ty, temp) in deferred_bindings {
+                    let local = self.alloc_local(name, ty.clone());
+                    self.ops.push(JvmOp::LoadLocal(temp, ty.clone()));
+                    self.ops.push(JvmOp::StoreLocal(local, ty));
                 }
             }
             Pattern::Or(pats, _) => {
