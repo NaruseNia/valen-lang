@@ -16,9 +16,12 @@ ECS テストプロジェクト（`examples/ecs-system`）から発見された 
 | フェーズ | 完了 | 残 | 備考 |
 |---------|------|-----|------|
 | Phase 1 (MVP) | 15/17 | TASK-013, 016 | Gradle plugin + サンプル |
-| Phase 1.5 M6 | 5/5 | StubBody 3箇所残存 | stub 全潰し _ほぼ_ 完了 |
+| Phase 1.5 M6 | 5/5 | — | stub 全潰し完了（StubBody 除去済み） |
 | Phase 1.5 M7 | 4/4 | — | 基盤整備完了 |
-| Phase 1.5 M8 | 4/7 | TASK-028, 031, 033 | 言語機能+ツール |
+| Phase 1.5 M8 | 6/7 | TASK-033 | TASK-028 ✅, TASK-031 ✅ |
+| M9 | 5/5 | — | ✅ Critical Fixes 完了 |
+| M9.5 | 2/2 | — | ✅ Bug Polish 完了 |
+| M10 | 4/4 | — | ✅ Practical Usability 完了 |
 | 要件 | 42/45 Done | 3 Draft | REQ-EMIT-004, REQ-TOOL-002, REQ-STDLIB-003 |
 
 ---
@@ -482,19 +485,19 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 
 ### 新規タスク（TASK-034 〜 055）
 
-| ID | 内容 | Issue / VEP | マイルストーン | 依存 | 規模 |
-|----|------|-------------|--------------|------|------|
-| TASK-034 | enum variant destructuring fix | #106 | M9 | — | S |
-| TASK-034a | StubBody 掃除（codegen 残存 3箇所） | — | M9 | — | S |
-| TASK-035 | e2e test type_check verification | #107 | M9 | — | S |
-| TASK-036 | Java constructor expression fix | #108 | M9 | — | M |
-| TASK-038 | ? operator for Option | #118 | M9 | — | M |
-| TASK-037 | Multi-file error attribution | #112 | M9.5 | M9 | M |
-| TASK-039 | return statement verification | #119 | M9.5 | M9 | S |
-| TASK-040 | println/print prelude | #116 | M10 | M9.5 | S |
-| TASK-041 | Prelude variant names | #109 | M10 | M9.5 | S |
-| TASK-042 | JVM reserved word handling | #113 | M10 | — | S |
-| TASK-045 | f-string | #117 | M10 | — | M |
+| ID | 内容 | Issue / VEP | マイルストーン | 依存 | 規模 | 状態 |
+|----|------|-------------|--------------|------|------|------|
+| TASK-034 | enum variant destructuring fix | #106 | M9 | — | S | ✅ PR #132 |
+| TASK-034a | StubBody 掃除（codegen 残存 3箇所） | — | M9 | — | S | ✅ PR #133 |
+| TASK-035 | e2e test type_check verification | #107 | M9 | — | S | ✅ PR #136 |
+| TASK-036 | Java constructor expression fix | #108 | M9 | — | M | ✅ PR #134 |
+| TASK-038 | ? operator for Option | #118 | M9 | — | M | ✅ PR #135 |
+| TASK-037 | Multi-file error attribution | #112 | M9.5 | M9 | M | ✅ PR #138 |
+| TASK-039 | return statement verification | #119 | M9.5 | M9 | S | ✅ PR #137 |
+| TASK-040 | println/print prelude | #116 | M10 | M9.5 | S | ✅ PR #140 |
+| TASK-041 | Prelude variant names | #109 | M10 | M9.5 | S | ✅ PR #139 |
+| TASK-042 | JVM reserved word handling | #113 | M10 | — | S | ✅ PR #141 |
+| TASK-045 | f-string | #117 | M10 | — | M | ✅ PR #142 |
 | TASK-050 | Collection operations | #114 | M11 | TASK-033 | M |
 | TASK-046 | if let / while let | #111, VEP-029 | M12 | M9 | L |
 | TASK-047 | let-else | VEP-028 | M12 | M9 | L |
@@ -514,8 +517,8 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 |----|------|--------------|------|
 | TASK-013 | Gradle プラグイン | M11 | 未着手 |
 | TASK-016 | サンプルプロジェクト | M11 | 未着手 |
-| TASK-028 | 演算子オーバーロード | M11 | 未着手 |
-| TASK-031 | valenfmt 最小実装 | M11 | 未着手 |
+| TASK-028 | 演算子オーバーロード | M11 | ✅ 実装済み（M8 時点で完了、e2e テスト green） |
+| TASK-031 | valenfmt 最小実装 | M11 | ✅ 実装済み（CLI + 32 テスト + --check モード） |
 | TASK-033 | stdlib 二層化 + 強化 | M11 | 未着手 |
 
 ---
@@ -553,6 +556,7 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 | VEP-011 | #128 | Refinement / newtype | 2 | Should | TASK-053 | M13 |
 | VEP-012 | #129 | Intersection constraints | 2 | Should | TASK-054 | M13 |
 | VEP-001 | #130 | unsafe block / unsafe fn | 2 | Should | TASK-055 | M14 |
+| VEP-031 | #143 | Mutable Reference (ref mut T) | 2+ | Should | — | TBD |
 
 ## トレーサビリティ: タスク → 要件
 
@@ -655,3 +659,4 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 | 日付 | 変更 |
 |------|------|
 | 2026-05-17 | 初版策定。Issue 17件 + VEP 8件 + Phase 1/1.5 残5件を統合。grill-me レビューで構文設計 11 項目確定 |
+| 2026-05-17 | M9/M9.5/M10 全タスク完了（11 PR マージ）。TASK-028, 031 既存完了を確認。VEP-031 (ref mut T) 起票 |

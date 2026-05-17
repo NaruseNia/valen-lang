@@ -73,3 +73,18 @@ fn add(a: Int, b: Int) -> Int {
     a + b  // ボディ内は推論
 }
 ```
+
+## 4.7 組み込み関数
+
+prelude に含まれる組み込み関数。import 不要で使用可能。
+
+| 関数 | シグネチャ | 説明 | JVM 実装 |
+|------|-----------|------|----------|
+| `println` | `fn(String) -> Unit` | 標準出力に文字列を出力し改行 | `System.out.println(String)` |
+| `print` | `fn(String) -> Unit` | 標準出力に文字列を出力（改行なし） | `System.out.print(String)` |
+
+```valen
+println("hello world");          // hello world\n
+print("no newline");             // no newline
+println(f"count: {x}");          // f-string と組み合わせ
+```
