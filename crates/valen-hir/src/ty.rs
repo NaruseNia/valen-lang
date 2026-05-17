@@ -676,6 +676,8 @@ impl<'hir> TypeChecker<'hir> {
             valen_ast::Expr::StringInterp(si) => self.synth_string_interp(si),
             valen_ast::Expr::Try(t) => self.synth_try(t),
             valen_ast::Expr::Safe(s) => self.synth_safe(s),
+            valen_ast::Expr::IfLet(il) => self.synth_if_let(il, expected),
+            valen_ast::Expr::WhileLet(wl) => self.synth_while_let(wl),
         }
     }
 
@@ -2119,6 +2121,81 @@ impl<'hir> TypeChecker<'hir> {
         }
     }
 
+    // -- if let / while let -------------------------------------------------
+
+    fn synth_if_let(&mut self, il: &valen_ast::IfLetExpr, expected: Option<&Ty>) -> TypedExpr {
+        let expr = self.infer_expr(&il.expr);
+
+        self.env.push_scope();
+        self.bind_pattern(&il.pattern, &expr.ty);
+        let then_expected = if il.else_branch.is_none() {
+            Some(&Ty::unit())
+        } else {
+            expected
+        };
+        let then_body = self.check_block(&il.then_branch, then_expected.or(expected));
+        self.env.pop_scope();
+
+        let (else_expr, ty) = if let Some(else_e) = &il.else_branch {
+            let ee = self.check_expr(else_e, expected.or(Some(&then_body.ty)));
+            let ty = if then_body.ty == ee.ty {
+                then_body.ty.clone()
+            } else if then_body.ty.is_error() || ee.ty.is_error() {
+                Ty::Error
+            } else if then_body.ty == Ty::nothing() {
+                ee.ty.clone()
+            } else if ee.ty == Ty::nothing() {
+                then_body.ty.clone()
+            } else {
+                self.diags.error(
+                    DiagCode::BRANCH_TYPE_MISMATCH,
+                    il.span,
+                    SmolStr::from(format!(
+                        "if let/else branches have incompatible types: `{}` vs `{}`",
+                        then_body.ty, ee.ty
+                    )),
+                );
+                Ty::Error
+            };
+            (Some(Box::new(ee)), ty)
+        } else {
+            (None, Ty::unit())
+        };
+
+        TypedExpr {
+            kind: TypedExprKind::IfLet {
+                pattern: il.pattern.clone(),
+                expr: Box::new(expr),
+                then_branch: Box::new(then_body),
+                else_branch: else_expr,
+            },
+            ty,
+            span: il.span,
+        }
+    }
+
+    fn synth_while_let(&mut self, wl: &valen_ast::WhileLetExpr) -> TypedExpr {
+        let expr = self.infer_expr(&wl.expr);
+
+        self.env.push_scope();
+        self.bind_pattern(&wl.pattern, &expr.ty);
+        let prev_in_loop = self.in_loop;
+        self.in_loop = true;
+        let body = self.check_block(&wl.body, Some(&Ty::unit()));
+        self.in_loop = prev_in_loop;
+        self.env.pop_scope();
+
+        TypedExpr {
+            kind: TypedExprKind::WhileLet {
+                pattern: wl.pattern.clone(),
+                expr: Box::new(expr),
+                body: Box::new(body),
+            },
+            ty: Ty::unit(),
+            span: wl.span,
+        }
+    }
+
     // -- match expression ---------------------------------------------------
 
     fn synth_match(&mut self, me: &valen_ast::MatchExpr, expected: Option<&Ty>) -> TypedExpr {
@@ -3490,6 +3567,51 @@ mod tests {
                 match opt {
                     Option::Some(v) => v,
                     Option::None => 0,
+                }
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn if_let_option() {
+        let r = check_source(
+            r#"
+            fn test(opt: Option<Int>) -> Int {
+                if let Option::Some(v) = opt {
+                    v
+                } else {
+                    0
+                }
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn if_let_no_else_returns_unit() {
+        let r = check_source(
+            r#"
+            fn test(opt: Option<Int>) -> Unit {
+                if let Option::Some(v) = opt {
+                    let x = v;
+                }
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn while_let_option() {
+        let r = check_source(
+            r#"
+            fn test(opt: Option<Int>) -> Unit {
+                while let Option::Some(v) = opt {
+                    let x = v;
+                    break;
                 }
             }
             "#,

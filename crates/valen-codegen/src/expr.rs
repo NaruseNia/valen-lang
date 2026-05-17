@@ -455,6 +455,27 @@ impl<'a> ExprLowering<'a> {
             } => {
                 self.lower_try(inner, *is_option, &expr.ty);
             }
+            TypedExprKind::IfLet {
+                pattern,
+                expr: scrutinee,
+                then_branch,
+                else_branch,
+            } => {
+                self.lower_if_let(
+                    pattern,
+                    scrutinee,
+                    then_branch,
+                    else_branch.as_deref(),
+                    &expr.ty,
+                );
+            }
+            TypedExprKind::WhileLet {
+                pattern,
+                expr: scrutinee,
+                body,
+            } => {
+                self.lower_while_let(pattern, scrutinee, body);
+            }
             TypedExprKind::Error => {}
         }
     }
@@ -1617,6 +1638,80 @@ impl<'a> ExprLowering<'a> {
             params: vec![JvmType::Object(JVM_STRING.to_string())],
             ret: JvmType::Void,
         });
+    }
+
+    fn lower_if_let(
+        &mut self,
+        pattern: &valen_ast::Pattern,
+        scrutinee: &TypedExpr,
+        then_branch: &valen_hir::TypedBody,
+        else_branch: Option<&TypedExpr>,
+        result_ty: &Ty,
+    ) {
+        self.lower_expr(scrutinee);
+        let scrutinee_ty = self.ty_to_jvm(&scrutinee.ty);
+        let temp_slot = self.next_slot;
+        self.next_slot += scrutinee_ty.slot_count();
+        self.ops
+            .push(JvmOp::StoreLocal(temp_slot, scrutinee_ty.clone()));
+
+        let else_label = self.alloc_label();
+        let end_label = self.alloc_label();
+
+        self.push_scope();
+        self.lower_pattern_check(pattern, temp_slot, &scrutinee_ty, else_label);
+        self.lower_body(then_branch);
+        self.pop_scope();
+        self.ops.push(JvmOp::Goto(end_label));
+
+        self.ops.push(JvmOp::Label(else_label));
+        self.emit_frame(vec![]);
+        if let Some(else_expr) = else_branch {
+            self.lower_expr(else_expr);
+        }
+
+        self.ops.push(JvmOp::Label(end_label));
+        let jvm_result = self.ty_to_jvm(result_ty);
+        let end_stack = if matches!(jvm_result, JvmType::Void) {
+            vec![]
+        } else {
+            vec![jvm_result]
+        };
+        self.emit_frame(end_stack);
+    }
+
+    fn lower_while_let(
+        &mut self,
+        pattern: &valen_ast::Pattern,
+        scrutinee: &TypedExpr,
+        body: &valen_hir::TypedBody,
+    ) {
+        let loop_start = self.alloc_label();
+        let loop_end = self.alloc_label();
+
+        self.ops.push(JvmOp::Label(loop_start));
+        self.emit_frame(vec![]);
+
+        self.lower_expr(scrutinee);
+        let scrutinee_ty = self.ty_to_jvm(&scrutinee.ty);
+        let temp_slot = self.next_slot;
+        self.next_slot += scrutinee_ty.slot_count();
+        self.ops
+            .push(JvmOp::StoreLocal(temp_slot, scrutinee_ty.clone()));
+
+        self.push_scope();
+        self.lower_pattern_check(pattern, temp_slot, &scrutinee_ty, loop_end);
+        self.loop_stack.push(LoopContext {
+            break_label: loop_end,
+            continue_label: loop_start,
+        });
+        self.lower_body(body);
+        self.loop_stack.pop();
+        self.pop_scope();
+        self.ops.push(JvmOp::Goto(loop_start));
+
+        self.ops.push(JvmOp::Label(loop_end));
+        self.emit_frame(vec![]);
     }
 
     fn lower_try(&mut self, inner: &TypedExpr, is_option: bool, result_ty: &Ty) {

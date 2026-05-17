@@ -291,3 +291,40 @@ public static final class Shape$Point implements Shape {
 - payload を持つバリアントは Java の `record` になります
 - payload を持たないバリアントは singleton クラスになります（メモリ効率のため）
 - Java 側からは `Shape$Circle` のように `$` 区切りの名前でアクセスできます
+
+## if let と while let
+
+`match` の 1-arm 版として `if let` が使えます。ネストした `match` をフラットに書き直すのに便利です。
+
+```valen
+// match だと冗長
+match getComponent(entity, "Position") {
+    Option::Some(pos) => println(f"({pos.x}, {pos.y})"),
+    Option::None => {},
+}
+
+// if let で簡潔に
+if let Some(pos) = getComponent(entity, "Position") {
+    println(f"({pos.x}, {pos.y})");
+}
+```
+
+`else` 節や `else if let` チェーンも使えます:
+
+```valen
+if let Some(pos) = getComponent(entity, "Position") {
+    println(f"pos: ({pos.x}, {pos.y})");
+} else if let Some(vel) = getComponent(entity, "Velocity") {
+    println(f"vel only");
+} else {
+    println("no components");
+}
+```
+
+`while let` はパターンが一致する間ループします:
+
+```valen
+while let Some(item) = iter.next() {
+    process(item);
+}
+```
