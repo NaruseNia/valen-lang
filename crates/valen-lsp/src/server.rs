@@ -634,6 +634,20 @@ impl ServerState {
                             ..Default::default()
                         });
                     }
+                    DefKind::Enum(e) => {
+                        let variants: Vec<String> =
+                            e.variants.iter().map(|v| v.name.to_string()).collect();
+                        items.push(CompletionItem {
+                            label: def.name.to_string(),
+                            kind: Some(CompletionItemKind::ENUM),
+                            detail: Some(format!(
+                                "enum {} {{ {} }}",
+                                def.name,
+                                variants.join(", ")
+                            )),
+                            ..Default::default()
+                        });
+                    }
                     _ => {}
                 }
             }
@@ -1044,6 +1058,9 @@ pub fn analyze_document(
 /// `///` comment lines. Strips the `/// ` (or `///`) prefix and joins with newlines.
 /// Returns `None` if no doc comments are found.
 fn extract_doc_comment(source: &str, span_start: u32) -> Option<String> {
+    if span_start as usize > source.len() {
+        return None;
+    }
     let before = &source[..span_start as usize];
     // Find the line containing span_start; we want the lines *before* it.
     let lines: Vec<&str> = before.lines().collect();
@@ -2045,7 +2062,7 @@ fn collect_hints_from_stmt(
             init,
             ..
         } => {
-            if !ty.is_error() {
+            if !ty.is_error() && (span.start as usize) < doc.text.len() {
                 // Position hint after the variable name.
                 // The span covers the whole let statement; we find the name end
                 // by scanning from span.start for `let [mut] <name>`.

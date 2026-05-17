@@ -737,6 +737,26 @@ fn lower_enum(
         }
     }
 
+    // Collect methods from inherent impls
+    if let Some(type_method_ids) = hir.type_methods.get(&def.name) {
+        let existing_names: std::collections::HashSet<_> =
+            methods.iter().map(|m| m.name.clone()).collect();
+        for &mid in type_method_ids {
+            if let Some(method_def) = hir.defs.get(&mid) {
+                if let DefKind::Fn(fn_def) = &method_def.kind {
+                    if existing_names.contains(method_def.name.as_str()) {
+                        continue;
+                    }
+                    let body = typed_bodies.get(&mid);
+                    let result = lower_method(hir, method_def, fn_def, body, &enum_internal, pkg);
+                    methods.push(result.method);
+                    all_synthetic_lambdas.extend(result.synthetic_lambdas);
+                    all_bootstrap_methods.extend(result.bootstrap_methods);
+                }
+            }
+        }
+    }
+
     let synthetic_methods = synthetic_lambdas_to_methods(all_synthetic_lambdas);
 
     classes.push(JvmClass {

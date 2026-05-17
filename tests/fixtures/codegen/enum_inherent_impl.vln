@@ -1,0 +1,24 @@
+package test;
+
+pub enum Direction {
+    North,
+    South,
+    East,
+    West,
+}
+
+impl Direction {
+    fn isVertical(self) -> Bool {
+        match self {
+            Direction::North => true,
+            Direction::South => true,
+            Direction::East => false,
+            Direction::West => false,
+        }
+    }
+}
+
+fn main() {
+    let d = Direction::North;
+    let v = d.isVertical();
+}
