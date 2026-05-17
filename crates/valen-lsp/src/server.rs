@@ -431,6 +431,39 @@ impl ServerState {
             }
         }
 
+        // Variant shorthand: when `.` has no receiver (e.g., `= .` or `=> .`),
+        // suggest enum variants filtered by expected type when determinable.
+        if type_name.is_none() && is_variant_shorthand_context(before) {
+            let expected_enum = infer_expected_enum_type(before, hir);
+            for def in hir.defs.values() {
+                if let DefKind::Enum(e) = &def.kind {
+                    if let Some(ref expected) = expected_enum {
+                        if def.name.as_str() != expected {
+                            continue;
+                        }
+                    }
+                    for v in &e.variants {
+                        let detail = if v.fields.is_empty() {
+                            format!("{}.{}", def.name, v.name)
+                        } else {
+                            let fields: Vec<String> = v
+                                .fields
+                                .iter()
+                                .map(|(name, ty)| format!("{name}: {ty}"))
+                                .collect();
+                            format!("{}.{}({})", def.name, v.name, fields.join(", "))
+                        };
+                        items.push(CompletionItem {
+                            label: v.name.to_string(),
+                            kind: Some(CompletionItemKind::ENUM_MEMBER),
+                            detail: Some(detail),
+                            ..Default::default()
+                        });
+                    }
+                }
+            }
+        }
+
         // Deduplicate
         items.sort_by(|a, b| a.label.cmp(&b.label));
         items.dedup_by(|a, b| a.label == b.label);
@@ -631,6 +664,20 @@ impl ServerState {
                             kind: Some(CompletionItemKind::CLASS),
                             detail: Some(sig),
                             documentation,
+                            ..Default::default()
+                        });
+                    }
+                    DefKind::Enum(e) => {
+                        let variants: Vec<String> =
+                            e.variants.iter().map(|v| v.name.to_string()).collect();
+                        items.push(CompletionItem {
+                            label: def.name.to_string(),
+                            kind: Some(CompletionItemKind::ENUM),
+                            detail: Some(format!(
+                                "enum {} {{ {} }}",
+                                def.name,
+                                variants.join(", ")
+                            )),
                             ..Default::default()
                         });
                     }
@@ -1044,6 +1091,9 @@ pub fn analyze_document(
 /// `///` comment lines. Strips the `/// ` (or `///`) prefix and joins with newlines.
 /// Returns `None` if no doc comments are found.
 fn extract_doc_comment(source: &str, span_start: u32) -> Option<String> {
+    if span_start as usize > source.len() {
+        return None;
+    }
     let before = &source[..span_start as usize];
     // Find the line containing span_start; we want the lines *before* it.
     let lines: Vec<&str> = before.lines().collect();
@@ -1623,6 +1673,187 @@ fn extract_name_before_double_colon(before: &str) -> &str {
     &without_colons[start..]
 }
 
+/// Attempt to infer the expected enum type from surrounding text context.
+///
+/// Handles patterns like:
+/// - `let x: Color = .`  → "Color"
+/// - `fn foo() -> Color { .` → "Color"
+/// - `param: Color` in a call argument position
+/// - `match expr { .` → uses match scrutinee type (via `let x: Type = ...; match x`)
+fn infer_expected_enum_type(before: &str, hir: &valen_hir::Hir) -> Option<String> {
+    let enum_names: std::collections::HashSet<&str> = hir
+        .defs
+        .values()
+        .filter_map(|d| {
+            if matches!(d.kind, DefKind::Enum(_)) {
+                Some(d.name.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Pattern: `let name: Type = .` or `let name: Type = expr; ... .`
+    // Scan backwards for `: TypeName` before `=`
+    let trimmed = before.trim_end();
+    let base = trimmed
+        .strip_suffix('.')
+        .unwrap_or(trimmed)
+        .trim_end()
+        .trim_end_matches(|c: char| c.is_ascii_alphanumeric() || c == '_')
+        .trim_end();
+
+    // `let x: Color = .` → look for `: Color =`
+    // `let x: Color = someExpr; ... .` → too far, skip
+    // Find the last `: TypeName` followed by `=` on the same line-ish
+    if let Some(eq_pos) = base.rfind('=') {
+        let before_eq = base[..eq_pos].trim_end();
+        // Don't match `==`, `!=`, `>=`, `<=`, `=>`
+        if !before_eq.ends_with('!')
+            && !before_eq.ends_with('>')
+            && !before_eq.ends_with('<')
+            && !before_eq.ends_with('=')
+        {
+            if let Some(colon_pos) = before_eq.rfind(':') {
+                let type_str = before_eq[colon_pos + 1..].trim();
+                let type_name = type_str
+                    .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                    .next()
+                    .unwrap_or("");
+                if enum_names.contains(type_name) {
+                    return Some(type_name.to_string());
+                }
+            }
+        }
+    }
+
+    // Pattern: `-> Type { ... .` (return type)
+    if let Some(arrow_pos) = before.rfind("->") {
+        let after_arrow = before[arrow_pos + 2..].trim_start();
+        let type_name = after_arrow
+            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .next()
+            .unwrap_or("");
+        if enum_names.contains(type_name) {
+            return Some(type_name.to_string());
+        }
+    }
+
+    // Pattern: `match expr {` → try to find scrutinee type from let bindings
+    if let Some(match_pos) = before.rfind("match ") {
+        let after_match = &before[match_pos + 6..];
+        let scrutinee = after_match
+            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .next()
+            .unwrap_or("");
+        if !scrutinee.is_empty() {
+            let let_pattern = format!("let {scrutinee}:");
+            if let Some(let_pos) = before.rfind(&let_pattern) {
+                let after_colon = &before[let_pos + let_pattern.len()..];
+                let type_name = after_colon
+                    .trim_start()
+                    .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                    .next()
+                    .unwrap_or("");
+                if enum_names.contains(type_name) {
+                    return Some(type_name.to_string());
+                }
+            }
+        }
+    }
+
+    // Pattern: `funcName(arg1, .` → find function, determine param index, get param type
+    if let Some(result) = infer_enum_from_call_arg(before, hir, &enum_names) {
+        return Some(result);
+    }
+
+    None
+}
+
+/// Infer enum type from function call argument position.
+/// e.g. `foo(x, .` → find `foo`, param index 1, check if param type is an enum.
+fn infer_enum_from_call_arg(
+    before: &str,
+    hir: &valen_hir::Hir,
+    enum_names: &std::collections::HashSet<&str>,
+) -> Option<String> {
+    let trimmed = before.trim_end();
+    let base = trimmed
+        .strip_suffix('.')
+        .unwrap_or(trimmed)
+        .trim_end()
+        .trim_end_matches(|c: char| c.is_ascii_alphanumeric() || c == '_')
+        .trim_end();
+
+    // Walk backwards to find matching `(`, counting commas for arg index
+    let mut depth = 0i32;
+    let mut arg_index = 0usize;
+    let mut paren_pos = None;
+    for (i, ch) in base.char_indices().rev() {
+        match ch {
+            ')' => depth += 1,
+            '(' => {
+                if depth == 0 {
+                    paren_pos = Some(i);
+                    break;
+                }
+                depth -= 1;
+            }
+            ',' if depth == 0 => arg_index += 1,
+            _ => {}
+        }
+    }
+    let paren_pos = paren_pos?;
+
+    // Extract function name before `(`
+    let before_paren = base[..paren_pos].trim_end();
+    let fn_name_start = before_paren
+        .rfind(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    let fn_name = &before_paren[fn_name_start..];
+    if fn_name.is_empty() {
+        return None;
+    }
+
+    // Look up function in HIR and get param type at arg_index
+    for def in hir.defs.values() {
+        if def.name.as_str() != fn_name {
+            continue;
+        }
+        if let DefKind::Fn(f) = &def.kind {
+            let params: Vec<_> = f.params.iter().filter(|p| !p.is_self).collect();
+            if let Some(param) = params.get(arg_index) {
+                let type_name = match &param.ty {
+                    valen_hir::TyRef::Named(n) => n.as_str(),
+                    valen_hir::TyRef::Generic(n, _) => n.as_str(),
+                    _ => continue,
+                };
+                if enum_names.contains(type_name) {
+                    return Some(type_name.to_string());
+                }
+            }
+        }
+    }
+
+    None
+}
+
+fn is_variant_shorthand_context(before: &str) -> bool {
+    let stripped = before.trim_end_matches(|c: char| c.is_ascii_alphanumeric() || c == '_');
+    let trimmed = stripped.trim_end();
+    let without_dot = match trimmed.strip_suffix('.') {
+        Some(s) => s.trim_end(),
+        None => return false,
+    };
+    without_dot.is_empty()
+        || without_dot.ends_with('=')
+        || without_dot.ends_with('(')
+        || without_dot.ends_with(',')
+        || without_dot.ends_with('{')
+        || without_dot.ends_with("=>")
+}
+
 fn is_dot_context(before: &str) -> bool {
     let trimmed = before.trim_end_matches(|c: char| c.is_ascii_alphanumeric() || c == '_');
     trimmed.trim_end().ends_with('.')
@@ -2045,7 +2276,7 @@ fn collect_hints_from_stmt(
             init,
             ..
         } => {
-            if !ty.is_error() {
+            if !ty.is_error() && (span.start as usize) < doc.text.len() {
                 // Position hint after the variable name.
                 // The span covers the whole let statement; we find the name end
                 // by scanning from span.start for `let [mut] <name>`.

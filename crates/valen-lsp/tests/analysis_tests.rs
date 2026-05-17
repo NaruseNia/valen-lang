@@ -295,3 +295,85 @@ fn main() {
         "should infer Circle from constructor call"
     );
 }
+
+#[test]
+fn complex_generics_file_does_not_break_analysis() {
+    let src = r#"package one.nxeu;
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+trait Shape {
+    fn area(self) -> Float;
+    fn color(col: Color) -> Unit;
+}
+
+trait Satisfied<T> {
+    fn satisfied(self) -> Option<T>;
+}
+
+class SatisfiedShape<T: Shape + Satisfied> {
+    fn area(shape: T) -> Option<Float> {
+        Option::Some(shape.area())
+    }
+}
+
+impl<T: Shape + Satisfied> Satisfied<String> for SatisfiedShape<T> {
+    fn satisfied(self) -> Option<String> {
+        Some("Satisfied")
+    }
+}
+
+class Rectangle(w: Float, h: Float) {
+    fn isSatisfied(self) -> Option<Rectangle> {
+        if self.w > 0.0f && self.h > 0.0f {
+            Some(self)
+        } else {
+            None
+        }
+    }
+}
+
+class Circle(r: Float) {}
+
+impl Shape for Rectangle {
+    fn area(self) -> Float {
+        self.w * self.h
+    }
+    fn color(col: Color) -> Unit {
+    }
+}
+
+impl Shape for Circle {
+    fn area(self) -> Float {
+        self.r * self.r * 3.14f
+    }
+    fn color(col: Color) -> Unit {
+    }
+}
+
+fn main() {
+    let circle = Circle(10.0f);
+    let rect = Rectangle(10.0f, 10.0f);
+    let circleArea = circle.area();
+    let mut rectArea = rect.area();
+    let margedArea = rectArea + circleArea;
+}
+"#;
+    let (doc, _diags) = analyze_document(src, FileId(0));
+    assert!(doc.hir.is_some(), "HIR should be present");
+    assert!(doc.bodies.is_some(), "typed bodies should be present");
+
+    let hir = doc.hir.as_ref().unwrap();
+    assert!(
+        hir.defs.values().any(|d| d.name == "Circle"),
+        "Circle should be in defs"
+    );
+    assert!(
+        hir.defs.values().any(|d| d.name == "Rectangle"),
+        "Rectangle should be in defs"
+    );
+}
