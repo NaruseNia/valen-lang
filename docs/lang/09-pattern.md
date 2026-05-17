@@ -15,7 +15,37 @@ match value {
 }
 ```
 
-### 9.1.1 match guard
+### 9.1.1 or パターンの束縛一貫性
+
+or パターン（`p1 | p2 | ...`）の各 alternative が変数を束縛する場合、**すべての alternative が同じ変数名の集合を束縛しなければならない**。束縛する変数名が異なるとコンパイルエラーになる。
+
+```valen
+enum Expr {
+    Lit(value: Int),
+    Neg(value: Int),
+    Add(lhs: Int, rhs: Int),
+}
+
+match expr {
+    Expr::Lit(v) | Expr::Neg(v) => v,   // OK: 両方 `v` を束縛
+    Expr::Add(a, b) => a + b,
+}
+
+match expr {
+    Expr::Lit(v) | Expr::Neg(w) => ..., // ERROR: 変数名が異なる（`v` vs `w`）
+}
+```
+
+束縛を持たない or パターン（リテラルのみ等）にはこの制約は適用されない。
+
+```valen
+match n {
+    1 | 2 | 3 => "small",   // OK: 束縛なし
+    _ => "other",
+}
+```
+
+### 9.1.2 match guard
 
 `match` arm は pattern の後に `if` 条件を置ける。guard は pattern が一致し、束縛変数が導入された後に評価される。
 
@@ -51,7 +81,7 @@ match n {
 }
 ```
 
-## 9.1.2 let-else
+## 9.1.3 let-else
 
 `let-else` is a refutable pattern binding that diverges when the pattern does not match. The else block **must** diverge (`return`, `break`, `continue`, or `panic`).
 

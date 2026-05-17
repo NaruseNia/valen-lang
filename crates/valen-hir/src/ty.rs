@@ -2297,9 +2297,52 @@ impl<'hir> TypeChecker<'hir> {
                     self.bind_pattern(pat, scrutinee_ty);
                 }
             }
-            Pattern::Or(pats, _) => {
+            Pattern::Or(pats, span) => {
+                // Bind from the first alternative (provides the actual scope bindings).
                 if let Some(first) = pats.first() {
                     self.bind_pattern(first, scrutinee_ty);
+                }
+                // Verify all alternatives bind the same set of variable names.
+                if pats.len() >= 2 {
+                    let first_names = collect_pattern_names(&pats[0]);
+                    for alt in &pats[1..] {
+                        let alt_names = collect_pattern_names(alt);
+                        if alt_names != first_names {
+                            let missing_from_alt: Vec<_> =
+                                first_names.difference(&alt_names).collect();
+                            let extra_in_alt: Vec<_> = alt_names.difference(&first_names).collect();
+                            let mut parts = Vec::new();
+                            if !missing_from_alt.is_empty() {
+                                parts.push(format!(
+                                    "missing: {}",
+                                    missing_from_alt
+                                        .iter()
+                                        .map(|n| format!("`{n}`"))
+                                        .collect::<Vec<_>>()
+                                        .join(", ")
+                                ));
+                            }
+                            if !extra_in_alt.is_empty() {
+                                parts.push(format!(
+                                    "extra: {}",
+                                    extra_in_alt
+                                        .iter()
+                                        .map(|n| format!("`{n}`"))
+                                        .collect::<Vec<_>>()
+                                        .join(", ")
+                                ));
+                            }
+                            self.diags.error(
+                                DiagCode::OR_PATTERN_BINDING_MISMATCH,
+                                *span,
+                                SmolStr::from(format!(
+                                    "or-pattern alternatives must bind the same variables ({})",
+                                    parts.join("; ")
+                                )),
+                            );
+                            break;
+                        }
+                    }
                 }
             }
             Pattern::At(at) => {
@@ -2795,6 +2838,49 @@ impl<'hir> TypeChecker<'hir> {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Recursively collect all variable names bound by a pattern.
+fn collect_pattern_names(pattern: &valen_ast::Pattern) -> IndexSet<SmolStr> {
+    let mut names = IndexSet::new();
+    collect_pattern_names_inner(pattern, &mut names);
+    names
+}
+
+fn collect_pattern_names_inner(pattern: &valen_ast::Pattern, names: &mut IndexSet<SmolStr>) {
+    use valen_ast::Pattern;
+    match pattern {
+        Pattern::Wildcard(_) | Pattern::Literal(_) | Pattern::Range(_) | Pattern::Path(_) => {}
+        Pattern::Binding(b) => {
+            names.insert(b.name.clone());
+        }
+        Pattern::Struct(sp) => {
+            for field in &sp.fields {
+                if let Some(sub) = &field.pattern {
+                    collect_pattern_names_inner(sub, names);
+                } else {
+                    // Shorthand binding: field name = variable name.
+                    names.insert(field.name.clone());
+                }
+            }
+        }
+        Pattern::Tuple(pats, _) => {
+            for p in pats {
+                collect_pattern_names_inner(p, names);
+            }
+        }
+        Pattern::Or(pats, _) => {
+            // For nested or-patterns, collect from the first alternative
+            // (all should be identical if well-formed).
+            if let Some(first) = pats.first() {
+                collect_pattern_names_inner(first, names);
+            }
+        }
+        Pattern::At(at) => {
+            names.insert(at.name.clone());
+            collect_pattern_names_inner(&at.pattern, names);
+        }
+    }
+}
 
 fn is_subtype(sub: &Ty, sup: &Ty) -> bool {
     if sub == sup {
