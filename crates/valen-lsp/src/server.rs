@@ -432,10 +432,16 @@ impl ServerState {
         }
 
         // Variant shorthand: when `.` has no receiver (e.g., `= .` or `=> .`),
-        // suggest all enum variants from all visible enums.
+        // suggest enum variants filtered by expected type when determinable.
         if type_name.is_none() && is_variant_shorthand_context(before) {
+            let expected_enum = infer_expected_enum_type(before, hir);
             for def in hir.defs.values() {
                 if let DefKind::Enum(e) = &def.kind {
+                    if let Some(ref expected) = expected_enum {
+                        if def.name.as_str() != expected {
+                            continue;
+                        }
+                    }
                     for v in &e.variants {
                         let detail = if v.fields.is_empty() {
                             format!("{}.{}", def.name, v.name)
@@ -1665,6 +1671,99 @@ fn extract_name_before_double_colon(before: &str) -> &str {
         .map(|i| i + 1)
         .unwrap_or(0);
     &without_colons[start..]
+}
+
+/// Attempt to infer the expected enum type from surrounding text context.
+///
+/// Handles patterns like:
+/// - `let x: Color = .`  → "Color"
+/// - `fn foo() -> Color { .` → "Color"
+/// - `param: Color` in a call argument position
+/// - `match expr { .` → uses match scrutinee type (via `let x: Type = ...; match x`)
+fn infer_expected_enum_type(before: &str, hir: &valen_hir::Hir) -> Option<String> {
+    let enum_names: std::collections::HashSet<&str> = hir
+        .defs
+        .values()
+        .filter_map(|d| {
+            if matches!(d.kind, DefKind::Enum(_)) {
+                Some(d.name.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Pattern: `let name: Type = .` or `let name: Type = expr; ... .`
+    // Scan backwards for `: TypeName` before `=`
+    let trimmed = before.trim_end();
+    let base = trimmed
+        .strip_suffix('.')
+        .unwrap_or(trimmed)
+        .trim_end()
+        .trim_end_matches(|c: char| c.is_ascii_alphanumeric() || c == '_')
+        .trim_end();
+
+    // `let x: Color = .` → look for `: Color =`
+    // `let x: Color = someExpr; ... .` → too far, skip
+    // Find the last `: TypeName` followed by `=` on the same line-ish
+    if let Some(eq_pos) = base.rfind('=') {
+        let before_eq = base[..eq_pos].trim_end();
+        // Don't match `==`, `!=`, `>=`, `<=`, `=>`
+        if !before_eq.ends_with('!')
+            && !before_eq.ends_with('>')
+            && !before_eq.ends_with('<')
+            && !before_eq.ends_with('=')
+        {
+            if let Some(colon_pos) = before_eq.rfind(':') {
+                let type_str = before_eq[colon_pos + 1..].trim();
+                let type_name = type_str
+                    .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                    .next()
+                    .unwrap_or("");
+                if enum_names.contains(type_name) {
+                    return Some(type_name.to_string());
+                }
+            }
+        }
+    }
+
+    // Pattern: `-> Type { ... .` (return type)
+    if let Some(arrow_pos) = before.rfind("->") {
+        let after_arrow = before[arrow_pos + 2..].trim_start();
+        let type_name = after_arrow
+            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .next()
+            .unwrap_or("");
+        if enum_names.contains(type_name) {
+            return Some(type_name.to_string());
+        }
+    }
+
+    // Pattern: `match expr {` → try to find scrutinee type from let bindings
+    if let Some(match_pos) = before.rfind("match ") {
+        let after_match = &before[match_pos + 6..];
+        let scrutinee = after_match
+            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .next()
+            .unwrap_or("");
+        if !scrutinee.is_empty() {
+            // Look for `let scrutinee: Type` or `let scrutinee = EnumType::`
+            let let_pattern = format!("let {scrutinee}:");
+            if let Some(let_pos) = before.rfind(&let_pattern) {
+                let after_colon = &before[let_pos + let_pattern.len()..];
+                let type_name = after_colon
+                    .trim_start()
+                    .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                    .next()
+                    .unwrap_or("");
+                if enum_names.contains(type_name) {
+                    return Some(type_name.to_string());
+                }
+            }
+        }
+    }
+
+    None
 }
 
 fn is_variant_shorthand_context(before: &str) -> bool {
