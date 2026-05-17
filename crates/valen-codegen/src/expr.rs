@@ -1224,15 +1224,32 @@ impl<'a> ExprLowering<'a> {
                 let mut deferred_bindings: Vec<(SmolStr, JvmType, u16)> = Vec::new();
 
                 // Phase 1: Check — all field tests use temp slots.
-                for field in &sp.fields {
+                for (idx, field) in sp.fields.iter().enumerate() {
                     self.ops.push(JvmOp::LoadLocal(cast_slot, cast_ty.clone()));
-                    let field_ty = variant_field_types
-                        .get(field.name.as_str())
-                        .cloned()
-                        .unwrap_or_else(|| JvmType::Object(JVM_OBJECT.to_string()));
+                    let (actual_field_name, field_ty) = if field.pattern.is_some() {
+                        variant_field_types
+                            .get(field.name.as_str())
+                            .map(|ty| (field.name.to_string(), ty.clone()))
+                            .unwrap_or_else(|| {
+                                (
+                                    field.name.to_string(),
+                                    JvmType::Object(JVM_OBJECT.to_string()),
+                                )
+                            })
+                    } else {
+                        variant_field_types
+                            .get_index(idx)
+                            .map(|(name, ty)| (name.clone(), ty.clone()))
+                            .unwrap_or_else(|| {
+                                (
+                                    field.name.to_string(),
+                                    JvmType::Object(JVM_OBJECT.to_string()),
+                                )
+                            })
+                    };
                     self.ops.push(JvmOp::GetField {
                         owner: variant_internal.clone(),
-                        name: field.name.to_string(),
+                        name: actual_field_name,
                         descriptor: field_ty.clone(),
                     });
                     if let Some(pat) = &field.pattern {

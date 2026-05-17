@@ -916,57 +916,16 @@ impl Parser {
         let start = self.peek_span();
         let saved_pos = self.pos;
 
-        // Try to parse as let-else: `let pattern = expr else { block };`
-        // We need lookahead to decide. First, check if the tokens after `let`
-        // look like a refutable pattern (e.g., `Some(x)`, `Ok(data)`,
-        // `Color::Blue(v)`). A simple heuristic: if the token after `let` is
-        // an identifier followed by `(` or `::`, it could be a let-else pattern.
-        // But we also support `let x = expr else { ... };` with a binding pattern.
-        //
-        // Strategy: try parsing as let-else first by checking for a pattern.
-        // If we detect `else` after the expression, commit to let-else.
-        // Otherwise, fall back to regular let.
-        if self.is_let_else_pattern() {
-            if let Some(stmt) = self.try_parse_let_else(start) {
-                return Some(stmt);
-            }
-            // Failed to parse as let-else, restore and try regular let
-            self.pos = saved_pos;
+        // Try to parse as let-else first: `let pattern = expr else { block };`
+        // If `else` is present after the expression, commit to let-else.
+        // Otherwise, restore position and fall back to regular let.
+        if let Some(stmt) = self.try_parse_let_else(start) {
+            return Some(stmt);
         }
+        self.pos = saved_pos;
 
         let ls = self.parse_let()?;
         Some(Stmt::Let(ls))
-    }
-
-    /// Check whether the tokens after `let` look like a let-else pattern.
-    ///
-    /// A let-else pattern starts with a refutable pattern like `Some(x)`,
-    /// `Ok(data)`, `Color::Blue(v)`. We detect this by looking ahead:
-    /// `let` followed by an identifier and then `(` or `::`.
-    fn is_let_else_pattern(&self) -> bool {
-        // Current token should be `let`
-        if !self.at(&TokenKind::Let) {
-            return false;
-        }
-        // Look past `let` (and optional `mut`)
-        let mut look = self.pos + 1;
-        if look < self.tokens.len() && self.tokens[look].0 == TokenKind::Mut {
-            look += 1;
-        }
-        // Next should be an identifier
-        if look >= self.tokens.len() || !matches!(self.tokens[look].0, TokenKind::Ident(_)) {
-            return false;
-        }
-        look += 1;
-        // If followed by `(` or `::`, it looks like a destructuring pattern
-        if look < self.tokens.len() {
-            matches!(
-                self.tokens[look].0,
-                TokenKind::LParen | TokenKind::DoubleColon
-            )
-        } else {
-            false
-        }
     }
 
     /// Try to parse a let-else statement: `let pattern = expr else { block };`
