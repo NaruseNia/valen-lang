@@ -634,6 +634,20 @@ impl ServerState {
                             ..Default::default()
                         });
                     }
+                    DefKind::Enum(e) => {
+                        let variants: Vec<String> =
+                            e.variants.iter().map(|v| v.name.to_string()).collect();
+                        items.push(CompletionItem {
+                            label: def.name.to_string(),
+                            kind: Some(CompletionItemKind::ENUM),
+                            detail: Some(format!(
+                                "enum {} {{ {} }}",
+                                def.name,
+                                variants.join(", ")
+                            )),
+                            ..Default::default()
+                        });
+                    }
                     _ => {}
                 }
             }
