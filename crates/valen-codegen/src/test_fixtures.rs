@@ -55,6 +55,7 @@ pub fn data_class(name: &str, params: Vec<CtorParamDef>) -> Hir {
             name: SmolStr::from(name),
             kind: DefKind::DataClass(DataClassDef {
                 ctor_params: params,
+                derives: vec![],
             }),
             vis: Vis::Pub,
             span: span(),
@@ -150,7 +151,10 @@ pub fn enum_def(name: &str, variants: Vec<EnumVariantDef>) -> Hir {
         Def {
             id,
             name: SmolStr::from(name),
-            kind: DefKind::Enum(EnumDef { variants }),
+            kind: DefKind::Enum(EnumDef {
+                variants,
+                derives: vec![],
+            }),
             vis: Vis::Pub,
             span: span(),
             package: None,

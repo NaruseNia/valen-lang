@@ -322,3 +322,35 @@ impl Eq for CaseInsensitiveString {
 ### プリミティブ型
 
 `Int`、`Float` 等のプリミティブ型の演算子は組み込みで処理されます（trait 経由ではありません）。プリミティブ型に対して演算子 trait を impl する必要はありません。
+
+## derives — trait の自動実装
+
+`derives(Trait1, Trait2)` を型宣言に付けると、trait の実装がフィールド構造から自動生成されます。
+
+```valen
+pub data class Entity(pub id: Int) derives(Eq, Hash);
+
+pub enum Shape derives(Eq, Hash, Debug) {
+    Circle(r: Float),
+    Rect(w: Float, h: Float),
+    Point,
+}
+```
+
+### 対応 trait
+
+| trait | 何が生成される？ |
+|-------|----------------|
+| `Eq` | `equals` — フィールドを1つずつ比較 |
+| `Hash` | `hashCode` — フィールドから一意のハッシュ値を計算 |
+| `Debug` | `toString` — `TypeName(field=value)` 形式の文字列表現 |
+| `Clone` | `copy` — 全フィールドを指定して複製 |
+
+### data class は暗黙に derive 済み
+
+`data class` は `derives(...)` を書かなくても `Eq`, `Hash`, `Debug`, `Clone` が自動生成されます。これは data class の設計意図（値型としての振る舞い）に基づいています。
+
+```valen
+// derives を書かなくても equals/hashCode/toString/copy が使える
+pub data class Point(pub x: Float, pub y: Float);
+```

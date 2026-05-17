@@ -46,6 +46,7 @@ expression: "check(\"@JsonName(\\\"user_name\\\")\\nclass User {}\")"
             generics: [],
             ctor_params: [],
             supertypes: [],
+            derives: [],
             body: [],
             span: Span {
                 start: 0,

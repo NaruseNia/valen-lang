@@ -268,12 +268,16 @@ pub struct CtorParamDef {
 #[derive(Debug, Clone)]
 pub struct DataClassDef {
     pub ctor_params: Vec<CtorParamDef>,
+    /// Explicitly derived traits from `derives(...)` clause.
+    pub derives: Vec<SmolStr>,
 }
 
 /// Enum definition containing its variant list.
 #[derive(Debug, Clone)]
 pub struct EnumDef {
     pub variants: Vec<EnumVariantDef>,
+    /// Explicitly derived traits from `derives(...)` clause.
+    pub derives: Vec<SmolStr>,
 }
 
 /// A single variant of an enum, optionally carrying named fields.

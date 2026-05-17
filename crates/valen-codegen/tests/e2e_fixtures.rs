@@ -797,9 +797,55 @@ fn fixture_let_else() {
 }
 
 #[test]
+fn fixture_derive() {
+    let classes = compile_fixture("derive.vln");
+    assert!(
+        classes.len() >= 4,
+        "should generate Shape enum + variant classes + Entity"
+    );
+
+    let circle = classes
+        .iter()
+        .find(|c| {
+            c.class_name()
+                .map(|n| {
+                    n.as_str()
+                        .map(|s| s.ends_with("Shape$Circle"))
+                        .unwrap_or(false)
+                })
+                .unwrap_or(false)
+        })
+        .expect("Shape$Circle variant class should be generated");
+
+    let circle_methods: Vec<String> = circle
+        .methods
+        .iter()
+        .filter_map(|m| {
+            circle
+                .constant_pool
+                .try_get_utf8(m.name_index)
+                .ok()
+                .and_then(|n| n.as_str().map(|s| s.to_string()))
+        })
+        .collect();
+
+    assert!(
+        circle_methods.contains(&"equals".to_string()),
+        "Circle should have derived equals: {circle_methods:?}"
+    );
+    assert!(
+        circle_methods.contains(&"hashCode".to_string()),
+        "Circle should have derived hashCode: {circle_methods:?}"
+    );
+    assert!(
+        circle_methods.contains(&"toString".to_string()),
+        "Circle should have derived toString: {circle_methods:?}"
+    );
+}
+
+#[test]
 fn fixture_variant_shorthand() {
     let classes = compile_fixture("variant_shorthand.vln");
-    // Color (sealed iface) + Color$Red + Color$Green + Color$Blue + VariantShorthandTest
     assert!(
         classes.len() >= 2,
         "should generate Color enum + VariantShorthandTest classes"

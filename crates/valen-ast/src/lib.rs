@@ -114,6 +114,8 @@ pub struct ClassDecl {
     /// Primary constructor parameters.
     pub ctor_params: Vec<CtorParam>,
     pub supertypes: Vec<Type>,
+    /// Traits to auto-derive: `derives(Eq, Hash)`.
+    pub derives: Vec<SmolStr>,
     pub body: Vec<ClassMember>,
     pub span: Span,
 }
@@ -171,6 +173,8 @@ pub struct DataClassDecl {
     pub generics: Vec<GenericParam>,
     pub ctor_params: Vec<CtorParam>,
     pub supertypes: Vec<Type>,
+    /// Traits to auto-derive: `derives(Eq, Hash)`.
+    pub derives: Vec<SmolStr>,
     pub span: Span,
 }
 
@@ -181,6 +185,8 @@ pub struct EnumDecl {
     pub visibility: Visibility,
     pub name: SmolStr,
     pub generics: Vec<GenericParam>,
+    /// Traits to auto-derive: `derives(Eq, Hash)`.
+    pub derives: Vec<SmolStr>,
     pub variants: Vec<EnumVariant>,
     pub span: Span,
 }
