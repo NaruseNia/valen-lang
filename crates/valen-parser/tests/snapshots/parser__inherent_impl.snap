@@ -1,0 +1,313 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"impl Vec2 { fn length(self) -> Float { 1.0 } fn scale(self, factor: Float) -> Float { factor } }\")"
+---
+=== AST ===
+[
+    Impl(
+        ImplBlock {
+            generics: [],
+            trait_ref: None,
+            target: Path(
+                TypePath {
+                    segments: [
+                        TypePathSegment {
+                            name: "Vec2",
+                            generics: [],
+                            span: Span {
+                                start: 5,
+                                end: 9,
+                                file_id: FileId(
+                                    0,
+                                ),
+                            },
+                        },
+                    ],
+                    span: Span {
+                        start: 5,
+                        end: 9,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            items: [
+                Fn(
+                    FnDecl {
+                        annotations: [],
+                        visibility: Pub,
+                        name: "length",
+                        generics: [],
+                        params: [
+                            Param {
+                                name: "self",
+                                ty: Path(
+                                    TypePath {
+                                        segments: [
+                                            TypePathSegment {
+                                                name: "Self",
+                                                generics: [],
+                                                span: Span {
+                                                    start: 22,
+                                                    end: 26,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ],
+                                        span: Span {
+                                            start: 22,
+                                            end: 26,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                mutable: false,
+                                default: None,
+                                span: Span {
+                                    start: 22,
+                                    end: 26,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ],
+                        return_type: Some(
+                            Path(
+                                TypePath {
+                                    segments: [
+                                        TypePathSegment {
+                                            name: "Float",
+                                            generics: [],
+                                            span: Span {
+                                                start: 31,
+                                                end: 36,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
+                                        },
+                                    ],
+                                    span: Span {
+                                        start: 31,
+                                        end: 36,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                            ),
+                        ),
+                        body: Some(
+                            Block {
+                                stmts: [],
+                                tail: Some(
+                                    Literal(
+                                        Double(
+                                            1.0,
+                                            Span {
+                                                start: 39,
+                                                end: 42,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                ),
+                                span: Span {
+                                    start: 37,
+                                    end: 44,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                        is_open: false,
+                        is_override: false,
+                        is_abstract: false,
+                        span: Span {
+                            start: 12,
+                            end: 44,
+                            file_id: FileId(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+                Fn(
+                    FnDecl {
+                        annotations: [],
+                        visibility: Pub,
+                        name: "scale",
+                        generics: [],
+                        params: [
+                            Param {
+                                name: "self",
+                                ty: Path(
+                                    TypePath {
+                                        segments: [
+                                            TypePathSegment {
+                                                name: "Self",
+                                                generics: [],
+                                                span: Span {
+                                                    start: 54,
+                                                    end: 58,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ],
+                                        span: Span {
+                                            start: 54,
+                                            end: 58,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                mutable: false,
+                                default: None,
+                                span: Span {
+                                    start: 54,
+                                    end: 58,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                            Param {
+                                name: "factor",
+                                ty: Path(
+                                    TypePath {
+                                        segments: [
+                                            TypePathSegment {
+                                                name: "Float",
+                                                generics: [],
+                                                span: Span {
+                                                    start: 68,
+                                                    end: 73,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                        ],
+                                        span: Span {
+                                            start: 68,
+                                            end: 73,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                mutable: false,
+                                default: None,
+                                span: Span {
+                                    start: 60,
+                                    end: 73,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ],
+                        return_type: Some(
+                            Path(
+                                TypePath {
+                                    segments: [
+                                        TypePathSegment {
+                                            name: "Float",
+                                            generics: [],
+                                            span: Span {
+                                                start: 78,
+                                                end: 83,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
+                                        },
+                                    ],
+                                    span: Span {
+                                        start: 78,
+                                        end: 83,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                            ),
+                        ),
+                        body: Some(
+                            Block {
+                                stmts: [],
+                                tail: Some(
+                                    Path(
+                                        Path {
+                                            segments: [
+                                                PathSegment {
+                                                    name: "factor",
+                                                    double_colon: false,
+                                                    generics: [],
+                                                    span: Span {
+                                                        start: 86,
+                                                        end: 92,
+                                                        file_id: FileId(
+                                                            0,
+                                                        ),
+                                                    },
+                                                },
+                                            ],
+                                            span: Span {
+                                                start: 86,
+                                                end: 92,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
+                                        },
+                                    ),
+                                ),
+                                span: Span {
+                                    start: 84,
+                                    end: 94,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                        is_open: false,
+                        is_override: false,
+                        is_abstract: false,
+                        span: Span {
+                            start: 45,
+                            end: 94,
+                            file_id: FileId(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+            ],
+            span: Span {
+                start: 0,
+                end: 96,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

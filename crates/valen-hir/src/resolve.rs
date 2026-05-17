@@ -671,7 +671,9 @@ impl Resolver {
                 DefKind::Class(c) => {
                     self.hir
                         .type_methods
-                        .insert(def.name.clone(), c.methods.clone());
+                        .entry(def.name.clone())
+                        .or_default()
+                        .extend(c.methods.clone());
                 }
                 DefKind::Impl(imp) => {
                     let target_name = match &imp.target {
@@ -679,16 +681,25 @@ impl Resolver {
                         TyRef::Prim(p) => SmolStr::from(format!("{p:?}")),
                         _ => continue,
                     };
-                    let trait_name = match &imp.trait_ref {
-                        TyRef::Named(n) => n.clone(),
-                        TyRef::Generic(n, _) => n.clone(),
-                        _ => continue,
-                    };
-                    self.hir.trait_impls.push(ImplEntry {
-                        trait_name,
-                        target_name,
-                        methods: imp.methods.clone(),
-                    });
+                    if imp.trait_ref == TyRef::Error {
+                        // Inherent impl: register methods under the target type
+                        self.hir
+                            .type_methods
+                            .entry(target_name)
+                            .or_default()
+                            .extend(imp.methods.clone());
+                    } else {
+                        let trait_name = match &imp.trait_ref {
+                            TyRef::Named(n) => n.clone(),
+                            TyRef::Generic(n, _) => n.clone(),
+                            _ => continue,
+                        };
+                        self.hir.trait_impls.push(ImplEntry {
+                            trait_name,
+                            target_name,
+                            methods: imp.methods.clone(),
+                        });
+                    }
                 }
                 _ => {}
             }
@@ -1356,5 +1367,26 @@ mod tests {
         assert_eq!(r.hir.trait_impls.len(), 1);
         assert_eq!(r.hir.trait_impls[0].trait_name, "Show");
         assert_eq!(r.hir.trait_impls[0].target_name, "Dog");
+    }
+
+    #[test]
+    fn inherent_impl_method_resolution() {
+        let r = resolve_source(
+            "data class Vec2(pub x: Float, pub y: Float);\nimpl Vec2 { fn length(self) -> Float { 1.0 } }",
+        );
+        assert!(!r.diagnostics.has_errors());
+        let res = r.hir.resolve_method("Vec2", "length");
+        assert!(matches!(res, crate::MethodResolution::Found(_)));
+    }
+
+    #[test]
+    fn inherent_impl_no_trait_impls_entry() {
+        let r = resolve_source(
+            "data class Vec2(pub x: Float, pub y: Float);\nimpl Vec2 { fn length(self) -> Float { 1.0 } }",
+        );
+        assert!(
+            !r.hir.trait_impls.iter().any(|e| e.target_name == "Vec2"),
+            "inherent impl should not appear in trait_impls"
+        );
     }
 }

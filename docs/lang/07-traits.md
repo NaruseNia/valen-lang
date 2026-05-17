@@ -14,7 +14,22 @@ trait Display {
 
 ## 7.2 impl
 
-`impl` は **trait 実装専用**。inherent impl block（`impl Type { ... }`）は存在しない — class の instance method / associated function は class 本体に直接書く（§5.1 参照）。
+`impl` は trait 実装と inherent impl（型固有メソッド追加）の2形式をサポートする。
+
+### trait impl
+
+`impl Trait for Type { ... }` で trait のメソッドを型に実装する。
+
+### inherent impl
+
+`impl Type { ... }` で型に直接メソッドを追加する。class body でのメソッド定義と同等だが、型定義の外に書ける。enum / data class にメソッドを追加する主要な手段。
+
+```valen
+impl Vec2 {
+    fn length(self) -> Float { ... }
+    fn scale(self, factor: Float) -> Vec2 { ... }
+}
+```
 
 ```valen
 impl Area for Shape {

@@ -75,15 +75,8 @@ impl<'h> CoherenceChecker<'h> {
             let trait_name = tyref_name(&imp.trait_ref);
             let target_name = tyref_name(&imp.target);
 
-            // Reject inherent impl (no trait ref)
+            // Inherent impl (no trait ref) — skip coherence checks
             if imp.trait_ref == TyRef::Error && target_name.is_some() {
-                self.diags.error(
-                    DiagCode::INHERENT_IMPL_NOT_ALLOWED,
-                    *span,
-                    SmolStr::from(
-                        "inherent `impl Type { ... }` is not allowed; use class body for methods",
-                    ),
-                );
                 continue;
             }
 
