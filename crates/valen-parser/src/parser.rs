@@ -824,9 +824,16 @@ impl Parser {
     fn parse_impl(&mut self, start: Span) -> Option<ImplBlock> {
         self.expect(TokenKind::Impl)?;
         let impl_generics = self.parse_generic_params()?;
-        let trait_type = self.parse_type()?;
-        self.expect(TokenKind::For)?;
-        let target = self.parse_type()?;
+        let first_type = self.parse_type()?;
+
+        // Distinguish `impl Trait for Type { ... }` from `impl Type { ... }`
+        let (trait_ref, target) = if self.eat(&TokenKind::For).is_some() {
+            let target = self.parse_type()?;
+            (Some(first_type), target)
+        } else {
+            (None, first_type)
+        };
+
         self.expect(TokenKind::LBrace)?;
         let mut items = Vec::new();
         while !self.at(&TokenKind::RBrace) && !self.at_eof() {
@@ -851,7 +858,7 @@ impl Parser {
         let end = self.expect(TokenKind::RBrace)?;
         Some(ImplBlock {
             generics: impl_generics,
-            trait_ref: Some(trait_type),
+            trait_ref,
             target,
             items,
             span: start.merge(end),

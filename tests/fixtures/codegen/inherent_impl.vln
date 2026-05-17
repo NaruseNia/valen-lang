@@ -1,0 +1,19 @@
+package test;
+
+data class Vec2(pub x: Float, pub y: Float);
+
+impl Vec2 {
+    fn length(self) -> Float {
+        1.0
+    }
+
+    fn scale(self, factor: Float) -> Float {
+        factor
+    }
+}
+
+fn main() {
+    let v = Vec2(x = 3.0, y = 4.0);
+    let len = v.length();
+    let scaled = v.scale(2.0);
+}

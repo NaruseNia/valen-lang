@@ -351,6 +351,13 @@ fn impl_block() {
 }
 
 #[test]
+fn inherent_impl() {
+    assert_snapshot!(check(
+        "impl Vec2 { fn length(self) -> Float { 1.0 } fn scale(self, factor: Float) -> Float { factor } }"
+    ));
+}
+
+#[test]
 fn package_decl() {
     assert_snapshot!(check("package com.example.foo;"));
 }

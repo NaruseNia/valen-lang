@@ -44,18 +44,27 @@ impl Display for Shape {
 }
 ```
 
-### inherent impl はない
+### inherent impl
 
-Valen には Rust のような `impl Type { ... }`（inherent impl）はありません。型自身のメソッドは class 本体に直接書きます。`impl` ブロックは trait 実装専用です。
+`impl Type { ... }` で型定義の外からメソッドを追加できます。class body でのメソッド定義と同じ効果ですが、enum や data class にメソッドを追加する主要な手段として使えます。
+
+```valen
+data class Vec2(pub x: Float, pub y: Float);
+
+impl Vec2 {
+    fn length(self) -> Float { ... }
+    fn scale(self, factor: Float) -> Vec2 { ... }
+}
+```
+
+class の場合は class body に直接書くこともできます。
 
 ```valen
 class User(pub name: String, mut age: Int) {
-    // メソッドは class 本体に直接書く
     fn greet(self) -> String {
         f"Hello, {self.name}!"
     }
 
-    // associated function（self なし）
     fn from_name(name: String) -> User {
         User(name = name, age = 0)
     }
