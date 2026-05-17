@@ -84,14 +84,14 @@ HIR 層は以下の4つのフェーズを順に実行します。
 
 ### 名前解決（resolve）
 
-`resolve.rs` がすべての識別子を定義に紐付けます。prelude として以下の型が自動的にスコープに注入されます。
+`resolve.rs` がすべての識別子を定義に紐付けます。prelude 型は `stdlib/valen/core/core.vln` から `include_str!` でコンパイラに埋め込まれ、起動時にパースされます（`stdlib.rs` の `parse_core_stdlib()`）。ユーザーコードの登録後に prelude 登録が実行されるため、ユーザー定義が prelude より優先されます。
 
-- `Option` / `Some` / `None`
-- `Result` / `Ok` / `Err`
-- `Error`
-- `Iterator`
-- `Range`
-- `JavaException`
+prelude に含まれる型・trait:
+
+- `Option` / `Result` / `Error` / `Iterator` / `Range` / `JavaException`
+- 演算子 trait: `Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, `Not`
+- 比較 trait: `Eq`, `Ord`
+- ユーティリティ trait: `Hash`, `Debug`, `Clone`
 
 ### 型検査（typecheck）
 

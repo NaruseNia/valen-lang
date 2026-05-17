@@ -50,6 +50,51 @@ pub trait Iterator<T> {
     fn next(mut self) -> Option<T>;
 }
 
+// --- Operator traits (arithmetic) ---
+
+pub trait Add<Rhs> {
+    type Output;
+    fn add(self, rhs: Rhs) -> Self;
+}
+
+pub trait Sub<Rhs> {
+    type Output;
+    fn sub(self, rhs: Rhs) -> Self;
+}
+
+pub trait Mul<Rhs> {
+    type Output;
+    fn mul(self, rhs: Rhs) -> Self;
+}
+
+pub trait Div<Rhs> {
+    type Output;
+    fn div(self, rhs: Rhs) -> Self;
+}
+
+pub trait Rem<Rhs> {
+    type Output;
+    fn rem(self, rhs: Rhs) -> Self;
+}
+
+// --- Operator traits (unary) ---
+
+pub trait Neg {
+    type Output;
+    fn neg(self) -> Self;
+}
+
+pub trait Not {
+    type Output;
+    fn not(self) -> Self;
+}
+
+// --- Comparison traits ---
+
+pub trait Ord {
+    fn cmp(self, rhs: Self) -> Int;
+}
+
 // --- Range ---
 
 pub data class Range<T>(
