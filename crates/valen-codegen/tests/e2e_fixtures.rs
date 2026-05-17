@@ -762,3 +762,36 @@ fn fixture_if_let() {
         "missing unwrapOr method"
     );
 }
+
+#[test]
+fn fixture_let_else() {
+    let classes = compile_fixture("let_else.vln");
+    // Color (abstract), Color$Red, Color$Green, Color$Blue, LetElseTest
+    assert!(
+        classes.len() >= 2,
+        "should generate Color enum + LetElseTest classes"
+    );
+    let test_class = classes
+        .iter()
+        .find(|c| c.class_name().unwrap() == "com/example/LetElseTest")
+        .expect("LetElseTest class should be generated");
+    let method = test_class
+        .methods
+        .iter()
+        .find(|m| {
+            test_class
+                .constant_pool
+                .try_get_utf8(m.name_index)
+                .ok()
+                .and_then(|n| n.as_str())
+                .map(|s| s == "extractBlue")
+                .unwrap_or(false)
+        })
+        .expect("extractBlue method should exist");
+    // Verify the method has code (was compiled, not a stub)
+    let has_code = method
+        .attributes
+        .iter()
+        .any(|a| matches!(a, Attribute::Code { .. }));
+    assert!(has_code, "extractBlue should have a Code attribute");
+}

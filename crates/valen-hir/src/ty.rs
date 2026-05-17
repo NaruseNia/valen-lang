@@ -612,8 +612,47 @@ impl<'hir> TypeChecker<'hir> {
                     span: ls.span,
                 }
             }
+            valen_ast::Stmt::LetElse(le) => self.check_let_else(le),
             valen_ast::Stmt::Expr(e) => TypedStmt::Expr(self.infer_expr(e)),
             valen_ast::Stmt::ExprSemi(e) => TypedStmt::ExprSemi(self.infer_expr(e)),
+        }
+    }
+
+    /// Type-check a `let Pattern = expr else { diverge };` statement.
+    ///
+    /// The else block must diverge (its type must be `Nothing`).
+    /// Pattern variables are bound in the enclosing scope (not inside the else block).
+    fn check_let_else(&mut self, le: &valen_ast::LetElseStmt) -> TypedStmt {
+        // Type-check the scrutinee expression
+        let expected = le.ty.as_ref().map(|t| self.resolve_ast_type(t));
+        let scrutinee = if let Some(exp) = &expected {
+            self.check_expr(&le.expr, Some(exp))
+        } else {
+            self.infer_expr(&le.expr)
+        };
+        let scrutinee_ty = expected.unwrap_or_else(|| scrutinee.ty.clone());
+
+        // Type-check the else block — it must diverge (type = Nothing)
+        let else_body = self.check_block(&le.else_block, Some(&Ty::nothing()));
+        if else_body.ty != Ty::nothing() {
+            self.diags.error(
+                DiagCode::LET_ELSE_NOT_DIVERGING,
+                le.else_block.span,
+                SmolStr::from(
+                    "else block in `let ... else` must diverge (return, break, continue, or panic)",
+                ),
+            );
+        }
+
+        // Bind the pattern variables in the current (enclosing) scope
+        self.bind_pattern(&le.pattern, &scrutinee_ty);
+
+        TypedStmt::LetElse {
+            pattern: le.pattern.clone(),
+            scrutinee,
+            ty: scrutinee_ty,
+            else_body,
+            span: le.span,
         }
     }
 
@@ -3613,6 +3652,49 @@ mod tests {
                     let x = v;
                     break;
                 }
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    // -- let-else -------------------------------------------------------------
+
+    #[test]
+    fn let_else_basic() {
+        let r = check_source(
+            r#"
+            enum Color { Red, Blue(value: Int) }
+            fn test(c: Color) -> Int {
+                let Color::Blue(value) = c else { return 0; };
+                value
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn let_else_diverges_required() {
+        let r = check_source(
+            r#"
+            enum Color { Red, Blue(value: Int) }
+            fn test(c: Color) -> Int {
+                let Color::Blue(value) = c else { 42 };
+                value
+            }
+            "#,
+        );
+        assert_has_error(&r, DiagCode::LET_ELSE_NOT_DIVERGING);
+    }
+
+    #[test]
+    fn let_else_option() {
+        let r = check_source(
+            r#"
+            fn test(opt: Option<Int>) -> Int {
+                let Option::Some(v) = opt else { return 0; };
+                v
             }
             "#,
         );

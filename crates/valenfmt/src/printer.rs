@@ -737,6 +737,21 @@ impl<'a> Printer<'a> {
                 self.w(";");
                 self.newline();
             }
+            Stmt::LetElse(le) => {
+                self.write_indent();
+                self.w("let ");
+                self.print_pattern(&le.pattern);
+                if let Some(ty) = &le.ty {
+                    self.w(": ");
+                    self.print_type(ty);
+                }
+                self.w(" = ");
+                self.print_expr(&le.expr);
+                self.w(" else ");
+                self.print_block(&le.else_block);
+                self.w(";");
+                self.newline();
+            }
             Stmt::Expr(e) => {
                 self.write_indent();
                 self.print_expr(e);
@@ -1285,6 +1300,7 @@ fn item_span(item: &Item) -> Span {
 fn stmt_span(stmt: &Stmt) -> Span {
     match stmt {
         Stmt::Let(l) => l.span,
+        Stmt::LetElse(le) => le.span,
         Stmt::Expr(e) | Stmt::ExprSemi(e) => expr_span(e),
     }
 }

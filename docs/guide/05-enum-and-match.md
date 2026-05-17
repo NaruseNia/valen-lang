@@ -154,6 +154,50 @@ match value {
 }
 ```
 
+## let-else（パターン束縛 + 早期脱出）
+
+`let-else` は、refutable（失敗しうる）パターンで変数を束縛し、パターンが一致しない場合は `else` ブロックで脱出する構文です。`else` ブロックは必ず分岐を終了する式（`return`、`break`、`continue`、`panic`）を含む必要があります。
+
+```valen
+fn getHealth(world: World, entity: Entity) -> Int {
+    let Option::Some(health) = world.getComponent(entity, "Health") else {
+        return 0;
+    };
+    health
+}
+```
+
+`let-else` を使うと、深くネストした `match` を避けてフラットなコードが書けます。
+
+```valen
+// match を使う場合（ネストが深くなる）
+fn process(result: Result<Data, Error>) -> String {
+    match result {
+        Result::Ok(data) => {
+            match data.parse() {
+                Result::Ok(parsed) => parsed.toString(),
+                Result::Err(_) => return "parse error",
+            }
+        }
+        Result::Err(e) => return f"error: {e}",
+    }
+}
+
+// let-else を使う場合（フラット）
+fn process(result: Result<Data, Error>) -> String {
+    let Result::Ok(data) = result else { return "error"; };
+    let Result::Ok(parsed) = data.parse() else { return "parse error"; };
+    parsed.toString()
+}
+```
+
+`else` ブロックの型は `Nothing`（ボトム型）でなければコンパイルエラーになります。つまり、`else` ブロックは必ず `return`、`break`、`continue`、または `panic` で終わらなければなりません。
+
+```valen
+// コンパイルエラー: else ブロックが分岐を終了していない
+let Option::Some(v) = opt else { 42 };
+```
+
 ## exhaustive check（網羅性検査）
 
 Valen の `match` は**厳密な網羅性検査**を行います。対象の型のすべてのケースをカバーしていないとコンパイルエラーになります。
