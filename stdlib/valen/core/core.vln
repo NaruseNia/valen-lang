@@ -48,6 +48,11 @@ pub trait Error {
 
 pub trait Iterator<T> {
     fn next(mut self) -> Option<T>;
+    fn forEach(mut self, f: fn(T) -> Unit);
+    fn count(mut self) -> Int;
+    fn any(mut self, predicate: fn(T) -> Bool) -> Bool;
+    fn all(mut self, predicate: fn(T) -> Bool) -> Bool;
+    fn find(mut self, predicate: fn(T) -> Bool) -> Option<T>;
 }
 
 // --- Conversion traits ---
@@ -136,6 +141,32 @@ pub trait Not {
 
 pub trait Ord {
     fn cmp(self, rhs: Self) -> Int;
+}
+
+// --- Numeric conversion methods ---
+
+impl Int {
+    fn toLong(self) -> Long { 0L }
+    fn toFloat(self) -> Float { 0.0f }
+    fn toDouble(self) -> Double { 0.0 }
+}
+
+impl Long {
+    fn toInt(self) -> Int { 0 }
+    fn toFloat(self) -> Float { 0.0f }
+    fn toDouble(self) -> Double { 0.0 }
+}
+
+impl Float {
+    fn toInt(self) -> Int { 0 }
+    fn toLong(self) -> Long { 0L }
+    fn toDouble(self) -> Double { 0.0 }
+}
+
+impl Double {
+    fn toInt(self) -> Int { 0 }
+    fn toLong(self) -> Long { 0L }
+    fn toFloat(self) -> Float { 0.0f }
 }
 
 // --- Ordering ---
