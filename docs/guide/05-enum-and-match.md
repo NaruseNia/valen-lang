@@ -372,3 +372,38 @@ while let Some(item) = iter.next() {
     process(item);
 }
 ```
+
+## バリアントショートハンド
+
+型から enum が明らかな場合、`.Variant` 構文で enum 名を省略できます。
+
+### 式での使用
+
+```valen
+let c: Color = .Red;           // Color::Red と同じ
+let b: Color = .Blue(42);      // Color::Blue(42) と同じ
+
+fn makeRed() -> Color {
+    .Red                        // 戻り値型から推論
+}
+```
+
+### パターンでの使用
+
+`match`、`if let`、`while let`、`let-else` のパターンでも使えます。
+
+```valen
+match color {
+    .Red => "red",
+    .Green => "green",
+    .Blue(v) => f"blue({v})",
+}
+
+if let .Some(x) = maybe_value {
+    process(x);
+}
+
+let .Ok(data) = result else { return default; };
+```
+
+バリアントショートハンドは、特に `match` のアーム内で enum 名の繰り返しを減らし、コードを読みやすくします。推論できない場合は `EnumName::Variant` の完全形を使ってください。

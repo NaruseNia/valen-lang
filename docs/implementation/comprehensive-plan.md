@@ -502,7 +502,7 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 | TASK-046 | if let / while let | #111, VEP-029 | M12 | M9 | L |
 | TASK-047 | let-else | VEP-028 | M12 | M9 | L | ✅ |
 | TASK-048 | derive | VEP-013 | M12 | TASK-030 ✅ | L |
-| TASK-049 | enum variant shorthand | #110 | M12 | TASK-046 | M |
+| TASK-049 | enum variant shorthand | #110 | M12 | TASK-046 | M | ✅ |
 | TASK-051 | Collection literal | VEP-030 | M13 | — | M |
 | TASK-052 | Pipeline operator | VEP-005 | M13 | — | S |
 | TASK-053 | Refinement / newtype | VEP-011 | M13 | — | L |

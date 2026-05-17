@@ -23,7 +23,50 @@ let p = Shape::Point;
 
 スコープ演算子 `::` で variant にアクセス。
 
-## 6.3 enum と sealed class の使い分け
+## 6.3 バリアントショートハンド
+
+型コンテキストからどの enum に属するかが推論できる場合、`.Variant` 構文で enum 名を省略できる。
+
+### 6.3.1 式でのショートハンド
+
+```valen
+let c: Color = .Red;
+let b: Color = .Blue(42);
+```
+
+戻り値型や変数の型注釈から推論される:
+
+```valen
+fn make() -> Color {
+    .Green         // Color::Green と同じ
+}
+```
+
+### 6.3.2 パターンでのショートハンド
+
+`match` / `if let` / `while let` / `let else` のパターンでも使用可能:
+
+```valen
+match color {
+    .Red => "red",
+    .Blue(v) => f"blue({v})",
+    .Green => "green",
+}
+
+if let .Some(x) = opt {
+    x
+}
+```
+
+scrutinee の型から enum を推論する。
+
+### 6.3.3 推論ルール
+
+1. 期待される型（expected type）が `Ty::Named(E)` または `Ty::Generic(E, args)` の場合、enum `E` から variant を検索する
+2. 期待される型がない場合、スコープ内のすべての enum から variant 名で検索する（あいまいな場合はエラー）
+3. 推論に失敗した場合は `EnumName::Variant` の完全修飾形を使う必要がある
+
+## 6.4 enum と sealed class の使い分け
 
 **操作で区別する**（「表現したいもの」ではなく「許される操作」で切る）。
 
@@ -42,7 +85,7 @@ let p = Shape::Point;
 
 `enum` は variant 自体を拡張しない純粋な識別付き和型、`sealed class` は OOP 階層の閉じた形。両方で書ける場面に迷ったら `enum` を先に試し、variant ごとに独自 method / state が必要になった時点で `sealed class` を検討する。
 
-## 6.4 Java bytecode 表現
+## 6.5 Java bytecode 表現
 
 Valen enum は以下のように bytecode に emit される。
 
@@ -66,28 +109,28 @@ public static final class Shape$Point implements Shape {
 - payload なし variant → `singleton class`（allocation 節約）
 - Valen ABI と Java surface ABI は分離管理
 
-## 6.5 Java ABI 凍結条件（MVP）
+## 6.6 Java ABI 凍結条件（MVP）
 
 以下は MVP 凍結ルール、将来変更しない。
 
-### 6.5.1 binary naming
+### 6.6.1 binary naming
 
 - variant の Java binary name は **`EnumName$VariantName`**（`$` 区切り）
 - Java inner class 風の記法を踏襲、Kotlin sealed hierarchy と互換性が高い
 - Java reflection で `Class.forName("com.example.Shape$Circle")` と読める
 
-### 6.5.2 serializer
+### 6.6.2 serializer
 
 - **Valen は serializer を提供しない**
 - JSON / XML 等の serialization を必要とする場合は、利用者側で Jackson / Gson / その他を設定する責任を持つ
 - Valen が特定ライブラリに lock-in しない方針
 
-### 6.5.3 reflection
+### 6.6.3 reflection
 
 - 各 variant は通常の Java class（record または singleton class）として反射から見える
 - 特別な reflection helper や registry は提供しない
 
-### 6.5.4 trait impl の Java surface 露出
+### 6.6.4 trait impl の Java surface 露出
 
 **可視性と連動する。**
 
@@ -99,7 +142,7 @@ public static final class Shape$Point implements Shape {
 
 これにより Java 側ユーザは Valen 公開 trait だけを安定 API として扱える。
 
-### 6.5.5 互換性ポリシー
+### 6.6.5 互換性ポリシー
 
 trait を追加したときの semver 影響：
 

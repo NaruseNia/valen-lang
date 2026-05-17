@@ -717,6 +717,7 @@ impl<'hir> TypeChecker<'hir> {
             valen_ast::Expr::Safe(s) => self.synth_safe(s),
             valen_ast::Expr::IfLet(il) => self.synth_if_let(il, expected),
             valen_ast::Expr::WhileLet(wl) => self.synth_while_let(wl),
+            valen_ast::Expr::VariantShorthand(vs) => self.synth_variant_shorthand(vs, expected),
         }
     }
 
@@ -2235,6 +2236,165 @@ impl<'hir> TypeChecker<'hir> {
         }
     }
 
+    // -- variant shorthand expression ----------------------------------------
+
+    /// Synthesize `.Variant` or `.Variant(args)` by resolving the enum from the
+    /// expected type context (or by searching all enums).
+    fn synth_variant_shorthand(
+        &mut self,
+        vs: &valen_ast::VariantShorthandExpr,
+        expected: Option<&Ty>,
+    ) -> TypedExpr {
+        let variant_name = &vs.variant_name;
+
+        // Try to resolve from expected type first, then fall back to searching all enums.
+        let resolved = self.resolve_variant_shorthand_enum(variant_name, expected);
+
+        let Some((enum_name, enum_def_clone)) = resolved else {
+            self.diags.error(
+                DiagCode::NAME_NOT_FOUND,
+                vs.span,
+                SmolStr::from(format!(
+                    "cannot resolve variant shorthand `.{variant_name}`: no matching enum found"
+                )),
+            );
+            return TypedExpr {
+                kind: TypedExprKind::Error,
+                ty: Ty::Error,
+                span: vs.span,
+            };
+        };
+
+        let Some(variant) = enum_def_clone
+            .variants
+            .iter()
+            .find(|v| v.name == *variant_name)
+        else {
+            self.diags.error(
+                DiagCode::NAME_NOT_FOUND,
+                vs.span,
+                SmolStr::from(format!(
+                    "enum `{enum_name}` has no variant `{variant_name}`"
+                )),
+            );
+            return TypedExpr {
+                kind: TypedExprKind::Error,
+                ty: Ty::Error,
+                span: vs.span,
+            };
+        };
+
+        let qualified = SmolStr::from(format!("{enum_name}::{variant_name}"));
+
+        // Unit variant (no fields)
+        if variant.fields.is_empty() {
+            if !vs.args.is_empty() {
+                self.diags.error(
+                    DiagCode::ARG_COUNT_MISMATCH,
+                    vs.span,
+                    SmolStr::from(format!(
+                        "`.{variant_name}` takes no arguments, found {}",
+                        vs.args.len()
+                    )),
+                );
+            }
+            let ty = match expected {
+                Some(Ty::Generic(n, args)) if *n == enum_name => {
+                    Ty::Generic(n.clone(), args.clone())
+                }
+                _ => Ty::Named(enum_name.clone()),
+            };
+            return TypedExpr {
+                kind: TypedExprKind::Call {
+                    callee: Box::new(TypedExpr {
+                        kind: TypedExprKind::LocalVar(qualified),
+                        ty: ty.clone(),
+                        span: vs.span,
+                    }),
+                    args: vec![],
+                },
+                ty,
+                span: vs.span,
+            };
+        }
+
+        // Record variant with fields — synthesize as Enum::Variant(args)
+        let args: Vec<TypedExpr> = vs.args.iter().map(|a| self.infer_expr(&a.value)).collect();
+
+        let callee = TypedExpr {
+            kind: TypedExprKind::LocalVar(qualified),
+            ty: Ty::Named(enum_name.clone()),
+            span: vs.span,
+        };
+
+        if let Some(result) = self.resolve_enum_variant_call(
+            &enum_name,
+            variant_name,
+            &callee,
+            &args,
+            vs.span,
+            expected,
+        ) {
+            return result;
+        }
+
+        // Fallback if resolve_enum_variant_call returns None (unit variant with args)
+        TypedExpr {
+            kind: TypedExprKind::Call {
+                callee: Box::new(callee),
+                args,
+            },
+            ty: Ty::Named(enum_name.clone()),
+            span: vs.span,
+        }
+    }
+
+    /// Resolve which enum a variant shorthand belongs to, preferring expected type.
+    /// When no expected type is available and multiple enums contain a variant
+    /// with the same name, returns `None` so the caller can emit an error.
+    fn resolve_variant_shorthand_enum(
+        &self,
+        variant_name: &SmolStr,
+        expected: Option<&Ty>,
+    ) -> Option<(SmolStr, crate::EnumDef)> {
+        // 1. Try expected type
+        let expected_name = match expected {
+            Some(Ty::Named(n)) => Some(n.clone()),
+            Some(Ty::Generic(n, _)) => Some(n.clone()),
+            _ => None,
+        };
+
+        if let Some(ref ename) = expected_name {
+            for def in self.hir.defs.values() {
+                if def.name == *ename {
+                    if let DefKind::Enum(edef) = &def.kind {
+                        if edef.variants.iter().any(|v| v.name == *variant_name) {
+                            return Some((ename.clone(), edef.clone()));
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Search all enums — collect candidates and check for ambiguity
+        let candidates: Vec<_> = self
+            .hir
+            .defs
+            .values()
+            .filter_map(|d| match &d.kind {
+                DefKind::Enum(e) if e.variants.iter().any(|v| v.name == *variant_name) => {
+                    Some((d.name.clone(), e.clone()))
+                }
+                _ => None,
+            })
+            .collect();
+
+        match candidates.len() {
+            1 => Some(candidates.into_iter().next().unwrap()),
+            _ => None, // 0 or ambiguous (>1)
+        }
+    }
+
     // -- match expression ---------------------------------------------------
 
     fn synth_match(&mut self, me: &valen_ast::MatchExpr, expected: Option<&Ty>) -> TypedExpr {
@@ -2350,7 +2510,83 @@ impl<'hir> TypeChecker<'hir> {
                     .define(at.name.clone(), scrutinee_ty.clone(), false);
                 self.bind_pattern(&at.pattern, scrutinee_ty);
             }
+            Pattern::VariantShorthand(vs) => {
+                self.bind_variant_shorthand_pattern(vs, scrutinee_ty);
+            }
         }
+    }
+
+    /// Bind variables from a `.Variant(fields)` shorthand pattern by resolving
+    /// the enum from the scrutinee type context or by searching all enums.
+    fn bind_variant_shorthand_pattern(
+        &mut self,
+        vs: &valen_ast::VariantShorthandPattern,
+        scrutinee_ty: &Ty,
+    ) {
+        let variant_name = vs.variant_name.as_str();
+
+        // Try to determine the enum from the scrutinee type.
+        // When the scrutinee is a known enum, do NOT fall back to global search
+        // to avoid hiding type errors (e.g. `.Some(x)` on a `Color` scrutinee).
+        let enum_name = match scrutinee_ty {
+            Ty::Named(n) | Ty::Generic(n, _) => {
+                let is_enum_with_variant = self.hir.defs.values().any(|d| {
+                    d.name == *n
+                        && matches!(&d.kind, DefKind::Enum(e) if e.variants.iter().any(|v| v.name == variant_name))
+                });
+                if is_enum_with_variant {
+                    Some(n.clone())
+                } else {
+                    // Check if scrutinee is an enum at all (without the variant)
+                    let is_enum = self
+                        .hir
+                        .defs
+                        .values()
+                        .any(|d| d.name == *n && matches!(&d.kind, DefKind::Enum(_)));
+                    if is_enum {
+                        // Scrutinee is an enum but doesn't have this variant — error
+                        self.diags.error(
+                            DiagCode::NAME_NOT_FOUND,
+                            vs.span,
+                            SmolStr::from(format!("enum `{n}` has no variant `{variant_name}`")),
+                        );
+                        return;
+                    }
+                    // Scrutinee is not an enum, try global search
+                    self.find_enum_for_variant(variant_name)
+                }
+            }
+            _ => self.find_enum_for_variant(variant_name),
+        };
+
+        let Some(enum_name) = enum_name else {
+            return;
+        };
+
+        // Build a synthetic StructPattern to reuse bind_variant_fields
+        let sp = valen_ast::StructPattern {
+            path: valen_ast::Path {
+                segments: vec![
+                    valen_ast::PathSegment {
+                        name: enum_name.clone(),
+                        double_colon: false,
+                        generics: vec![],
+                        span: vs.span,
+                    },
+                    valen_ast::PathSegment {
+                        name: SmolStr::from(variant_name),
+                        double_colon: true,
+                        generics: vec![],
+                        span: vs.span,
+                    },
+                ],
+                span: vs.span,
+            },
+            fields: vs.fields.clone(),
+            rest: vs.rest,
+            span: vs.span,
+        };
+        self.bind_variant_fields(&sp, &enum_name, variant_name, scrutinee_ty);
     }
 
     /// Resolve field types from an enum variant pattern and bind variables.
@@ -2898,6 +3134,15 @@ fn collect_pattern_names_inner(pattern: &valen_ast::Pattern, names: &mut IndexSe
         Pattern::At(at) => {
             names.insert(at.name.clone());
             collect_pattern_names_inner(&at.pattern, names);
+        }
+        Pattern::VariantShorthand(vs) => {
+            for field in &vs.fields {
+                if let Some(sub) = &field.pattern {
+                    collect_pattern_names_inner(sub, names);
+                } else {
+                    names.insert(field.name.clone());
+                }
+            }
         }
     }
 }

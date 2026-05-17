@@ -1,0 +1,33 @@
+package com.example;
+
+pub enum Color {
+    Red,
+    Green,
+    Blue(value: Int),
+}
+
+pub class VariantShorthandTest {
+    fn makeRed(self) -> Color {
+        .Red
+    }
+
+    fn makeBlue(self, v: Int) -> Color {
+        .Blue(v)
+    }
+
+    fn describe(self, c: Color) -> String {
+        match c {
+            .Red => "red",
+            .Green => "green",
+            .Blue(value) => "blue",
+        }
+    }
+
+    fn isRed(self, c: Color) -> Bool {
+        if let .Red = c {
+            true
+        } else {
+            false
+        }
+    }
+}

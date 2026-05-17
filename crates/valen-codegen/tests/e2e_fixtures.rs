@@ -795,3 +795,44 @@ fn fixture_let_else() {
         .any(|a| matches!(a, Attribute::Code { .. }));
     assert!(has_code, "extractBlue should have a Code attribute");
 }
+
+#[test]
+fn fixture_variant_shorthand() {
+    let classes = compile_fixture("variant_shorthand.vln");
+    // Color (sealed iface) + Color$Red + Color$Green + Color$Blue + VariantShorthandTest
+    assert!(
+        classes.len() >= 2,
+        "should generate Color enum + VariantShorthandTest classes"
+    );
+    let test_class = classes
+        .iter()
+        .find(|c| c.class_name().unwrap() == "com/example/VariantShorthandTest")
+        .expect("VariantShorthandTest class should be generated");
+    let methods: Vec<String> = test_class
+        .methods
+        .iter()
+        .filter_map(|m| {
+            test_class
+                .constant_pool
+                .try_get_utf8(m.name_index)
+                .ok()
+                .and_then(|n| n.as_str().map(|s| s.to_string()))
+        })
+        .collect();
+    assert!(
+        methods.contains(&"makeRed".to_string()),
+        "missing makeRed method"
+    );
+    assert!(
+        methods.contains(&"makeBlue".to_string()),
+        "missing makeBlue method"
+    );
+    assert!(
+        methods.contains(&"describe".to_string()),
+        "missing describe method"
+    );
+    assert!(
+        methods.contains(&"isRed".to_string()),
+        "missing isRed method"
+    );
+}

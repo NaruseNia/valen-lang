@@ -26,8 +26,8 @@ use valen_ast::{
     LambdaParam, LetElseStmt, LetStmt, Literal, LoopExpr, MatchArm, MatchExpr, MethodCallExpr,
     PackageDecl, Param, Path, PathSegment, Pattern, RangeExpr, RangePattern, ReturnExpr, Span,
     Stmt, StringInterpExpr, StructPattern, StructPatternField, TraitDecl, TraitItem, TryExpr, Type,
-    TypeAliasDecl, TypePath, TypePathSegment, UnaryExpr, UnaryOp, Variance, Visibility, WhileExpr,
-    WhileLetExpr,
+    TypeAliasDecl, TypePath, TypePathSegment, UnaryExpr, UnaryOp, Variance, VariantShorthandExpr,
+    VariantShorthandPattern, Visibility, WhileExpr, WhileLetExpr,
 };
 use valen_diagnostics::{DiagCode, Diagnostics};
 
@@ -1339,6 +1339,9 @@ impl Parser {
             TokenKind::Return => self.parse_return_expr(),
             TokenKind::Pipe | TokenKind::PipePipe => self.parse_lambda_expr(),
             TokenKind::Safe => self.parse_safe_expr(),
+            TokenKind::Dot if self.is_variant_shorthand_start() => {
+                self.parse_variant_shorthand_expr()
+            }
             _ => {
                 self.diagnostics.error(
                     DiagCode::PARSE_EXPECTED_EXPR,
@@ -1347,6 +1350,79 @@ impl Parser {
                 );
                 None
             }
+        }
+    }
+
+    fn is_variant_shorthand_start(&self) -> bool {
+        let look = self.pos + 1;
+        look < self.tokens.len()
+            && matches!(&self.tokens[look].0, TokenKind::Ident(name) if name.starts_with(|c: char| c.is_ascii_uppercase()))
+    }
+
+    fn parse_variant_shorthand_expr(&mut self) -> Option<Expr> {
+        let start = self.peek_span();
+        self.expect(TokenKind::Dot)?;
+        let variant_name = self.expect_ident()?;
+        let args = if self.at(&TokenKind::LParen) {
+            self.parse_call_args()?
+        } else {
+            Vec::new()
+        };
+        let end = self.prev_span();
+        Some(Expr::VariantShorthand(VariantShorthandExpr {
+            variant_name,
+            args,
+            span: start.merge(end),
+        }))
+    }
+
+    fn parse_variant_shorthand_pattern(&mut self) -> Option<Pattern> {
+        let start = self.peek_span();
+        self.expect(TokenKind::Dot)?;
+        let variant_name = self.expect_ident()?;
+        if self.at(&TokenKind::LParen) {
+            self.expect(TokenKind::LParen)?;
+            let mut fields = Vec::new();
+            let mut rest = false;
+            while !self.at(&TokenKind::RParen) && !self.at_eof() {
+                if !fields.is_empty() {
+                    self.expect(TokenKind::Comma)?;
+                    if self.at(&TokenKind::RParen) {
+                        break;
+                    }
+                }
+                if self.eat(&TokenKind::DotDot).is_some() {
+                    rest = true;
+                    break;
+                }
+                let field_span = self.peek_span();
+                let field_name = self.expect_ident()?;
+                let pattern = if self.eat(&TokenKind::Colon).is_some() {
+                    Some(self.parse_pattern()?)
+                } else {
+                    None
+                };
+                fields.push(StructPatternField {
+                    name: field_name,
+                    pattern,
+                    span: field_span,
+                });
+            }
+            let end = self.expect(TokenKind::RParen)?;
+            Some(Pattern::VariantShorthand(VariantShorthandPattern {
+                variant_name,
+                fields,
+                rest,
+                span: start.merge(end),
+            }))
+        } else {
+            let end = self.prev_span();
+            Some(Pattern::VariantShorthand(VariantShorthandPattern {
+                variant_name,
+                fields: vec![],
+                rest: false,
+                span: start.merge(end),
+            }))
         }
     }
 
@@ -1547,6 +1623,9 @@ impl Parser {
                 }))
             }
             TokenKind::Ident(_) | TokenKind::Data => self.parse_ident_pattern(),
+            TokenKind::Dot if self.is_variant_shorthand_start() => {
+                self.parse_variant_shorthand_pattern()
+            }
             _ => {
                 self.diagnostics.error(
                     DiagCode::PARSE_EXPECTED_EXPR,
@@ -2158,6 +2237,7 @@ fn expr_span(expr: &Expr) -> Span {
         Expr::Safe(s) => s.span,
         Expr::IfLet(i) => i.span,
         Expr::WhileLet(w) => w.span,
+        Expr::VariantShorthand(v) => v.span,
     }
 }
 
@@ -2182,6 +2262,7 @@ fn pattern_span(pat: &Pattern) -> Span {
         Pattern::Range(r) => r.span,
         Pattern::Or(_, s) => *s,
         Pattern::At(a) => a.span,
+        Pattern::VariantShorthand(v) => v.span,
     }
 }
 
