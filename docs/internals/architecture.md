@@ -7,7 +7,7 @@ Valen コンパイラ `valenc` は Rust で実装され、`.vln` ソースから
 ## コンパイラパイプライン
 
 ```
-.vln source
+.vln source + stdlib/valen/core/core.vln (embedded)
     │
     ▼
 ┌──────────────┐
@@ -17,8 +17,9 @@ Valen コンパイラ `valenc` は Rust で実装され、`.vln` ソースから
        │
        ▼
 ┌──────────────┐
-│  valen-hir   │  name resolution → type check → coherence → exhaustiveness
+│  valen-hir   │  stdlib parse → name resolution → type check → coherence → exhaustiveness
 │              │  → Hir (typed IR)
+│  stdlib.rs   │  embeds core.vln via include_str!, parses to prelude AST
 └──────┬───────┘
        │
        ▼
@@ -38,7 +39,7 @@ Valen コンパイラ `valenc` は Rust で実装され、`.vln` ソースから
 | `valen-ast` | AST 型定義、TokenKind、Span | — |
 | `valen-diagnostics` | エラー・警告の共通構造体 | `valen-ast` |
 | `valen-parser` | lexer + parser | `valen-ast`, `valen-diagnostics`, `logos` |
-| `valen-hir` | 名前解決・型検査・coherence・exhaustiveness | `valen-ast`, `valen-diagnostics` |
+| `valen-hir` | 名前解決・型検査・coherence・exhaustiveness | `valen-ast`, `valen-diagnostics`, `valen-parser` |
 | `valen-codegen` | JVM bytecode 生成 | `valen-hir`, `ristretto_classfile` |
 | `valenc` | コンパイラ CLI | 全 crate |
 | `valen-lsp` | LSP サーバー | `valen-parser`, `valen-hir`, `async-lsp` |

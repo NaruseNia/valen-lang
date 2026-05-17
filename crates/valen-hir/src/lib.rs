@@ -7,6 +7,7 @@ pub mod classpath;
 pub mod coherence;
 pub mod exhaustive;
 pub mod resolve;
+pub mod stdlib;
 pub mod ty;
 
 use indexmap::IndexMap;

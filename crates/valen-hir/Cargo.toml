@@ -11,9 +11,7 @@ description = "Valen high-level IR: name resolution, type check, coherence"
 [dependencies]
 valen-ast = { workspace = true }
 valen-diagnostics = { workspace = true }
+valen-parser = { workspace = true }
 smol_str = { workspace = true }
 indexmap = { workspace = true }
 ristretto_classfile = { workspace = true }
-
-[dev-dependencies]
-valen-parser = { workspace = true }

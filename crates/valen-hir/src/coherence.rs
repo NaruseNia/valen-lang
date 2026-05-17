@@ -59,8 +59,11 @@ impl<'h> CoherenceChecker<'h> {
         let impls: Vec<_> = self
             .hir
             .defs
-            .values()
-            .filter_map(|d| {
+            .iter()
+            .filter_map(|(id, d)| {
+                if self.hir.prelude_ids.contains(id) {
+                    return None;
+                }
                 if let DefKind::Impl(imp) = &d.kind {
                     Some((d.span, imp.clone()))
                 } else {

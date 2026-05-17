@@ -9,7 +9,7 @@ use valen_diagnostics::DiagCode;
 
 use crate::{
     ClassDef, ClassDefKind, CtorParamDef, DataClassDef, Def, DefId, DefKind, EnumDef,
-    EnumVariantDef, FnDef, Hir, HirAssocType, ImplDef, ImplEntry, ParamDef, TraitDef, TyRef, Vis,
+    EnumVariantDef, FnDef, Hir, ImplDef, ImplEntry, ParamDef, TraitDef, TyRef, Vis,
 };
 
 /// Name resolver that lowers AST items into HIR definitions and builds scope tables.
@@ -109,520 +109,78 @@ impl Resolver {
             self.register_item(item);
         }
 
-        // Inject prelude types for names not already defined by user/stdlib code
-        self.inject_prelude();
+        // Register stdlib prelude (parsed from core.vln) for names not already defined
+        self.register_stdlib_prelude();
 
         // Second pass: build method indexes and validate
         self.build_method_index();
     }
 
-    fn inject_prelude(&mut self) {
+    /// Parse the embedded `core.vln` and register its definitions as prelude,
+    /// skipping any names already defined by user code.
+    fn register_stdlib_prelude(&mut self) {
+        let stdlib_items = crate::stdlib::parse_core_stdlib();
         let prelude_pkg = Some(vec![SmolStr::from("valen"), SmolStr::from("core")]);
 
-        self.inject_prelude_option(&prelude_pkg);
-        self.inject_prelude_result(&prelude_pkg);
-        self.inject_prelude_error_trait(&prelude_pkg);
-        self.inject_prelude_iterator_trait(&prelude_pkg);
-        self.inject_prelude_range(&prelude_pkg);
-        self.inject_prelude_java_exception(&prelude_pkg);
-        self.inject_prelude_operator_traits(&prelude_pkg);
-    }
+        let saved_package = self.current_package.clone();
+        self.current_package = prelude_pkg.clone();
 
-    fn inject_prelude_option(&mut self, pkg: &Option<Vec<SmolStr>>) {
-        if self.scope.lookup("Option").is_some() {
-            return;
-        }
-        let id = self.hir.alloc_id();
-        let def = Def {
-            id,
-            name: SmolStr::from("Option"),
-            kind: DefKind::Enum(EnumDef {
-                variants: vec![
-                    EnumVariantDef {
-                        name: SmolStr::from("Some"),
-                        fields: vec![(
-                            SmolStr::from("value"),
-                            TyRef::Unresolved(SmolStr::from("T")),
-                        )],
-                    },
-                    EnumVariantDef {
-                        name: SmolStr::from("None"),
-                        fields: vec![],
-                    },
-                ],
-                derives: vec![],
-            }),
-            vis: Vis::Pub,
-            span: valen_ast::Span::DUMMY,
-            package: pkg.clone(),
-        };
-        self.hir.defs.insert(id, def);
-        self.hir.prelude_ids.push(id);
-        self.scope.names.insert(SmolStr::from("Option"), id);
-        self.hir.imports.insert(
-            SmolStr::from("Option"),
-            vec![
-                SmolStr::from("valen"),
-                SmolStr::from("core"),
-                SmolStr::from("Option"),
-            ],
-        );
-    }
+        let mut injected_names = indexmap::IndexSet::<SmolStr>::new();
 
-    fn inject_prelude_result(&mut self, pkg: &Option<Vec<SmolStr>>) {
-        if self.scope.lookup("Result").is_some() {
-            return;
-        }
-        let id = self.hir.alloc_id();
-        let def = Def {
-            id,
-            name: SmolStr::from("Result"),
-            kind: DefKind::Enum(EnumDef {
-                variants: vec![
-                    EnumVariantDef {
-                        name: SmolStr::from("Ok"),
-                        fields: vec![(
-                            SmolStr::from("value"),
-                            TyRef::Unresolved(SmolStr::from("T")),
-                        )],
-                    },
-                    EnumVariantDef {
-                        name: SmolStr::from("Err"),
-                        fields: vec![(
-                            SmolStr::from("error"),
-                            TyRef::Unresolved(SmolStr::from("E")),
-                        )],
-                    },
-                ],
-                derives: vec![],
-            }),
-            vis: Vis::Pub,
-            span: valen_ast::Span::DUMMY,
-            package: pkg.clone(),
-        };
-        self.hir.defs.insert(id, def);
-        self.hir.prelude_ids.push(id);
-        self.scope.names.insert(SmolStr::from("Result"), id);
-        self.hir.imports.insert(
-            SmolStr::from("Result"),
-            vec![
-                SmolStr::from("valen"),
-                SmolStr::from("core"),
-                SmolStr::from("Result"),
-            ],
-        );
-    }
-
-    fn inject_prelude_error_trait(&mut self, pkg: &Option<Vec<SmolStr>>) {
-        if self.scope.lookup("Error").is_some() {
-            return;
-        }
-        let mid = self.hir.alloc_id();
-        let mdef = Def {
-            id: mid,
-            name: SmolStr::from("message"),
-            kind: DefKind::Fn(FnDef {
-                params: vec![ParamDef {
-                    name: SmolStr::from("self"),
-                    ty: TyRef::SelfTy,
-                    mutable: false,
-                    is_self: true,
-                    has_default: false,
-                }],
-                return_ty: Some(TyRef::Prim(crate::PrimTy::String)),
-                has_body: false,
-                generic_bounds: vec![],
-            }),
-            vis: Vis::Pub,
-            span: valen_ast::Span::DUMMY,
-            package: pkg.clone(),
-        };
-        self.hir.defs.insert(mid, mdef);
-        self.hir.prelude_ids.push(mid);
-
-        let id = self.hir.alloc_id();
-        let def = Def {
-            id,
-            name: SmolStr::from("Error"),
-            kind: DefKind::Trait(TraitDef {
-                is_sealed: false,
-                methods: vec![mid],
-                associated_types: vec![],
-                generics: vec![],
-            }),
-            vis: Vis::Pub,
-            span: valen_ast::Span::DUMMY,
-            package: pkg.clone(),
-        };
-        self.hir.defs.insert(id, def);
-        self.hir.prelude_ids.push(id);
-        self.scope.names.insert(SmolStr::from("Error"), id);
-        self.hir.imports.insert(
-            SmolStr::from("Error"),
-            vec![
-                SmolStr::from("valen"),
-                SmolStr::from("core"),
-                SmolStr::from("Error"),
-            ],
-        );
-    }
-
-    fn inject_prelude_iterator_trait(&mut self, pkg: &Option<Vec<SmolStr>>) {
-        if self.scope.lookup("Iterator").is_some() {
-            return;
-        }
-        let mid = self.hir.alloc_id();
-        let mdef = Def {
-            id: mid,
-            name: SmolStr::from("next"),
-            kind: DefKind::Fn(FnDef {
-                params: vec![ParamDef {
-                    name: SmolStr::from("self"),
-                    ty: TyRef::SelfTy,
-                    mutable: true,
-                    is_self: true,
-                    has_default: false,
-                }],
-                return_ty: Some(TyRef::Generic(
-                    SmolStr::from("Option"),
-                    vec![TyRef::Unresolved(SmolStr::from("T"))],
-                )),
-                has_body: false,
-                generic_bounds: vec![],
-            }),
-            vis: Vis::Pub,
-            span: valen_ast::Span::DUMMY,
-            package: pkg.clone(),
-        };
-        self.hir.defs.insert(mid, mdef);
-        self.hir.prelude_ids.push(mid);
-
-        let id = self.hir.alloc_id();
-        let def = Def {
-            id,
-            name: SmolStr::from("Iterator"),
-            kind: DefKind::Trait(TraitDef {
-                is_sealed: false,
-                methods: vec![mid],
-                associated_types: vec![],
-                generics: vec![],
-            }),
-            vis: Vis::Pub,
-            span: valen_ast::Span::DUMMY,
-            package: pkg.clone(),
-        };
-        self.hir.defs.insert(id, def);
-        self.hir.prelude_ids.push(id);
-        self.scope.names.insert(SmolStr::from("Iterator"), id);
-        self.hir.imports.insert(
-            SmolStr::from("Iterator"),
-            vec![
-                SmolStr::from("valen"),
-                SmolStr::from("core"),
-                SmolStr::from("Iterator"),
-            ],
-        );
-    }
-
-    fn inject_prelude_range(&mut self, pkg: &Option<Vec<SmolStr>>) {
-        if self.scope.lookup("Range").is_some() {
-            return;
-        }
-        let id = self.hir.alloc_id();
-        let def = Def {
-            id,
-            name: SmolStr::from("Range"),
-            kind: DefKind::DataClass(DataClassDef {
-                ctor_params: vec![
-                    CtorParamDef {
-                        vis: Vis::Pub,
-                        name: SmolStr::from("start"),
-                        ty: TyRef::Unresolved(SmolStr::from("T")),
-                        mutable: false,
-                        has_default: false,
-                    },
-                    CtorParamDef {
-                        vis: Vis::Pub,
-                        name: SmolStr::from("end"),
-                        ty: TyRef::Unresolved(SmolStr::from("T")),
-                        mutable: false,
-                        has_default: false,
-                    },
-                    CtorParamDef {
-                        vis: Vis::Pub,
-                        name: SmolStr::from("inclusive"),
-                        ty: TyRef::Prim(crate::PrimTy::Bool),
-                        mutable: false,
-                        has_default: false,
-                    },
-                ],
-                derives: vec![],
-            }),
-            vis: Vis::Pub,
-            span: valen_ast::Span::DUMMY,
-            package: pkg.clone(),
-        };
-        self.hir.defs.insert(id, def);
-        self.hir.prelude_ids.push(id);
-        self.scope.names.insert(SmolStr::from("Range"), id);
-        self.hir.imports.insert(
-            SmolStr::from("Range"),
-            vec![
-                SmolStr::from("valen"),
-                SmolStr::from("core"),
-                SmolStr::from("Range"),
-            ],
-        );
-    }
-
-    fn inject_prelude_java_exception(&mut self, pkg: &Option<Vec<SmolStr>>) {
-        if self.scope.lookup("JavaException").is_some() {
-            return;
-        }
-        let id = self.hir.alloc_id();
-        let def = Def {
-            id,
-            name: SmolStr::from("JavaException"),
-            kind: DefKind::DataClass(DataClassDef {
-                ctor_params: vec![
-                    CtorParamDef {
-                        vis: Vis::Pub,
-                        name: SmolStr::from("message"),
-                        ty: TyRef::Prim(crate::PrimTy::String),
-                        mutable: false,
-                        has_default: false,
-                    },
-                    CtorParamDef {
-                        vis: Vis::Pub,
-                        name: SmolStr::from("class_name"),
-                        ty: TyRef::Prim(crate::PrimTy::String),
-                        mutable: false,
-                        has_default: false,
-                    },
-                ],
-                derives: vec![],
-            }),
-            vis: Vis::Pub,
-            span: valen_ast::Span::DUMMY,
-            package: pkg.clone(),
-        };
-        self.hir.defs.insert(id, def);
-        self.hir.prelude_ids.push(id);
-        self.scope.names.insert(SmolStr::from("JavaException"), id);
-        self.hir.imports.insert(
-            SmolStr::from("JavaException"),
-            vec![
-                SmolStr::from("valen"),
-                SmolStr::from("core"),
-                SmolStr::from("JavaException"),
-            ],
-        );
-    }
-
-    /// Inject prelude operator traits: Add, Sub, Mul, Div, Rem, Neg, Not, Ord, Eq.
-    fn inject_prelude_operator_traits(&mut self, pkg: &Option<Vec<SmolStr>>) {
-        // Binary arithmetic traits with associated type Output and Rhs type param
-        for name in &["Add", "Sub", "Mul", "Div", "Rem"] {
-            self.inject_binary_arith_trait(name, pkg);
-        }
-        // Unary traits with associated type Output
-        for (name, method) in &[("Neg", "neg"), ("Not", "not")] {
-            self.inject_unary_trait(name, method, pkg);
-        }
-        // Ord: fn cmp(self, rhs: Self) -> Int
-        self.inject_comparison_trait("Ord", "cmp", TyRef::Prim(crate::PrimTy::Int), pkg);
-        // Eq: fn eq(self, rhs: Self) -> Bool
-        self.inject_comparison_trait("Eq", "eq", TyRef::Prim(crate::PrimTy::Bool), pkg);
-    }
-
-    /// trait Name<Rhs> { type Output; fn name(self, rhs: Rhs) -> Self::Output; }
-    fn inject_binary_arith_trait(&mut self, name: &str, pkg: &Option<Vec<SmolStr>>) {
-        if self.scope.lookup(name).is_some() {
-            return;
-        }
-        let method_name = name.to_ascii_lowercase();
-
-        let mid = self.hir.alloc_id();
-        let mdef = Def {
-            id: mid,
-            name: SmolStr::from(method_name.as_str()),
-            kind: DefKind::Fn(FnDef {
-                params: vec![
-                    ParamDef {
-                        name: SmolStr::from("self"),
-                        ty: TyRef::SelfTy,
-                        mutable: false,
-                        is_self: true,
-                        has_default: false,
-                    },
-                    ParamDef {
-                        name: SmolStr::from("rhs"),
-                        ty: TyRef::Unresolved(SmolStr::from("Rhs")),
-                        mutable: false,
-                        is_self: false,
-                        has_default: false,
-                    },
-                ],
-                return_ty: Some(TyRef::SelfTy),
-                has_body: false,
-                generic_bounds: vec![],
-            }),
-            vis: Vis::Pub,
-            span: valen_ast::Span::DUMMY,
-            package: pkg.clone(),
-        };
-        self.hir.defs.insert(mid, mdef);
-        self.hir.prelude_ids.push(mid);
-
-        let id = self.hir.alloc_id();
-        let sname = SmolStr::from(name);
-        let def = Def {
-            id,
-            name: sname.clone(),
-            kind: DefKind::Trait(TraitDef {
-                is_sealed: false,
-                methods: vec![mid],
-                associated_types: vec![HirAssocType {
-                    name: SmolStr::from("Output"),
-                    default: None,
-                }],
-                generics: vec![],
-            }),
-            vis: Vis::Pub,
-            span: valen_ast::Span::DUMMY,
-            package: pkg.clone(),
-        };
-        self.hir.defs.insert(id, def);
-        self.hir.prelude_ids.push(id);
-        self.scope.names.insert(sname.clone(), id);
-        self.hir.imports.insert(
-            sname.clone(),
-            vec![SmolStr::from("valen"), SmolStr::from("core"), sname],
-        );
-    }
-
-    /// trait Name { type Output; fn method(self) -> Self::Output; }
-    fn inject_unary_trait(&mut self, name: &str, method: &str, pkg: &Option<Vec<SmolStr>>) {
-        if self.scope.lookup(name).is_some() {
-            return;
+        // First pass: register named items (types, traits, functions)
+        for item in stdlib_items {
+            match item {
+                Item::Package(_) | Item::Import(_) | Item::Impl(_) => {}
+                _ => {
+                    let name = item_name(item);
+                    if let Some(n) = &name {
+                        if self.scope.lookup(n).is_some() {
+                            continue;
+                        }
+                    }
+                    let id_before = self.hir.next_id;
+                    self.register_item(item);
+                    for id in id_before..self.hir.next_id {
+                        self.hir.prelude_ids.push(id);
+                    }
+                    if let Some(n) = &name {
+                        injected_names.insert(n.clone());
+                        self.hir.imports.insert(
+                            SmolStr::from(n.as_str()),
+                            vec![
+                                SmolStr::from("valen"),
+                                SmolStr::from("core"),
+                                SmolStr::from(n.as_str()),
+                            ],
+                        );
+                    }
+                }
+            }
         }
 
-        let mid = self.hir.alloc_id();
-        let mdef = Def {
-            id: mid,
-            name: SmolStr::from(method),
-            kind: DefKind::Fn(FnDef {
-                params: vec![ParamDef {
-                    name: SmolStr::from("self"),
-                    ty: TyRef::SelfTy,
-                    mutable: false,
-                    is_self: true,
-                    has_default: false,
-                }],
-                return_ty: Some(TyRef::SelfTy),
-                has_body: false,
-                generic_bounds: vec![],
-            }),
-            vis: Vis::Pub,
-            span: valen_ast::Span::DUMMY,
-            package: pkg.clone(),
-        };
-        self.hir.defs.insert(mid, mdef);
-        self.hir.prelude_ids.push(mid);
-
-        let id = self.hir.alloc_id();
-        let sname = SmolStr::from(name);
-        let def = Def {
-            id,
-            name: sname.clone(),
-            kind: DefKind::Trait(TraitDef {
-                is_sealed: false,
-                methods: vec![mid],
-                associated_types: vec![HirAssocType {
-                    name: SmolStr::from("Output"),
-                    default: None,
-                }],
-                generics: vec![],
-            }),
-            vis: Vis::Pub,
-            span: valen_ast::Span::DUMMY,
-            package: pkg.clone(),
-        };
-        self.hir.defs.insert(id, def);
-        self.hir.prelude_ids.push(id);
-        self.scope.names.insert(sname.clone(), id);
-        self.hir.imports.insert(
-            sname.clone(),
-            vec![SmolStr::from("valen"), SmolStr::from("core"), sname],
-        );
-    }
-
-    /// trait Name { fn method(self, rhs: Self) -> RetTy; }
-    fn inject_comparison_trait(
-        &mut self,
-        name: &str,
-        method: &str,
-        ret_ty: TyRef,
-        pkg: &Option<Vec<SmolStr>>,
-    ) {
-        if self.scope.lookup(name).is_some() {
-            return;
+        // Second pass: register impl blocks only if both trait and target were injected
+        for item in stdlib_items {
+            if let Item::Impl(imp) = item {
+                let trait_name = imp.trait_ref.as_ref().and_then(type_head_name);
+                let target_name = type_head_name(&imp.target);
+                let both_injected = trait_name
+                    .as_ref()
+                    .is_some_and(|n| injected_names.contains(n.as_str()))
+                    && target_name
+                        .as_ref()
+                        .is_some_and(|n| injected_names.contains(n.as_str()));
+                if !both_injected {
+                    continue;
+                }
+                let id_before = self.hir.next_id;
+                self.register_item(item);
+                for id in id_before..self.hir.next_id {
+                    self.hir.prelude_ids.push(id);
+                }
+            }
         }
 
-        let mid = self.hir.alloc_id();
-        let mdef = Def {
-            id: mid,
-            name: SmolStr::from(method),
-            kind: DefKind::Fn(FnDef {
-                params: vec![
-                    ParamDef {
-                        name: SmolStr::from("self"),
-                        ty: TyRef::SelfTy,
-                        mutable: false,
-                        is_self: true,
-                        has_default: false,
-                    },
-                    ParamDef {
-                        name: SmolStr::from("rhs"),
-                        ty: TyRef::SelfTy,
-                        mutable: false,
-                        is_self: false,
-                        has_default: false,
-                    },
-                ],
-                return_ty: Some(ret_ty),
-                has_body: false,
-                generic_bounds: vec![],
-            }),
-            vis: Vis::Pub,
-            span: valen_ast::Span::DUMMY,
-            package: pkg.clone(),
-        };
-        self.hir.defs.insert(mid, mdef);
-        self.hir.prelude_ids.push(mid);
-
-        let id = self.hir.alloc_id();
-        let sname = SmolStr::from(name);
-        let def = Def {
-            id,
-            name: sname.clone(),
-            kind: DefKind::Trait(TraitDef {
-                is_sealed: false,
-                methods: vec![mid],
-                associated_types: vec![],
-                generics: vec![],
-            }),
-            vis: Vis::Pub,
-            span: valen_ast::Span::DUMMY,
-            package: pkg.clone(),
-        };
-        self.hir.defs.insert(id, def);
-        self.hir.prelude_ids.push(id);
-        self.scope.names.insert(sname.clone(), id);
-        self.hir.imports.insert(
-            sname.clone(),
-            vec![SmolStr::from("valen"), SmolStr::from("core"), sname],
-        );
+        self.current_package = saved_package;
     }
 
     fn check_naming_conventions(&mut self) {
@@ -1074,6 +632,28 @@ fn lower_ctor_param_with_params(p: &valen_ast::CtorParam, type_params: &[SmolStr
     }
 }
 
+fn type_head_name(ty: &valen_ast::Type) -> Option<SmolStr> {
+    match ty {
+        valen_ast::Type::Path(tp) if !tp.segments.is_empty() => {
+            Some(tp.segments.last().unwrap().name.clone())
+        }
+        _ => None,
+    }
+}
+
+fn item_name(item: &Item) -> Option<SmolStr> {
+    match item {
+        Item::Fn(f) => Some(f.name.clone()),
+        Item::Class(c) => Some(c.name.clone()),
+        Item::DataClass(dc) => Some(dc.name.clone()),
+        Item::Enum(e) => Some(e.name.clone()),
+        Item::Trait(t) => Some(t.name.clone()),
+        Item::TypeAlias(ta) => Some(ta.name.clone()),
+        Item::AnnotationClass(ac) => Some(ac.name.clone()),
+        Item::Impl(_) | Item::Package(_) | Item::Import(_) => None,
+    }
+}
+
 fn lower_type_ref_with_params(ty: &valen_ast::Type, type_params: &[SmolStr]) -> TyRef {
     match ty {
         valen_ast::Type::Path(tp) => {
@@ -1353,8 +933,56 @@ mod tests {
         let r = resolve_source(
             "trait Show { fn show(self) -> String; }\nimpl Show for Dog { fn show(self) -> String { self } }",
         );
-        assert_eq!(r.hir.trait_impls.len(), 1);
-        assert_eq!(r.hir.trait_impls[0].trait_name, "Show");
-        assert_eq!(r.hir.trait_impls[0].target_name, "Dog");
+        let user_impls: Vec<_> = r
+            .hir
+            .trait_impls
+            .iter()
+            .filter(|e| e.trait_name == "Show")
+            .collect();
+        assert_eq!(user_impls.len(), 1);
+        assert_eq!(user_impls[0].trait_name, "Show");
+        assert_eq!(user_impls[0].target_name, "Dog");
+    }
+
+    #[test]
+    fn stdlib_prelude_names_injected() {
+        let r = resolve_source("fn main() { 0 }");
+        for name in [
+            "Option",
+            "Result",
+            "Error",
+            "Iterator",
+            "Range",
+            "JavaException",
+        ] {
+            assert!(
+                r.hir
+                    .defs
+                    .values()
+                    .any(|d| d.name == name && r.hir.prelude_ids.contains(&d.id)),
+                "prelude should contain `{name}`"
+            );
+        }
+    }
+
+    #[test]
+    fn user_java_exception_blocks_stdlib_error_impl() {
+        let r = resolve_source("data class JavaException(pub x: Int);");
+        assert!(
+            !r.hir
+                .trait_impls
+                .iter()
+                .any(|i| i.trait_name == "Error" && i.target_name == "JavaException"),
+            "stdlib impl Error for JavaException should not be injected when user defines JavaException"
+        );
+    }
+
+    #[test]
+    fn user_error_trait_blocks_stdlib_impl() {
+        let r = resolve_source("trait Error { fn code(self) -> Int; }");
+        assert!(
+            !r.hir.trait_impls.iter().any(|i| i.trait_name == "Error"),
+            "stdlib impl should not be injected when user redefines Error"
+        );
     }
 }
