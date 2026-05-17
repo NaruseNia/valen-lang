@@ -1290,6 +1290,7 @@ dependencies = [
  "smol_str",
  "thiserror",
  "valen-ast",
+ "valen-diagnostics",
  "valen-hir",
  "valen-parser",
 ]

@@ -95,6 +95,10 @@ impl<'h> ExhaustivenessChecker<'h> {
                         }
                     }
                 }
+                valen_ast::Stmt::LetElse(le) => {
+                    self.check_expr(&le.expr);
+                    self.check_block(&le.else_block);
+                }
             }
         }
         if let Some(tail) = &block.tail {

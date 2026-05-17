@@ -352,6 +352,8 @@ pub struct Block {
 #[derive(Debug, Clone)]
 pub enum Stmt {
     Let(LetStmt),
+    /// `let Pattern = expr else { diverge };` — pattern-matching let that diverges on mismatch.
+    LetElse(LetElseStmt),
     Expr(Expr),
     /// Expression statement terminated by `;` (value is discarded).
     ExprSemi(Expr),
@@ -365,6 +367,22 @@ pub struct LetStmt {
     /// Explicit type annotation, if provided.
     pub ty: Option<Type>,
     pub init: Expr,
+    pub span: Span,
+}
+
+/// `let Pattern = expr else { diverge };` — refutable pattern binding with diverging else block.
+#[derive(Debug, Clone)]
+pub struct LetElseStmt {
+    /// The binding name extracted from the pattern (for simple cases like `Some(x)`).
+    pub name: SmolStr,
+    /// Explicit type annotation, if provided.
+    pub ty: Option<Type>,
+    /// The refutable pattern to match against.
+    pub pattern: Pattern,
+    /// The expression to match.
+    pub expr: Expr,
+    /// The else block, which must diverge (return/break/continue/panic).
+    pub else_block: Block,
     pub span: Span,
 }
 

@@ -2073,6 +2073,9 @@ fn collect_hints_from_stmt(
         TypedStmt::Let { init, .. } => {
             collect_hints_from_expr(init, doc, range, hints);
         }
+        TypedStmt::LetElse { scrutinee, .. } => {
+            collect_hints_from_expr(scrutinee, doc, range, hints);
+        }
         TypedStmt::Expr(e) | TypedStmt::ExprSemi(e) => {
             collect_hints_from_expr(e, doc, range, hints);
         }
@@ -2321,6 +2324,7 @@ fn find_expr_in_body<'a>(body: &'a TypedBody, offset: u32, best: &mut Option<&'a
     for stmt in &body.stmts {
         match stmt {
             TypedStmt::Let { init, .. } => find_expr_in_expr(init, offset, best),
+            TypedStmt::LetElse { scrutinee, .. } => find_expr_in_expr(scrutinee, offset, best),
             TypedStmt::Expr(e) | TypedStmt::ExprSemi(e) => find_expr_in_expr(e, offset, best),
         }
     }
@@ -2517,6 +2521,17 @@ fn collect_vars_from_body(body: &TypedBody, offset: u32, vars: &mut Vec<(String,
                 // Also recurse into init expression for nested blocks
                 collect_vars_from_expr(init, offset, vars);
             }
+            TypedStmt::LetElse {
+                scrutinee, span, ..
+            } => {
+                // Variables from the pattern are bound after the let-else statement
+                collect_vars_from_expr(scrutinee, offset, vars);
+                // Pattern bindings are visible after the statement
+                if span.start < offset {
+                    // Pattern variables are already in the enclosing scope
+                    // from the type checker; they're visible via the env
+                }
+            }
             TypedStmt::Expr(e) | TypedStmt::ExprSemi(e) => {
                 collect_vars_from_expr(e, offset, vars);
             }
@@ -2562,7 +2577,9 @@ fn collect_vars_from_expr(expr: &TypedExpr, offset: u32, vars: &mut Vec<(String,
         TypedExprKind::For { var, iter, body } => {
             // The iteration variable is in scope inside the body
             if body.stmts.first().is_some_and(|s| match s {
-                TypedStmt::Let { span, .. } => span.start <= offset,
+                TypedStmt::Let { span, .. } | TypedStmt::LetElse { span, .. } => {
+                    span.start <= offset
+                }
                 TypedStmt::Expr(e) | TypedStmt::ExprSemi(e) => e.span.start <= offset,
             }) || body.tail.as_ref().is_some_and(|t| t.span.start <= offset)
             {

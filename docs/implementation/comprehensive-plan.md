@@ -500,7 +500,7 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 | TASK-045 | f-string | #117 | M10 | — | M | ✅ PR #142 |
 | TASK-050 | Collection operations | #114 | M11 | TASK-033 | M |
 | TASK-046 | if let / while let | #111, VEP-029 | M12 | M9 | L |
-| TASK-047 | let-else | VEP-028 | M12 | M9 | L |
+| TASK-047 | let-else | VEP-028 | M12 | M9 | L | ✅ |
 | TASK-048 | derive | VEP-013 | M12 | TASK-030 ✅ | L |
 | TASK-049 | enum variant shorthand | #110 | M12 | TASK-046 | M |
 | TASK-051 | Collection literal | VEP-030 | M13 | — | M |

@@ -51,6 +51,32 @@ match n {
 }
 ```
 
+## 9.1.2 let-else
+
+`let-else` is a refutable pattern binding that diverges when the pattern does not match. The else block **must** diverge (`return`, `break`, `continue`, or `panic`).
+
+```valen
+let Some(health) = world.getComponent(entity, "Health") else { return; };
+let Ok(data) = readFile(path) else { panic("read failed"); };
+```
+
+The bound variables (`health`, `data`) are available in the enclosing scope after the `let-else` statement. The else block's type must be `Nothing` (the bottom type).
+
+This is syntactic sugar for early-return patterns, avoiding deeply nested `match` blocks:
+
+```valen
+// Without let-else:
+let health = match world.getComponent(entity, "Health") {
+    Option::Some(h) => h,
+    Option::None => return,
+};
+
+// With let-else:
+let Option::Some(health) = world.getComponent(entity, "Health") else { return; };
+```
+
+The pattern in `let-else` is always refutable (e.g. `Some(x)`, `Ok(v)`, `Color::Blue(n)`). Using an irrefutable pattern is permitted but unusual.
+
 ## 9.2 exhaustive check
 
 - Valen `enum` / `sealed class` / `sealed trait` hierarchy：**厳密 exhaustive**（非網羅はコンパイルエラー）

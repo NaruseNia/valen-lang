@@ -23,9 +23,9 @@ use valen_ast::{
     CallExpr, ClassDecl, ClassKind, ClassMember, ContinueExpr, CtorParam, DataClassDecl, EnumDecl,
     EnumField, EnumVariant, EnumVariantFields, Expr, FieldAccess, FileId, FnDecl, ForExpr,
     GenericParam, IfExpr, IfLetExpr, ImplBlock, ImplItem, ImportDecl, Item, LambdaExpr,
-    LambdaParam, LetStmt, Literal, LoopExpr, MatchArm, MatchExpr, MethodCallExpr, PackageDecl,
-    Param, Path, PathSegment, Pattern, RangeExpr, RangePattern, ReturnExpr, Span, Stmt,
-    StringInterpExpr, StructPattern, StructPatternField, TraitDecl, TraitItem, TryExpr, Type,
+    LambdaParam, LetElseStmt, LetStmt, Literal, LoopExpr, MatchArm, MatchExpr, MethodCallExpr,
+    PackageDecl, Param, Path, PathSegment, Pattern, RangeExpr, RangePattern, ReturnExpr, Span,
+    Stmt, StringInterpExpr, StructPattern, StructPatternField, TraitDecl, TraitItem, TryExpr, Type,
     TypeAliasDecl, TypePath, TypePathSegment, UnaryExpr, UnaryOp, Variance, Visibility, WhileExpr,
     WhileLetExpr,
 };
@@ -864,8 +864,8 @@ impl Parser {
 
         while !self.at(&TokenKind::RBrace) && !self.at_eof() {
             if self.at(&TokenKind::Let) {
-                let let_stmt = self.parse_let()?;
-                stmts.push(Stmt::Let(let_stmt));
+                let stmt = self.parse_let_or_let_else()?;
+                stmts.push(stmt);
                 continue;
             }
 
@@ -905,6 +905,106 @@ impl Parser {
             tail,
             span: start.merge(end),
         })
+    }
+
+    /// Parse a `let` statement, producing either `Stmt::Let` or `Stmt::LetElse`.
+    ///
+    /// The let-else form is: `let Pattern = expr else { diverge };`
+    /// We detect it by checking whether the `else` keyword follows the
+    /// initializer expression.
+    fn parse_let_or_let_else(&mut self) -> Option<Stmt> {
+        let start = self.peek_span();
+        let saved_pos = self.pos;
+
+        // Try to parse as let-else: `let pattern = expr else { block };`
+        // We need lookahead to decide. First, check if the tokens after `let`
+        // look like a refutable pattern (e.g., `Some(x)`, `Ok(data)`,
+        // `Color::Blue(v)`). A simple heuristic: if the token after `let` is
+        // an identifier followed by `(` or `::`, it could be a let-else pattern.
+        // But we also support `let x = expr else { ... };` with a binding pattern.
+        //
+        // Strategy: try parsing as let-else first by checking for a pattern.
+        // If we detect `else` after the expression, commit to let-else.
+        // Otherwise, fall back to regular let.
+        if self.is_let_else_pattern() {
+            if let Some(stmt) = self.try_parse_let_else(start) {
+                return Some(stmt);
+            }
+            // Failed to parse as let-else, restore and try regular let
+            self.pos = saved_pos;
+        }
+
+        let ls = self.parse_let()?;
+        Some(Stmt::Let(ls))
+    }
+
+    /// Check whether the tokens after `let` look like a let-else pattern.
+    ///
+    /// A let-else pattern starts with a refutable pattern like `Some(x)`,
+    /// `Ok(data)`, `Color::Blue(v)`. We detect this by looking ahead:
+    /// `let` followed by an identifier and then `(` or `::`.
+    fn is_let_else_pattern(&self) -> bool {
+        // Current token should be `let`
+        if !self.at(&TokenKind::Let) {
+            return false;
+        }
+        // Look past `let` (and optional `mut`)
+        let mut look = self.pos + 1;
+        if look < self.tokens.len() && self.tokens[look].0 == TokenKind::Mut {
+            look += 1;
+        }
+        // Next should be an identifier
+        if look >= self.tokens.len() || !matches!(self.tokens[look].0, TokenKind::Ident(_)) {
+            return false;
+        }
+        look += 1;
+        // If followed by `(` or `::`, it looks like a destructuring pattern
+        if look < self.tokens.len() {
+            matches!(
+                self.tokens[look].0,
+                TokenKind::LParen | TokenKind::DoubleColon
+            )
+        } else {
+            false
+        }
+    }
+
+    /// Try to parse a let-else statement: `let pattern = expr else { block };`
+    fn try_parse_let_else(&mut self, _start_hint: Span) -> Option<Stmt> {
+        let start = self.expect(TokenKind::Let)?;
+        let pattern = self.parse_pattern()?;
+
+        // Extract the binding name from the pattern for the LetElseStmt.
+        // For struct patterns like `Some(x)`, the name is the first segment
+        // of the path (used as a descriptive label, not the bound variable).
+        let name = extract_pattern_name(&pattern);
+
+        let ty: Option<Type> = if self.eat(&TokenKind::Colon).is_some() {
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+
+        self.expect(TokenKind::Eq)?;
+        let expr = self.parse_expr()?;
+
+        // Must see `else` keyword — otherwise this is not a let-else
+        if !self.at(&TokenKind::Else) {
+            return None;
+        }
+        self.bump(); // consume `else`
+
+        let else_block = self.parse_block()?;
+        let end = self.expect(TokenKind::Semi)?;
+
+        Some(Stmt::LetElse(LetElseStmt {
+            name,
+            ty,
+            pattern,
+            expr,
+            else_block,
+            span: start.merge(end),
+        }))
     }
 
     fn parse_let(&mut self) -> Option<LetStmt> {
@@ -2136,6 +2236,29 @@ fn literal_span(lit: &Literal) -> Span {
         Literal::String(_, s) => *s,
         Literal::Bool(_, s) => *s,
         Literal::Unit(s) => *s,
+    }
+}
+
+/// Extract a descriptive name from a pattern for the `LetElseStmt::name` field.
+///
+/// For struct patterns like `Some(x)` this returns `"x"` (the first bound variable).
+/// For binding patterns like `x` it returns `"x"`.
+/// For wildcards and other patterns, returns `"_"`.
+fn extract_pattern_name(pattern: &Pattern) -> SmolStr {
+    match pattern {
+        Pattern::Binding(b) => b.name.clone(),
+        Pattern::Struct(sp) => {
+            // Extract the first bound field name as the "name" of the let-else binding
+            if let Some(field) = sp.fields.first() {
+                if let Some(ref pat) = field.pattern {
+                    return extract_pattern_name(pat);
+                }
+                return field.name.clone();
+            }
+            SmolStr::from("_")
+        }
+        Pattern::At(at) => at.name.clone(),
+        _ => SmolStr::from("_"),
     }
 }
 

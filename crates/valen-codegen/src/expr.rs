@@ -285,6 +285,15 @@ impl<'a> ExprLowering<'a> {
                 let slot = self.alloc_local(name.clone(), jvm_ty.clone());
                 self.ops.push(JvmOp::StoreLocal(slot, jvm_ty));
             }
+            TypedStmt::LetElse {
+                pattern,
+                scrutinee,
+                ty,
+                else_body,
+                ..
+            } => {
+                self.lower_let_else(pattern, scrutinee, ty, else_body);
+            }
             TypedStmt::Expr(expr) => {
                 self.lower_expr(expr);
                 self.pop_if_needed(&expr.ty);
@@ -1080,6 +1089,51 @@ impl<'a> ExprLowering<'a> {
             vec![jvm_result]
         };
         self.emit_frame(end_stack);
+    }
+
+    /// Lower `let Pattern = expr else { diverge };` into JVM bytecode.
+    ///
+    /// Evaluates the scrutinee, checks the pattern. If the pattern matches,
+    /// binds variables and continues. If it fails, executes the else block
+    /// (which must diverge, so control never reaches past it).
+    ///
+    /// Pattern variables are bound in the **enclosing** scope (no push/pop),
+    /// so they remain accessible after the let-else statement.
+    fn lower_let_else(
+        &mut self,
+        pattern: &valen_ast::Pattern,
+        scrutinee: &TypedExpr,
+        _ty: &Ty,
+        else_body: &TypedBody,
+    ) {
+        // Evaluate the scrutinee and store in a temp slot
+        self.lower_expr(scrutinee);
+        let scrutinee_ty = self.ty_to_jvm(&scrutinee.ty);
+        let temp_slot = self.next_slot;
+        self.next_slot += scrutinee_ty.slot_count();
+        self.ops
+            .push(JvmOp::StoreLocal(temp_slot, scrutinee_ty.clone()));
+
+        // Allocate labels
+        let else_label = self.alloc_label();
+        let continue_label = self.alloc_label();
+
+        // Check the pattern — if it fails, jump to else_label.
+        // Do NOT wrap in push_scope/pop_scope: pattern bindings must
+        // persist in the enclosing scope after the let-else.
+        self.lower_pattern_check(pattern, temp_slot, &scrutinee_ty, else_label);
+
+        // Pattern matched — jump over the else block
+        self.ops.push(JvmOp::Goto(continue_label));
+
+        // Else block — executes when pattern doesn't match (diverges)
+        self.ops.push(JvmOp::Label(else_label));
+        self.emit_frame(vec![]);
+        self.lower_body(else_body);
+
+        // Continue label — after the pattern match succeeded
+        self.ops.push(JvmOp::Label(continue_label));
+        self.emit_frame(vec![]);
     }
 
     fn lower_pattern_check(

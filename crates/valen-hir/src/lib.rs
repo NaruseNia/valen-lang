@@ -587,6 +587,18 @@ pub enum TypedStmt {
         has_annotation: bool,
         span: Span,
     },
+    /// `let Pattern = expr else { diverge };` — refutable pattern binding with diverging else.
+    LetElse {
+        /// The pattern used for matching.
+        pattern: valen_ast::Pattern,
+        /// The scrutinee expression.
+        scrutinee: TypedExpr,
+        /// The type of the successfully bound value.
+        ty: Ty,
+        /// The diverging else block (type must be `Nothing`).
+        else_body: TypedBody,
+        span: Span,
+    },
     /// An expression whose value is used (tail position).
     Expr(TypedExpr),
     /// An expression followed by a semicolon (value discarded).
