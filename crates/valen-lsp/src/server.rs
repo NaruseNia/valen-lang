@@ -2548,6 +2548,15 @@ fn collect_pattern_bindings(pattern: &valen_ast::Pattern, ty: &Ty, out: &mut Vec
                 collect_pattern_bindings(first, ty, out);
             }
         }
+        Pattern::VariantShorthand(vs) => {
+            for field in &vs.fields {
+                if let Some(sub) = &field.pattern {
+                    collect_pattern_bindings(sub, ty, out);
+                } else {
+                    out.push((field.name.to_string(), ty.clone()));
+                }
+            }
+        }
         Pattern::Wildcard(_) | Pattern::Literal(_) | Pattern::Path(_) | Pattern::Range(_) => {
             // No variable bindings introduced.
         }

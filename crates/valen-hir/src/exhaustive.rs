@@ -169,6 +169,11 @@ impl<'h> ExhaustivenessChecker<'h> {
                 }
             }
             valen_ast::Expr::Safe(s) => self.check_block(&s.block),
+            valen_ast::Expr::VariantShorthand(vs) => {
+                for arg in &vs.args {
+                    self.check_expr(&arg.value);
+                }
+            }
             _ => {}
         }
     }
@@ -511,6 +516,9 @@ fn collect_covered_variants(pat: &Pattern, enum_name: &SmolStr, covered: &mut In
                 covered.insert(variant);
             }
         }
+        Pattern::VariantShorthand(vs) => {
+            covered.insert(vs.variant_name.clone());
+        }
         Pattern::Or(pats, _) => {
             for p in pats {
                 collect_covered_variants(p, enum_name, covered);
@@ -544,6 +552,9 @@ fn collect_covered_type_names(pat: &Pattern, covered: &mut IndexSet<SmolStr>) {
             if let Some(seg) = sp.path.segments.last() {
                 covered.insert(seg.name.clone());
             }
+        }
+        Pattern::VariantShorthand(vs) => {
+            covered.insert(vs.variant_name.clone());
         }
         Pattern::Or(pats, _) => {
             for p in pats {

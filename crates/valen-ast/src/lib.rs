@@ -419,6 +419,8 @@ pub enum Expr {
     Safe(SafeExpr),
     IfLet(Box<IfLetExpr>),
     WhileLet(Box<WhileLetExpr>),
+    /// `.Variant` or `.Variant(args)` — enum variant shorthand with inferred enum type.
+    VariantShorthand(VariantShorthandExpr),
 }
 
 /// Literal value (integer, float, string, etc.).
@@ -479,6 +481,7 @@ impl Expr {
             Expr::Safe(s) => s.span,
             Expr::IfLet(i) => i.span,
             Expr::WhileLet(w) => w.span,
+            Expr::VariantShorthand(v) => v.span,
         }
     }
 }
@@ -508,6 +511,7 @@ impl Pattern {
             Pattern::Range(r) => r.span,
             Pattern::Or(_, s) => *s,
             Pattern::At(a) => a.span,
+            Pattern::VariantShorthand(v) => v.span,
         }
     }
 }
@@ -669,6 +673,8 @@ pub enum Pattern {
     Or(Vec<Pattern>, Span),
     /// `name @ pattern` — bind the matched value while destructuring.
     At(AtPattern),
+    /// `.Variant` or `.Variant(fields)` — enum variant shorthand pattern.
+    VariantShorthand(VariantShorthandPattern),
 }
 
 /// Variable binding pattern (e.g. `x` or `mut x`).
@@ -712,6 +718,23 @@ pub struct RangePattern {
 pub struct AtPattern {
     pub name: SmolStr,
     pub pattern: Box<Pattern>,
+    pub span: Span,
+}
+
+/// `.Variant` or `.Variant(args)` — enum variant shorthand expression.
+#[derive(Debug, Clone)]
+pub struct VariantShorthandExpr {
+    pub variant_name: SmolStr,
+    pub args: Vec<CallArg>,
+    pub span: Span,
+}
+
+/// `.Variant` or `.Variant(fields)` — enum variant shorthand pattern.
+#[derive(Debug, Clone)]
+pub struct VariantShorthandPattern {
+    pub variant_name: SmolStr,
+    pub fields: Vec<StructPatternField>,
+    pub rest: bool,
     pub span: Span,
 }
 

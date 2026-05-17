@@ -796,6 +796,7 @@ impl<'a> Printer<'a> {
             Expr::Safe(s) => self.print_safe(s),
             Expr::IfLet(il) => self.print_if_let(il),
             Expr::WhileLet(wl) => self.print_while_let(wl),
+            Expr::VariantShorthand(vs) => self.print_variant_shorthand_expr(vs),
         }
     }
 
@@ -819,6 +820,25 @@ impl<'a> Printer<'a> {
         self.print_expr(&wl.expr);
         self.w(" ");
         self.print_block(&wl.body);
+    }
+
+    fn print_variant_shorthand_expr(&mut self, vs: &valen_ast::VariantShorthandExpr) {
+        self.w(".");
+        self.w(&vs.variant_name);
+        if !vs.args.is_empty() {
+            self.w("(");
+            for (i, arg) in vs.args.iter().enumerate() {
+                if i > 0 {
+                    self.w(", ");
+                }
+                if let Some(ref name) = arg.name {
+                    self.w(name);
+                    self.w(" = ");
+                }
+                self.print_expr(&arg.value);
+            }
+            self.w(")");
+        }
     }
 
     fn print_literal(&mut self, lit: &Literal) {
@@ -1185,6 +1205,30 @@ impl<'a> Printer<'a> {
                 self.w(&a.name);
                 self.w(" @ ");
                 self.print_pattern(&a.pattern);
+            }
+            Pattern::VariantShorthand(vs) => {
+                self.w(".");
+                self.w(&vs.variant_name);
+                if !vs.fields.is_empty() || vs.rest {
+                    self.w("(");
+                    for (i, f) in vs.fields.iter().enumerate() {
+                        if i > 0 {
+                            self.w(", ");
+                        }
+                        self.w(&f.name);
+                        if let Some(sub) = &f.pattern {
+                            self.w(": ");
+                            self.print_pattern(sub);
+                        }
+                    }
+                    if vs.rest {
+                        if !vs.fields.is_empty() {
+                            self.w(", ");
+                        }
+                        self.w("..");
+                    }
+                    self.w(")");
+                }
             }
         }
     }
