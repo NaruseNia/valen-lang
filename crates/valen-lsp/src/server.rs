@@ -431,6 +431,33 @@ impl ServerState {
             }
         }
 
+        // Variant shorthand: when `.` has no receiver (e.g., `= .` or `=> .`),
+        // suggest all enum variants from all visible enums.
+        if type_name.is_none() && is_variant_shorthand_context(before) {
+            for def in hir.defs.values() {
+                if let DefKind::Enum(e) = &def.kind {
+                    for v in &e.variants {
+                        let detail = if v.fields.is_empty() {
+                            format!("{}.{}", def.name, v.name)
+                        } else {
+                            let fields: Vec<String> = v
+                                .fields
+                                .iter()
+                                .map(|(name, ty)| format!("{name}: {ty}"))
+                                .collect();
+                            format!("{}.{}({})", def.name, v.name, fields.join(", "))
+                        };
+                        items.push(CompletionItem {
+                            label: v.name.to_string(),
+                            kind: Some(CompletionItemKind::ENUM_MEMBER),
+                            detail: Some(detail),
+                            ..Default::default()
+                        });
+                    }
+                }
+            }
+        }
+
         // Deduplicate
         items.sort_by(|a, b| a.label.cmp(&b.label));
         items.dedup_by(|a, b| a.label == b.label);
@@ -1638,6 +1665,21 @@ fn extract_name_before_double_colon(before: &str) -> &str {
         .map(|i| i + 1)
         .unwrap_or(0);
     &without_colons[start..]
+}
+
+fn is_variant_shorthand_context(before: &str) -> bool {
+    let stripped = before.trim_end_matches(|c: char| c.is_ascii_alphanumeric() || c == '_');
+    let trimmed = stripped.trim_end();
+    let without_dot = match trimmed.strip_suffix('.') {
+        Some(s) => s.trim_end(),
+        None => return false,
+    };
+    without_dot.is_empty()
+        || without_dot.ends_with('=')
+        || without_dot.ends_with('(')
+        || without_dot.ends_with(',')
+        || without_dot.ends_with('{')
+        || without_dot.ends_with("=>")
 }
 
 fn is_dot_context(before: &str) -> bool {
