@@ -65,7 +65,7 @@ impl<'h> CoherenceChecker<'h> {
                     return None;
                 }
                 if let DefKind::Impl(imp) = &d.kind {
-                    Some((d.span, imp.clone()))
+                    Some((d.span, d.package.clone(), imp.clone()))
                 } else {
                     None
                 }
@@ -74,7 +74,7 @@ impl<'h> CoherenceChecker<'h> {
 
         let mut seen_pairs: Vec<(SmolStr, SmolStr, valen_ast::Span)> = Vec::new();
 
-        for (span, imp) in &impls {
+        for (span, pkg, imp) in &impls {
             let trait_name = tyref_name(&imp.trait_ref);
             let target_name = tyref_name(&imp.target);
 
@@ -103,7 +103,7 @@ impl<'h> CoherenceChecker<'h> {
             // A name is local if it appears in local_defs (user-defined types/traits).
             let trait_local = self.local_defs.contains(tn.as_str());
             let type_local = self.local_defs.contains(tgt.as_str());
-            if !trait_local && !type_local {
+            if !trait_local && !type_local && !is_stdlib_package(pkg) {
                 self.diags.error(
                     DiagCode::ORPHAN_RULE_VIOLATION,
                     *span,
@@ -364,6 +364,16 @@ fn tyref_name(ty: &TyRef) -> Option<SmolStr> {
     }
 }
 
+/// Returns true if the package is a stdlib package (valen.core or valen.std.*),
+/// which is exempt from the orphan rule for foreign-foreign impl.
+fn is_stdlib_package(pkg: &Option<Vec<SmolStr>>) -> bool {
+    let Some(segs) = pkg else { return false };
+    if segs.len() >= 2 && segs[0] == "valen" && (segs[1] == "core" || segs[1] == "std") {
+        return true;
+    }
+    false
+}
+
 fn is_type_param(
     ty: &TyRef,
     generic_names: &IndexSet<SmolStr>,
@@ -476,6 +486,22 @@ mod tests {
     fn foreign_trait_foreign_type() {
         let r = check_source(
             "import java.io.Serializable;\nimport java.util.List;\nimpl Serializable for List { }",
+        );
+        assert_has_error(&r, DiagCode::ORPHAN_RULE_VIOLATION);
+    }
+
+    #[test]
+    fn stdlib_package_exempt_from_orphan_rule() {
+        let r = check_source(
+            "package valen.core;\nimport java.util.List;\ntrait MyTrait { fn foo(self) -> Int; }\nimpl MyTrait for List { fn foo(self) -> Int { 0 } }",
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn non_stdlib_package_not_exempt() {
+        let r = check_source(
+            "package com.example;\nimport java.io.Serializable;\nimport java.util.List;\nimpl Serializable for List { }",
         );
         assert_has_error(&r, DiagCode::ORPHAN_RULE_VIOLATION);
     }
