@@ -1,4 +1,4 @@
-pub enum Shape derives(Eq, Hash, Debug) {
+pub enum Shape derives(Eq, Hash, Display) {
     Circle(r: Float),
     Rect(w: Float, h: Float),
     Point,

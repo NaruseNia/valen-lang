@@ -134,7 +134,7 @@ impl Container for IntList {
 ```valen
 pub data class Entity(pub id: Int) derives(Eq, Hash);
 
-pub enum Color derives(Eq, Hash, Debug) {
+pub enum Color derives(Eq, Hash, Display) {
     Red,
     Green,
     Blue(value: Int),
@@ -149,12 +149,12 @@ pub class Point(pub x: Float, pub y: Float) derives(Eq) {}
 |-------|------------|------|
 | `Eq` | `equals(Object) -> boolean` | フィールド逐次比較 |
 | `Hash` | `hashCode() -> int` | 31-multiply-accumulate |
-| `Debug` | `toString() -> String` | `TypeName(field=value, ...)` 形式 |
+| `Display` | `toString() -> String` | `TypeName(field=value, ...)` 形式 |
 | `Clone` | `copy(fields...) -> Self` | 全フィールド指定のコピーコンストラクタ |
 
 ### data class の暗黙 derives
 
-`data class` は宣言するだけで `Eq`, `Hash`, `Debug`, `Clone` の実装を自動生成する（`derives(...)` を書かなくても生成される）。明示的に `derives(Eq)` と書いても冗長なだけで害はない。
+`data class` は宣言するだけで `Eq`, `Hash`, `Display`, `Clone` の実装を自動生成する（`derives(...)` を書かなくても生成される）。明示的に `derives(Eq)` と書いても冗長なだけで害はない。
 
 ### enum の derives
 

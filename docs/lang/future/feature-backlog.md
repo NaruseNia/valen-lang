@@ -333,7 +333,7 @@ fn write_all<T: Read & Close>(x: T) -> Result<Unit, IoError> { ... }
 構造から明らかな trait 実装を生成する。
 
 ```valen
-#[derive(Eq, Hash, Debug, Clone)]
+#[derive(Eq, Hash, Display, Clone)]
 enum Color {
     Red,
     Rgb(Int, Int, Int),
@@ -343,7 +343,7 @@ enum Color {
 候補 trait:
 
 - `Eq` / `Hash`
-- `Debug` / `Display`
+- `Display` / `Display`
 - `Clone` / `Copy` 相当
 - `Ord` / `PartialOrd`
 - `Serialize` / `Deserialize`

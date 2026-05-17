@@ -127,7 +127,7 @@ trait Display {
     fn display(self) -> String;
 }
 
-trait Debug {
+trait Display {
     fn debug(self) -> String;
 }
 
