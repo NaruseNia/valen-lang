@@ -58,6 +58,8 @@ impl Area for Shape {
 
 **所有単位は module** — package / module / compile unit の三者同一視は行わない。
 
+**stdlib 例外:** `valen.core` および `valen.std.*` パッケージからの impl は、foreign trait を foreign type に実装できる（Java コレクション連携用）。ユーザーコードには適用されない。
+
 - `package` は source 階層と名前空間（§10.1）
 - `module` はビルドターゲット内の意味的所有単位（§10.2）。orphan rule / `sealed permit` 範囲 / `internal` 可視性はすべて module ID に従う
 - `compile unit` は物理的な単位で、仕様には現れない（実装側で決まる）
