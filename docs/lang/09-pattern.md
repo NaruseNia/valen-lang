@@ -84,3 +84,37 @@ match javaSealed {
 理由: Valen 自身が定義した closed world はコンパイラが完全に把握できるが、Java 定義の closed world は classpath 変動・tooling 差異があり、同じ厳密さを保証できない。annotation による明示 opt-in を要求することで、classpath で permit が増えたときに silently non-exhaustive 化する事故を防ぐ。
 
 詳細は [20. アノテーション](20-annotations.md) を参照。
+
+## 9.4 if let / while let
+
+`if let` は単一パターンに対する条件付き分解。`match` の 1-arm 版。
+
+```valen
+if let Some(pos) = getComponent(entity, "Position") {
+    println(f"x={pos.x}, y={pos.y}");
+} else {
+    println("no position");
+}
+```
+
+`else if let` チェーンも可能:
+
+```valen
+if let Some(pos) = getComponent(entity, "Position") {
+    println(f"pos: ({pos.x}, {pos.y})");
+} else if let Some(vel) = getComponent(entity, "Velocity") {
+    println(f"vel only");
+} else {
+    println("no components");
+}
+```
+
+`while let` はパターンが一致する間ループ:
+
+```valen
+while let Some(entity) = iter.next() {
+    process(entity);
+}
+```
+
+**制限（MVP）:** ガード条件 (`if let P = e && cond`) は非対応（Phase 3）。

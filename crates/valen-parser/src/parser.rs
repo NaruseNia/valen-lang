@@ -22,11 +22,12 @@ use valen_ast::{
     AssocTypeDef, AtPattern, BinaryExpr, BinaryOp, BindingPattern, Block, BreakExpr, CallArg,
     CallExpr, ClassDecl, ClassKind, ClassMember, ContinueExpr, CtorParam, DataClassDecl, EnumDecl,
     EnumField, EnumVariant, EnumVariantFields, Expr, FieldAccess, FileId, FnDecl, ForExpr,
-    GenericParam, IfExpr, ImplBlock, ImplItem, ImportDecl, Item, LambdaExpr, LambdaParam, LetStmt,
-    Literal, LoopExpr, MatchArm, MatchExpr, MethodCallExpr, PackageDecl, Param, Path, PathSegment,
-    Pattern, RangeExpr, RangePattern, ReturnExpr, Span, Stmt, StringInterpExpr, StructPattern,
-    StructPatternField, TraitDecl, TraitItem, TryExpr, Type, TypeAliasDecl, TypePath,
-    TypePathSegment, UnaryExpr, UnaryOp, Variance, Visibility, WhileExpr,
+    GenericParam, IfExpr, IfLetExpr, ImplBlock, ImplItem, ImportDecl, Item, LambdaExpr,
+    LambdaParam, LetStmt, Literal, LoopExpr, MatchArm, MatchExpr, MethodCallExpr, PackageDecl,
+    Param, Path, PathSegment, Pattern, RangeExpr, RangePattern, ReturnExpr, Span, Stmt,
+    StringInterpExpr, StructPattern, StructPatternField, TraitDecl, TraitItem, TryExpr, Type,
+    TypeAliasDecl, TypePath, TypePathSegment, UnaryExpr, UnaryOp, Variance, Visibility, WhileExpr,
+    WhileLetExpr,
 };
 use valen_diagnostics::{DiagCode, Diagnostics};
 
@@ -1320,6 +1321,11 @@ impl Parser {
 
     fn parse_if_expr(&mut self) -> Option<Expr> {
         let start = self.expect(TokenKind::If)?;
+
+        if self.at(&TokenKind::Let) {
+            return self.parse_if_let_expr(start);
+        }
+
         let cond = self.parse_expr()?;
         let then_branch = self.parse_block()?;
         let else_branch = if self.eat(&TokenKind::Else).is_some() {
@@ -1338,6 +1344,35 @@ impl Parser {
             .unwrap_or(then_branch.span);
         Some(Expr::If(Box::new(IfExpr {
             cond: Box::new(cond),
+            then_branch,
+            else_branch,
+            span: start.merge(end),
+        })))
+    }
+
+    fn parse_if_let_expr(&mut self, start: Span) -> Option<Expr> {
+        self.expect(TokenKind::Let)?;
+        let pattern = self.parse_pattern()?;
+        self.expect(TokenKind::Eq)?;
+        let expr = self.parse_expr()?;
+        let then_branch = self.parse_block()?;
+        let else_branch = if self.eat(&TokenKind::Else).is_some() {
+            if self.at(&TokenKind::If) {
+                Some(Box::new(self.parse_if_expr()?))
+            } else {
+                let block = self.parse_block()?;
+                Some(Box::new(Expr::Block(block)))
+            }
+        } else {
+            None
+        };
+        let end = else_branch
+            .as_ref()
+            .map(|e| expr_span(e))
+            .unwrap_or(then_branch.span);
+        Some(Expr::IfLet(Box::new(IfLetExpr {
+            pattern,
+            expr: Box::new(expr),
             then_branch,
             else_branch,
             span: start.merge(end),
@@ -1629,6 +1664,22 @@ impl Parser {
 
     fn parse_while_expr(&mut self) -> Option<Expr> {
         let start = self.expect(TokenKind::While)?;
+
+        if self.at(&TokenKind::Let) {
+            self.expect(TokenKind::Let)?;
+            let pattern = self.parse_pattern()?;
+            self.expect(TokenKind::Eq)?;
+            let expr = self.parse_expr()?;
+            let body = self.parse_block()?;
+            let span = start.merge(body.span);
+            return Some(Expr::WhileLet(Box::new(WhileLetExpr {
+                pattern,
+                expr: Box::new(expr),
+                body,
+                span,
+            })));
+        }
+
         let cond = self.parse_expr()?;
         let body = self.parse_block()?;
         let span = start.merge(body.span);
@@ -2046,6 +2097,8 @@ fn expr_span(expr: &Expr) -> Span {
         Expr::Try(t) => t.span,
         Expr::StringInterp(s) => s.span,
         Expr::Safe(s) => s.span,
+        Expr::IfLet(i) => i.span,
+        Expr::WhileLet(w) => w.span,
     }
 }
 

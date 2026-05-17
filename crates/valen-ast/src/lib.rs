@@ -393,6 +393,8 @@ pub enum Expr {
     Try(TryExpr),
     StringInterp(StringInterpExpr),
     Safe(SafeExpr),
+    IfLet(Box<IfLetExpr>),
+    WhileLet(Box<WhileLetExpr>),
 }
 
 /// Literal value (integer, float, string, etc.).
@@ -451,6 +453,8 @@ impl Expr {
             Expr::Try(t) => t.span,
             Expr::StringInterp(s) => s.span,
             Expr::Safe(s) => s.span,
+            Expr::IfLet(i) => i.span,
+            Expr::WhileLet(w) => w.span,
         }
     }
 }
@@ -784,5 +788,24 @@ pub enum StringInterpPart {
 #[derive(Debug, Clone)]
 pub struct SafeExpr {
     pub block: Block,
+    pub span: Span,
+}
+
+/// `if let Pattern = expr { then } else { else }`.
+#[derive(Debug, Clone)]
+pub struct IfLetExpr {
+    pub pattern: Pattern,
+    pub expr: Box<Expr>,
+    pub then_branch: Block,
+    pub else_branch: Option<Box<Expr>>,
+    pub span: Span,
+}
+
+/// `while let Pattern = expr { body }`.
+#[derive(Debug, Clone)]
+pub struct WhileLetExpr {
+    pub pattern: Pattern,
+    pub expr: Box<Expr>,
+    pub body: Block,
     pub span: Span,
 }

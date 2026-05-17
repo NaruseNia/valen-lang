@@ -1,0 +1,11 @@
+package com.example;
+
+pub class IfLetDemo {
+    fn unwrapOr(self, opt: Option<Int>, default: Int) -> Int {
+        if let Option::Some(v) = opt {
+            v
+        } else {
+            default
+        }
+    }
+}

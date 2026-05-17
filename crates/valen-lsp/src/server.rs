@@ -2133,6 +2133,22 @@ fn collect_hints_from_expr(
                 collect_hints_from_expr(eb, doc, range, hints);
             }
         }
+        TypedExprKind::IfLet {
+            expr,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_hints_from_expr(expr, doc, range, hints);
+            collect_hints_from_body(then_branch, doc, range, hints);
+            if let Some(eb) = else_branch {
+                collect_hints_from_expr(eb, doc, range, hints);
+            }
+        }
+        TypedExprKind::WhileLet { expr, body, .. } => {
+            collect_hints_from_expr(expr, doc, range, hints);
+            collect_hints_from_body(body, doc, range, hints);
+        }
         TypedExprKind::Match { scrutinee, arms } => {
             collect_hints_from_expr(scrutinee, doc, range, hints);
             for arm in arms {
@@ -2342,6 +2358,22 @@ fn find_expr_in_expr<'a>(expr: &'a TypedExpr, offset: u32, best: &mut Option<&'a
                 find_expr_in_expr(eb, offset, best);
             }
         }
+        TypedExprKind::IfLet {
+            expr,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            find_expr_in_expr(expr, offset, best);
+            find_expr_in_body(then_branch, offset, best);
+            if let Some(eb) = else_branch {
+                find_expr_in_expr(eb, offset, best);
+            }
+        }
+        TypedExprKind::WhileLet { expr, body, .. } => {
+            find_expr_in_expr(expr, offset, best);
+            find_expr_in_body(body, offset, best);
+        }
         TypedExprKind::Match { scrutinee, arms } => {
             find_expr_in_expr(scrutinee, offset, best);
             for arm in arms {
@@ -2513,6 +2545,19 @@ fn collect_vars_from_expr(expr: &TypedExpr, offset: u32, vars: &mut Vec<(String,
             if let Some(eb) = else_branch {
                 collect_vars_from_expr(eb, offset, vars);
             }
+        }
+        TypedExprKind::IfLet {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_vars_from_body(then_branch, offset, vars);
+            if let Some(eb) = else_branch {
+                collect_vars_from_expr(eb, offset, vars);
+            }
+        }
+        TypedExprKind::WhileLet { body, .. } => {
+            collect_vars_from_body(body, offset, vars);
         }
         TypedExprKind::For { var, iter, body } => {
             // The iteration variable is in scope inside the body

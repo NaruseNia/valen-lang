@@ -683,6 +683,19 @@ pub enum TypedExprKind {
         inner: Box<TypedExpr>,
         is_option: bool,
     },
+    /// `if let Pattern = expr { then } else { ... }`
+    IfLet {
+        pattern: valen_ast::Pattern,
+        expr: Box<TypedExpr>,
+        then_branch: Box<TypedBody>,
+        else_branch: Option<Box<TypedExpr>>,
+    },
+    /// `while let Pattern = expr { body }`
+    WhileLet {
+        pattern: valen_ast::Pattern,
+        expr: Box<TypedExpr>,
+        body: Box<TypedBody>,
+    },
     Error,
 }
 

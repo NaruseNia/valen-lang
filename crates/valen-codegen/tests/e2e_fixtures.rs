@@ -740,3 +740,25 @@ fn fixture_println_print() {
         "should reference PrintStream"
     );
 }
+
+#[test]
+fn fixture_if_let() {
+    let classes = compile_fixture("if_let.vln");
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+
+    let methods: Vec<String> = c
+        .methods
+        .iter()
+        .filter_map(|m| {
+            c.constant_pool
+                .try_get_utf8(m.name_index)
+                .ok()
+                .and_then(|n| n.as_str().map(|s| s.to_string()))
+        })
+        .collect();
+    assert!(
+        methods.contains(&"unwrapOr".to_string()),
+        "missing unwrapOr method"
+    );
+}

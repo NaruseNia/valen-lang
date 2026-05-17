@@ -779,7 +779,31 @@ impl<'a> Printer<'a> {
             Expr::Try(t) => self.print_try(t),
             Expr::StringInterp(s) => self.print_string_interp(s),
             Expr::Safe(s) => self.print_safe(s),
+            Expr::IfLet(il) => self.print_if_let(il),
+            Expr::WhileLet(wl) => self.print_while_let(wl),
         }
+    }
+
+    fn print_if_let(&mut self, il: &valen_ast::IfLetExpr) {
+        self.w("if let ");
+        self.print_pattern(&il.pattern);
+        self.w(" = ");
+        self.print_expr(&il.expr);
+        self.w(" ");
+        self.print_block(&il.then_branch);
+        if let Some(ref else_branch) = il.else_branch {
+            self.w(" else ");
+            self.print_expr(else_branch);
+        }
+    }
+
+    fn print_while_let(&mut self, wl: &valen_ast::WhileLetExpr) {
+        self.w("while let ");
+        self.print_pattern(&wl.pattern);
+        self.w(" = ");
+        self.print_expr(&wl.expr);
+        self.w(" ");
+        self.print_block(&wl.body);
     }
 
     fn print_literal(&mut self, lit: &Literal) {
@@ -1312,6 +1336,8 @@ fn expr_ends_with_block(expr: &Expr) -> bool {
             | Expr::Loop(_)
             | Expr::Block(_)
             | Expr::Safe(_)
+            | Expr::IfLet(_)
+            | Expr::WhileLet(_)
     )
 }
 
