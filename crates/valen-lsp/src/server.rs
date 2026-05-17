@@ -1747,7 +1747,6 @@ fn infer_expected_enum_type(before: &str, hir: &valen_hir::Hir) -> Option<String
             .next()
             .unwrap_or("");
         if !scrutinee.is_empty() {
-            // Look for `let scrutinee: Type` or `let scrutinee = EnumType::`
             let let_pattern = format!("let {scrutinee}:");
             if let Some(let_pos) = before.rfind(&let_pattern) {
                 let after_colon = &before[let_pos + let_pattern.len()..];
@@ -1756,6 +1755,80 @@ fn infer_expected_enum_type(before: &str, hir: &valen_hir::Hir) -> Option<String
                     .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
                     .next()
                     .unwrap_or("");
+                if enum_names.contains(type_name) {
+                    return Some(type_name.to_string());
+                }
+            }
+        }
+    }
+
+    // Pattern: `funcName(arg1, .` → find function, determine param index, get param type
+    if let Some(result) = infer_enum_from_call_arg(before, hir, &enum_names) {
+        return Some(result);
+    }
+
+    None
+}
+
+/// Infer enum type from function call argument position.
+/// e.g. `foo(x, .` → find `foo`, param index 1, check if param type is an enum.
+fn infer_enum_from_call_arg(
+    before: &str,
+    hir: &valen_hir::Hir,
+    enum_names: &std::collections::HashSet<&str>,
+) -> Option<String> {
+    let trimmed = before.trim_end();
+    let base = trimmed
+        .strip_suffix('.')
+        .unwrap_or(trimmed)
+        .trim_end()
+        .trim_end_matches(|c: char| c.is_ascii_alphanumeric() || c == '_')
+        .trim_end();
+
+    // Walk backwards to find matching `(`, counting commas for arg index
+    let mut depth = 0i32;
+    let mut arg_index = 0usize;
+    let mut paren_pos = None;
+    for (i, ch) in base.char_indices().rev() {
+        match ch {
+            ')' => depth += 1,
+            '(' => {
+                if depth == 0 {
+                    paren_pos = Some(i);
+                    break;
+                }
+                depth -= 1;
+            }
+            ',' if depth == 0 => arg_index += 1,
+            _ => {}
+        }
+    }
+    let paren_pos = paren_pos?;
+
+    // Extract function name before `(`
+    let before_paren = base[..paren_pos].trim_end();
+    let fn_name_start = before_paren
+        .rfind(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    let fn_name = &before_paren[fn_name_start..];
+    if fn_name.is_empty() {
+        return None;
+    }
+
+    // Look up function in HIR and get param type at arg_index
+    for def in hir.defs.values() {
+        if def.name.as_str() != fn_name {
+            continue;
+        }
+        if let DefKind::Fn(f) = &def.kind {
+            let params: Vec<_> = f.params.iter().filter(|p| !p.is_self).collect();
+            if let Some(param) = params.get(arg_index) {
+                let type_name = match &param.ty {
+                    valen_hir::TyRef::Named(n) => n.as_str(),
+                    valen_hir::TyRef::Generic(n, _) => n.as_str(),
+                    _ => continue,
+                };
                 if enum_names.contains(type_name) {
                     return Some(type_name.to_string());
                 }
