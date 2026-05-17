@@ -732,6 +732,7 @@ fn lower_enum(
                 variant_internal,
                 &enum_internal,
                 &variant.fields,
+                &enum_def.derives,
                 pkg,
                 source_file.clone(),
                 &hir.imports,
@@ -746,6 +747,7 @@ fn lower_record_variant(
     variant_internal: &str,
     enum_internal: &str,
     fields: &[(SmolStr, valen_hir::TyRef)],
+    derives: &[SmolStr],
     pkg: Option<&[SmolStr]>,
     source_file: Option<String>,
     imports: &IndexMap<SmolStr, Vec<SmolStr>>,
@@ -768,6 +770,37 @@ fn lower_record_variant(
     let mut methods = vec![ctor];
     for field in &jvm_fields {
         methods.push(generate_getter(variant_internal, &field.name, &field.ty));
+    }
+
+    let field_info: Vec<(String, JvmType)> = jvm_fields
+        .iter()
+        .map(|f| (f.name.clone(), f.ty.clone()))
+        .collect();
+    let variant_name_str = variant_internal
+        .rsplit('$')
+        .next()
+        .unwrap_or(variant_internal);
+    for d in derives {
+        match d.as_str() {
+            "Eq" => methods.push(data_class_methods::generate_equals(
+                variant_internal,
+                &field_info,
+            )),
+            "Hash" => methods.push(data_class_methods::generate_hash_code(
+                variant_internal,
+                &field_info,
+            )),
+            "Debug" => methods.push(data_class_methods::generate_to_string(
+                variant_internal,
+                variant_name_str,
+                &field_info,
+            )),
+            "Clone" => methods.push(data_class_methods::generate_copy(
+                variant_internal,
+                &field_info,
+            )),
+            _ => {}
+        }
     }
 
     JvmClass {

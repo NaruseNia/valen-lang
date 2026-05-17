@@ -1,0 +1,7 @@
+pub enum Shape derives(Eq, Hash, Debug) {
+    Circle(r: Float),
+    Rect(w: Float, h: Float),
+    Point,
+}
+
+pub data class Entity(pub id: Int) derives(Eq, Hash);

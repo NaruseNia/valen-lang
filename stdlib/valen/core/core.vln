@@ -14,6 +14,30 @@ pub enum Result<T, E> {
     Err(error: E),
 }
 
+// --- Eq trait ---
+
+pub trait Eq {
+    fn eq(self, other: Self) -> Bool;
+}
+
+// --- Hash trait ---
+
+pub trait Hash {
+    fn hash(self) -> Int;
+}
+
+// --- Debug trait ---
+
+pub trait Debug {
+    fn fmt(self) -> String;
+}
+
+// --- Clone trait ---
+
+pub trait Clone {
+    fn clone(self) -> Self;
+}
+
 // --- Error trait ---
 
 pub trait Error {
