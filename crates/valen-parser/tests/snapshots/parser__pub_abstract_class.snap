@@ -13,6 +13,7 @@ expression: "check(\"pub abstract class Bar {}\")"
             generics: [],
             ctor_params: [],
             supertypes: [],
+            derives: [],
             body: [],
             span: Span {
                 start: 0,

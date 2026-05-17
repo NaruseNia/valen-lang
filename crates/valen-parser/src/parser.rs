@@ -453,6 +453,7 @@ impl Parser {
         };
 
         let supertypes = self.parse_supertypes()?;
+        let derives = self.parse_derives();
 
         let (body, end) = if self.at(&TokenKind::LBrace) {
             self.expect(TokenKind::LBrace)?;
@@ -472,6 +473,7 @@ impl Parser {
             generics,
             ctor_params,
             supertypes,
+            derives,
             body,
             span: start.merge(end),
         })
@@ -523,6 +525,35 @@ impl Parser {
             types.push(self.parse_type()?);
         }
         Some(types)
+    }
+
+    /// Parse an optional `derives(Trait1, Trait2, ...)` clause.
+    fn parse_derives(&mut self) -> Vec<SmolStr> {
+        if !matches!(self.peek(), TokenKind::Ident(ref s) if s == "derives") {
+            return Vec::new();
+        }
+        self.bump();
+        if self.eat(&TokenKind::LParen).is_none() {
+            return Vec::new();
+        }
+        let mut traits = Vec::new();
+        while !self.at(&TokenKind::RParen) && !self.at_eof() {
+            if !traits.is_empty() {
+                if self.expect(TokenKind::Comma).is_none() {
+                    break;
+                }
+                if self.at(&TokenKind::RParen) {
+                    break;
+                }
+            }
+            if let Some(name) = self.expect_ident() {
+                traits.push(name);
+            } else {
+                break;
+            }
+        }
+        let _ = self.expect(TokenKind::RParen);
+        traits
     }
 
     fn parse_generic_params(&mut self) -> Option<Vec<GenericParam>> {
@@ -615,6 +646,7 @@ impl Parser {
         let generics = self.parse_generic_params()?;
         let ctor_params = self.parse_ctor_params()?;
         let supertypes = self.parse_supertypes()?;
+        let derives = self.parse_derives();
         let end = self.expect(TokenKind::Semi)?;
         Some(DataClassDecl {
             annotations,
@@ -623,6 +655,7 @@ impl Parser {
             generics,
             ctor_params,
             supertypes,
+            derives,
             span: start.merge(end),
         })
     }
@@ -636,6 +669,7 @@ impl Parser {
         self.expect(TokenKind::Enum)?;
         let name = self.expect_ident()?;
         let generics = self.parse_generic_params()?;
+        let derives = self.parse_derives();
         self.expect(TokenKind::LBrace)?;
         let mut variants = Vec::new();
         while !self.at(&TokenKind::RBrace) && !self.at_eof() {
@@ -653,6 +687,7 @@ impl Parser {
             visibility,
             name,
             generics,
+            derives,
             variants,
             span: start.merge(end),
         })

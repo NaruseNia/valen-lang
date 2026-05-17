@@ -127,7 +127,40 @@ impl Container for IntList {
 - impl ごとに一意に解決される
 - trait 定義側でデフォルト型を指定可能: `type Item = Int;`
 
-## 7.7 演算子オーバーロード（Phase 1.5 実装済み）
+## 7.7 derives（自動 trait 実装）
+
+`derives(Trait1, Trait2)` 節を型宣言に付けると、指定した trait の実装がフィールド構造から自動生成される。
+
+```valen
+pub data class Entity(pub id: Int) derives(Eq, Hash);
+
+pub enum Color derives(Eq, Hash, Debug) {
+    Red,
+    Green,
+    Blue(value: Int),
+}
+
+pub class Point(pub x: Float, pub y: Float) derives(Eq) {}
+```
+
+### 対応 trait
+
+| trait | 生成メソッド | 動作 |
+|-------|------------|------|
+| `Eq` | `equals(Object) -> boolean` | フィールド逐次比較 |
+| `Hash` | `hashCode() -> int` | 31-multiply-accumulate |
+| `Debug` | `toString() -> String` | `TypeName(field=value, ...)` 形式 |
+| `Clone` | `copy(fields...) -> Self` | 全フィールド指定のコピーコンストラクタ |
+
+### data class の暗黙 derives
+
+`data class` は宣言するだけで `Eq`, `Hash`, `Debug`, `Clone` の実装を自動生成する（`derives(...)` を書かなくても生成される）。明示的に `derives(Eq)` と書いても冗長なだけで害はない。
+
+### enum の derives
+
+enum に `derives(Eq)` を付けると、**フィールドを持つ variant ごとに** `equals` メソッドが生成される。unit variant は singleton なので参照比較のみ。
+
+## 7.8 演算子オーバーロード（Phase 1.5 実装済み）
 
 trait ベースの演算子オーバーロード。prelude に定義された演算子 trait を impl することで有効化する。
 

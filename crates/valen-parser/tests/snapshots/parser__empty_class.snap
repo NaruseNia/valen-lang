@@ -13,6 +13,7 @@ expression: "check(\"class Foo {}\")"
             generics: [],
             ctor_params: [],
             supertypes: [],
+            derives: [],
             body: [],
             span: Span {
                 start: 0,

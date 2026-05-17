@@ -90,6 +90,7 @@ expression: "check(\"class User(pub name: String, mut age: Int) {}\")"
                 },
             ],
             supertypes: [],
+            derives: [],
             body: [],
             span: Span {
                 start: 0,

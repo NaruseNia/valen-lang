@@ -150,6 +150,7 @@ impl Resolver {
                         fields: vec![],
                     },
                 ],
+                derives: vec![],
             }),
             vis: Vis::Pub,
             span: valen_ast::Span::DUMMY,
@@ -193,6 +194,7 @@ impl Resolver {
                         )],
                     },
                 ],
+                derives: vec![],
             }),
             vis: Vis::Pub,
             span: valen_ast::Span::DUMMY,
@@ -354,6 +356,7 @@ impl Resolver {
                         has_default: false,
                     },
                 ],
+                derives: vec![],
             }),
             vis: Vis::Pub,
             span: valen_ast::Span::DUMMY,
@@ -397,6 +400,7 @@ impl Resolver {
                         has_default: false,
                     },
                 ],
+                derives: vec![],
             }),
             vis: Vis::Pub,
             span: valen_ast::Span::DUMMY,
@@ -767,6 +771,7 @@ impl Resolver {
                             .iter()
                             .map(|p| lower_ctor_param_with_params(p, &dc_params))
                             .collect(),
+                        derives: dc.derives.clone(),
                     }),
                     vis: lower_vis(dc.visibility),
                     span: dc.span,
@@ -803,7 +808,10 @@ impl Resolver {
                 let def = Def {
                     id,
                     name: e.name.clone(),
-                    kind: DefKind::Enum(EnumDef { variants }),
+                    kind: DefKind::Enum(EnumDef {
+                        variants,
+                        derives: e.derives.clone(),
+                    }),
                     vis: lower_vis(e.visibility),
                     span: e.span,
                     package: self.current_package.clone(),

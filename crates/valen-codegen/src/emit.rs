@@ -1492,6 +1492,7 @@ mod tests {
                             has_default: false,
                         },
                     ],
+                    derives: vec![],
                 }),
                 vis: Vis::Pub,
                 span: valen_ast::Span {
