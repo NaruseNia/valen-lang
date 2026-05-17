@@ -2503,6 +2503,57 @@ fn collect_local_variables(
     vars.into_iter().collect()
 }
 
+/// Extract variable bindings from a pattern, pairing each binding name with `ty`.
+///
+/// For simple `Binding` patterns the name maps directly to `ty`.  Nested
+/// patterns (struct destructuring, tuples, or-patterns, `@`-patterns) are
+/// walked recursively; inner fields all receive the outer `ty` as a
+/// conservative approximation since the HIR does not carry per-field types
+/// for patterns today.
+fn extract_pattern_bindings(pattern: &valen_ast::Pattern, ty: &Ty) -> Vec<(String, Ty)> {
+    let mut out = Vec::new();
+    collect_pattern_bindings(pattern, ty, &mut out);
+    out
+}
+
+fn collect_pattern_bindings(pattern: &valen_ast::Pattern, ty: &Ty, out: &mut Vec<(String, Ty)>) {
+    use valen_ast::Pattern;
+    match pattern {
+        Pattern::Binding(bp) => {
+            out.push((bp.name.to_string(), ty.clone()));
+        }
+        Pattern::At(at) => {
+            // `name @ sub` — the outer name binds the whole value.
+            out.push((at.name.to_string(), ty.clone()));
+            collect_pattern_bindings(&at.pattern, ty, out);
+        }
+        Pattern::Struct(sp) => {
+            for field in &sp.fields {
+                if let Some(sub) = &field.pattern {
+                    collect_pattern_bindings(sub, ty, out);
+                } else {
+                    // Shorthand field: `Foo { x }` — field name = variable name.
+                    out.push((field.name.to_string(), ty.clone()));
+                }
+            }
+        }
+        Pattern::Tuple(pats, _) => {
+            for p in pats {
+                collect_pattern_bindings(p, ty, out);
+            }
+        }
+        Pattern::Or(pats, _) => {
+            // All alternatives must bind the same names, so just take the first.
+            if let Some(first) = pats.first() {
+                collect_pattern_bindings(first, ty, out);
+            }
+        }
+        Pattern::Wildcard(_) | Pattern::Literal(_) | Pattern::Path(_) | Pattern::Range(_) => {
+            // No variable bindings introduced.
+        }
+    }
+}
+
 fn collect_vars_from_body(body: &TypedBody, offset: u32, vars: &mut Vec<(String, Ty)>) {
     for stmt in &body.stmts {
         match stmt {
@@ -2522,14 +2573,17 @@ fn collect_vars_from_body(body: &TypedBody, offset: u32, vars: &mut Vec<(String,
                 collect_vars_from_expr(init, offset, vars);
             }
             TypedStmt::LetElse {
-                scrutinee, span, ..
+                pattern,
+                scrutinee,
+                ty,
+                span,
+                ..
             } => {
-                // Variables from the pattern are bound after the let-else statement
                 collect_vars_from_expr(scrutinee, offset, vars);
-                // Pattern bindings are visible after the statement
+                // Pattern bindings are visible after the let-else statement
                 if span.start < offset {
-                    // Pattern variables are already in the enclosing scope
-                    // from the type checker; they're visible via the env
+                    let bindings = extract_pattern_bindings(pattern, ty);
+                    vars.extend(bindings);
                 }
             }
             TypedStmt::Expr(e) | TypedStmt::ExprSemi(e) => {
