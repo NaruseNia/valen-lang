@@ -48,6 +48,7 @@ expression: "check(\"@Deprecated(message = \\\"old\\\")\\npub class OldApi {}\")
             generics: [],
             ctor_params: [],
             supertypes: [],
+            derives: [],
             body: [],
             span: Span {
                 start: 0,

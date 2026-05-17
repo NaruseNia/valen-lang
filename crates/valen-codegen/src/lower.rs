@@ -1002,6 +1002,7 @@ mod tests {
                 id,
                 name: SmolStr::from("Point"),
                 kind: DefKind::DataClass(DataClassDef {
+                    derives: vec![],
                     ctor_params: vec![
                         CtorParamDef {
                             vis: Vis::Pub,
@@ -1216,6 +1217,7 @@ mod tests {
                             fields: vec![],
                         },
                     ],
+                    derives: vec![],
                 }),
                 vis: Vis::Pub,
                 span: valen_ast::Span {
@@ -1287,6 +1289,7 @@ mod tests {
                         name: "Red".into(),
                         fields: vec![],
                     }],
+                    derives: vec![],
                 }),
                 vis: Vis::Pub,
                 span: valen_ast::Span {

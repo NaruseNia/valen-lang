@@ -103,6 +103,7 @@ expression: "check(\"class User(pub name: String, pub age: Int = 0) {}\")"
                 },
             ],
             supertypes: [],
+            derives: [],
             body: [],
             span: Span {
                 start: 0,

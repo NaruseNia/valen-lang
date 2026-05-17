@@ -89,6 +89,7 @@ expression: "check(\"data class Point(x: Float, y: Float);\")"
                 },
             ],
             supertypes: [],
+            derives: [],
             span: Span {
                 start: 0,
                 end: 37,

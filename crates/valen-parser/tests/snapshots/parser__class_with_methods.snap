@@ -52,6 +52,7 @@ expression: "check(\"class Dog(pub name: String) { fn greet(self) -> String { se
                 },
             ],
             supertypes: [],
+            derives: [],
             body: [
                 Method(
                     FnDecl {
