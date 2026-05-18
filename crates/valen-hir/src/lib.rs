@@ -210,6 +210,8 @@ pub enum DefKind {
     Impl(ImplDef),
     /// A type alias (`typealias Name<T> = Target<T>;`).
     TypeAlias(TypeAliasDef),
+    /// A newtype wrapper (`newtype Name = InnerType;`).
+    NewType(NewTypeDef),
     /// An annotation class declaration.
     AnnotationClass(AnnotationClassDef),
 }
@@ -332,6 +334,13 @@ pub struct TypeAliasDef {
     pub generics: Vec<SmolStr>,
     /// The target type this alias expands to.
     pub target: TyRef,
+}
+
+/// A newtype wrapper creating a distinct type from an inner type.
+#[derive(Debug, Clone)]
+pub struct NewTypeDef {
+    /// The wrapped inner type.
+    pub inner_ty: TyRef,
 }
 
 /// An `impl Trait for Type` block.

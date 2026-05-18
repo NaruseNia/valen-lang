@@ -22,6 +22,7 @@ pub enum Item {
     Trait(TraitDecl),
     Impl(ImplBlock),
     TypeAlias(TypeAliasDecl),
+    NewType(NewTypeDecl),
     AnnotationClass(AnnotationClassDecl),
 }
 
@@ -276,6 +277,15 @@ pub struct TypeAliasDecl {
     pub name: SmolStr,
     pub generics: Vec<GenericParam>,
     pub ty: Type,
+    pub span: Span,
+}
+
+/// `newtype Name = InnerType;` — creates a distinct type wrapping another type.
+#[derive(Debug, Clone)]
+pub struct NewTypeDecl {
+    pub visibility: Visibility,
+    pub name: SmolStr,
+    pub inner_ty: Type,
     pub span: Span,
 }
 

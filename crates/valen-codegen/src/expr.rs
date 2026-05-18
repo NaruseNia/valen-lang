@@ -279,6 +279,17 @@ impl<'a> ExprLowering<'a> {
         }
     }
 
+    fn is_newtype_or_class_ctor(&self, name: &str) -> bool {
+        use valen_hir::DefKind;
+        self.hir.defs.values().any(|d| {
+            d.name == name
+                && matches!(
+                    &d.kind,
+                    DefKind::NewType(_) | DefKind::Class(_) | DefKind::DataClass(_)
+                )
+        })
+    }
+
     fn resolve_type_alias(&self, name: &str) -> Option<Ty> {
         use valen_hir::DefKind;
         for def in self.hir.defs.values() {
@@ -559,12 +570,30 @@ impl<'a> ExprLowering<'a> {
                     self.lower_lambda_call(callee, args, result_ty);
                     return;
                 }
-                // For non-Fn callees (e.g. constructor calls via path expression),
-                // we emit a static call without loading the callee expression.
-                // Previously this loaded the callee onto the stack and then emitted
-                // InvokeStatic which does NOT consume an objectref, leaving a dangling
-                // value on the stack (VerifyError). Instead, treat as a static call
-                // using the callee's type as the owner class.
+
+                // Check if this is a newtype or class constructor call
+                if let Ty::Named(n) = result_ty {
+                    if self.is_newtype_or_class_ctor(n) {
+                        let owner = crate::descriptor::resolve_type_internal_name(
+                            n,
+                            self.pkg,
+                            &self.hir.imports,
+                        );
+                        self.ops.push(JvmOp::New(owner.clone()));
+                        self.ops.push(JvmOp::Dup);
+                        for arg in args {
+                            self.lower_expr(arg);
+                        }
+                        self.ops.push(JvmOp::InvokeSpecial {
+                            owner,
+                            name: "<init>".to_string(),
+                            params: param_tys,
+                            ret: JvmType::Void,
+                        });
+                        return;
+                    }
+                }
+
                 let owner = match &callee.ty {
                     Ty::Named(n) => crate::descriptor::resolve_type_internal_name(
                         n,

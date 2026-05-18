@@ -506,7 +506,7 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 | TASK-049 | enum variant shorthand | #110 | M12 | TASK-046 | M | ✅ PR #153 |
 | TASK-051 | Collection literal | VEP-030 | M13 | — | M | ✅ |
 | TASK-052 | Pipeline operator | VEP-005 | M13 | — | S | ✅ |
-| TASK-053 | Refinement / newtype | VEP-011 | M13 | — | L |
+| TASK-053 | Refinement / newtype | VEP-011 | M13 | — | L | ✅ |
 | TASK-054 | Intersection constraints（+ 型チェック） | VEP-012 | M13 | — | S | ✅ |
 | TASK-043 | Generic Java collection tracking | #115 | M13 | TASK-025 ✅ | L |
 | TASK-044 | Any type | #122 | M13 | — | M | ✅ |

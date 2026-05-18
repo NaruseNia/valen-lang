@@ -587,7 +587,9 @@ impl ServerState {
                         CompletionItemKind::INTERFACE,
                         build_trait_documentation(&def.name, t, hir, &doc.text, def.span.start),
                     ),
-                    DefKind::TypeAlias(_) => (CompletionItemKind::CLASS, None),
+                    DefKind::TypeAlias(_) | DefKind::NewType(_) => {
+                        (CompletionItemKind::CLASS, None)
+                    }
                     _ => continue,
                 };
                 let label = def.name.to_string();
@@ -827,7 +829,9 @@ impl ServerState {
                         )
                     }
                     // typealias / annotation not usable as expressions
-                    DefKind::TypeAlias(_) | DefKind::AnnotationClass(_) => continue,
+                    DefKind::TypeAlias(_) | DefKind::NewType(_) | DefKind::AnnotationClass(_) => {
+                        continue
+                    }
                     DefKind::Impl(_) => continue,
                 };
                 if seen.insert(label.clone()) {
@@ -2061,6 +2065,9 @@ fn format_def_hover(def: &valen_hir::Def, hir: &valen_hir::Hir) -> String {
         DefKind::TypeAlias(ta) => {
             format!("typealias {} = {}", def.name, ta.target)
         }
+        DefKind::NewType(nt) => {
+            format!("newtype {} = {}", def.name, nt.inner_ty)
+        }
         DefKind::AnnotationClass(_) => {
             format!("annotation class {}", def.name)
         }
@@ -2141,6 +2148,9 @@ fn format_def_hover_markdown(def: &valen_hir::Def, hir: &valen_hir::Hir, source:
         }
         DefKind::TypeAlias(ta) => {
             md.push_str(&format!("typealias {} = {}", def.name, ta.target));
+        }
+        DefKind::NewType(nt) => {
+            md.push_str(&format!("newtype {} = {}", def.name, nt.inner_ty));
         }
         DefKind::AnnotationClass(_) => {
             md.push_str(&format!("annotation class {}", def.name));

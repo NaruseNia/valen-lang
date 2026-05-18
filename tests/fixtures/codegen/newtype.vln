@@ -1,0 +1,14 @@
+package com.example;
+
+pub newtype EntityId = Int;
+pub newtype Label = String;
+
+pub class IdTest {
+    fn makeId(self) -> EntityId {
+        EntityId(42)
+    }
+
+    fn makeLabel(self) -> Label {
+        Label("hello")
+    }
+}

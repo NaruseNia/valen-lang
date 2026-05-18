@@ -938,3 +938,17 @@ fn fixture_any_type() {
     // <init> + acceptAny + upcast
     assert_eq!(c.methods.len(), 3);
 }
+
+#[test]
+fn fixture_newtype() {
+    let classes = compile_fixture("newtype.vln");
+    assert!(classes
+        .iter()
+        .any(|c| c.class_name().unwrap() == "com/example/EntityId"));
+    assert!(classes
+        .iter()
+        .any(|c| c.class_name().unwrap() == "com/example/Label"));
+    assert!(classes
+        .iter()
+        .any(|c| c.class_name().unwrap() == "com/example/IdTest"));
+}
