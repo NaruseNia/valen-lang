@@ -23,6 +23,7 @@ ECS テストプロジェクト（`examples/ecs-system`）から発見された 
 | M9.5 | 2/2 | — | ✅ Bug Polish 完了 |
 | M10 | 4/4 | — | ✅ Practical Usability 完了 |
 | M12 | 4/4 | — | ✅ Phase 2 Core 完了 |
+| M13 | 6/6 | — | ✅ Phase 2 Extended 完了 |
 | 要件 | 42/45 Done | 3 Draft | REQ-EMIT-004, REQ-TOOL-002, REQ-STDLIB-003 |
 
 ---
@@ -434,13 +435,14 @@ pub trait Queryable: Component + Eq { ... }
 
 ---
 
-## M14: Phase 2 Safety（1-2 週、M13 依存）
+## M14: Phase 2 Safety & Mutability（2-3 週、M13 依存）
 
-安全性境界の明示。
+安全性境界の明示 + ミュータブル参照型の導入。
 
 | タスク | 内容 | VEP | 優先度 | 影響 crate | 規模 |
 |--------|------|-----|--------|-----------|------|
 | TASK-055 | unsafe block / unsafe fn | [VEP-001](https://github.com/NaruseNia/valen-lang/discussions/130) | Should | parser, hir, codegen | M |
+| TASK-056 | Mutable Reference (`ref mut T`) | [VEP-031](https://github.com/NaruseNia/valen-lang/discussions/143) | Should | parser, hir, codegen, stdlib | L |
 
 ### TASK-055: unsafe block / unsafe fn
 
@@ -462,7 +464,50 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 2. HIR: unsafe コンテキストフラグ。上記3操作は unsafe コンテキスト外ではコンパイルエラー
 3. `unsafe fn` 呼び出し元にも `unsafe` を要求
 
-**完了条件:** unsafe キャストで Object → 具体型への変換が可能。
+### TASK-056: Mutable Reference (`ref mut T`)
+
+**構文:**
+```valen
+fn increment(x: ref mut Int) -> Unit {
+    *x = *x + 1;
+}
+
+let mut n = 10;
+increment(ref mut n);
+// n == 11
+
+// Lambda with explicit ref mut
+let mut count = 0;
+let r = ref mut count;
+let inc = || { *r = *r + 1; };
+```
+
+**設計決定:**
+- **型:** `Ty::RefMut(Box<Ty>)` — `ref mut T` と `T` は別の型、暗黙変換なし
+- **操作:** `ref mut expr` で参照作成、`*r` で読み取り、`*r = expr` で書き込み
+- **Lambda:** 明示的 `ref mut` のみ — 自動キャプチャなし、boxing コストは作成時に明示
+- **安全性:** GC が保証（ダングリング不可）。aliasing と data race はプログラマ責任
+- **Java interop:** Valen 内部のみ。Java メソッドへの `ref mut T` 渡しはコンパイルエラー
+
+**JVM 実装:**
+
+| Valen 型 | JVM クラス | フィールド |
+|-----------|-----------|----------|
+| `ref mut Int` | `valen/core/IntRef` | `int value` |
+| `ref mut Long` | `valen/core/LongRef` | `long value` |
+| `ref mut Float` | `valen/core/FloatRef` | `float value` |
+| `ref mut Double` | `valen/core/DoubleRef` | `double value` |
+| `ref mut Bool` | `valen/core/BoolRef` | `boolean value` |
+| `ref mut T`（object） | `valen/core/Ref<T>` | `Object value` |
+
+**実装方針:**
+1. parser: `ref mut` 型構文、`ref mut expr` 式、`*` 前置演算子（deref）
+2. AST/HIR: `Ty::RefMut(Box<Ty>)` 型バリアント、`Deref` / `DerefAssign` 式ノード
+3. type_check: ref mut 型の型検査、deref の型解決、Java interop 境界チェック
+4. codegen: プリミティブ特殊化クラス群（`IntRef` 等）を合成生成、`ref mut` → `new XxxRef(value)`、`*r` → `r.value`、`*r = v` → `r.value = v`
+5. stdlib: `Ref<T>` ジェネリッククラスの生成
+
+**完了条件:** `ref mut` で関数境界を越えた値の変更が可能。Lambda でキャプチャ変数の変更が可能。
 
 ---
 
@@ -511,6 +556,7 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 | TASK-043 | Generic Java collection tracking | #115 | M13 | TASK-025 ✅ | L | ✅ |
 | TASK-044 | Any type | #122 | M13 | — | M | ✅ |
 | TASK-055 | unsafe block / unsafe fn | VEP-001 | M14 | — | M |
+| TASK-056 | Mutable Reference (ref mut T) | VEP-031 | M14 | — | L |
 
 ### 既存残タスク
 
@@ -557,7 +603,7 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 | VEP-011 | #128 | Refinement / newtype | 2 | Should | TASK-053 | M13 |
 | VEP-012 | #129 | Intersection constraints | 2 | Should | TASK-054 | M13 |
 | VEP-001 | #130 | unsafe block / unsafe fn | 2 | Should | TASK-055 | M14 |
-| VEP-031 | #143 | Mutable Reference (ref mut T) | 2+ | Should | — | TBD |
+| VEP-031 | #143 | Mutable Reference (ref mut T) | 2 | Should | TASK-056 | M14 |
 
 ## トレーサビリティ: タスク → 要件
 
@@ -582,6 +628,7 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 | TASK-053 | 新規: REQ-TYPE-009（newtype） |
 | TASK-054 | REQ-TYPE-006（intersection constraint 追加） |
 | TASK-055 | 新規: REQ-FAIL-006（unsafe block） |
+| TASK-056 | 新規: REQ-TYPE-010（ref mut T） |
 
 ---
 
@@ -632,7 +679,7 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 | M11: Phase 1/1.5 Closure | 2-3 週 | 2.5-3.5 週 | M10 と並行 |
 | M12: Phase 2 Core | 3-4 週 | 5-7.5 週 | M11 と並行可 |
 | M13: Phase 2 Extended | 3-4 週 | 8-11.5 週 | — |
-| M14: Phase 2 Safety | 1-2 週 | 9-13.5 週 | — |
+| M14: Phase 2 Safety & Mutability | 2-3 週 | 10-14.5 週 | — |
 
 **総期間目安:** 10-15 週（2.5-4 ヶ月）
 **クリティカルパス:** M9 → M9.5 → M10 → M12 → M13 → M14
@@ -651,7 +698,7 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 | M11 完了 | Gradle ビルド、Iterator + 高階メソッドで for ループ |
 | M12 完了 | if let でフラットなコード、derive で Eq/Hash 自動、.Some(x) 省略構文 |
 | M13 完了 | `[1, 2, 3]` / `#{"a": 1}` リテラル、パイプライン、newtype で型安全 ID |
-| M14 完了 | unsafe キャストで Object → 具体型変換 |
+| M14 完了 | unsafe キャストで Object → 具体型変換。`ref mut` で関数境界越え変更・Lambda キャプチャ変更 |
 
 ---
 
@@ -663,3 +710,5 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 | 2026-05-17 | M9/M9.5/M10 全タスク完了（11 PR マージ）。TASK-028, 031 既存完了を確認。VEP-031 (ref mut T) 起票 |
 | 2026-05-18 | M12 全タスク完了。TASK-046 (if let/while let, PR #145)、TASK-048 (derive, PR #152)、TASK-049 (variant shorthand, PR #153) を完了マーク。TASK-033 (stdlib 二層化) を Phase 1-5 完了として反映。M8 クローズ |
 | 2026-05-18 | TASK-050 (Iterator collection operations) 完了。Iterator trait に map/filter/fold/collect 追加。ListIterator + iter() アダプタ実装。型チェッカーに trait メソッド解決・メソッドレベルジェネリクス推論・typealias 展開を追加 |
+| 2026-05-18 | M13 全タスク完了（6 PR マージ: #168〜#173）。TASK-051 (collection literal)、TASK-052 (pipeline)、TASK-054 (intersection)、TASK-044 (Any)、TASK-053 (newtype)、TASK-043 (Java generic tracking) |
+| 2026-05-18 | VEP-031 (ref mut T) を TASK-056 として M14 に組み込み。M14 を「Phase 2 Safety & Mutability」に改称 |
