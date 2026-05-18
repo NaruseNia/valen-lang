@@ -795,6 +795,8 @@ pub struct ForeignClassInfo {
     pub permitted_subclasses: Vec<String>,
     /// Whether `@valen.Closed` annotation is present (enables exhaustive match).
     pub has_valen_closed: bool,
+    /// Generic type parameter names (e.g. `["K", "V"]` for `HashMap<K, V>`).
+    pub type_params: Vec<SmolStr>,
 }
 
 /// A method on a foreign Java class.
@@ -804,6 +806,9 @@ pub struct ForeignMethodInfo {
     pub params: Vec<TyRef>,
     pub return_ty: TyRef,
     pub is_static: bool,
+    /// Return type from the generic Signature attribute, if available.
+    /// Uses `TyRef::Unresolved` for type variables (e.g. `V` in `HashMap<K,V>`).
+    pub generic_return_ty: Option<TyRef>,
 }
 
 /// A constructor on a foreign Java class.
