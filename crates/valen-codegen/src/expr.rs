@@ -368,20 +368,23 @@ impl<'a> ExprLowering<'a> {
                 method,
                 args,
             } => {
-                self.lower_expr(receiver);
-                for arg in args {
-                    self.lower_expr(arg);
-                }
-                let receiver_ty = self.ty_to_jvm(&receiver.ty);
-                let ret_ty = self.ty_to_jvm(&expr.ty);
-                let param_tys: Vec<JvmType> = args.iter().map(|a| self.ty_to_jvm(&a.ty)).collect();
-                if let JvmType::Object(owner) = receiver_ty {
-                    self.ops.push(JvmOp::InvokeVirtual {
-                        owner,
-                        name: method.to_string(),
-                        params: param_tys,
-                        ret: ret_ty,
-                    });
+                if !self.try_lower_iterator_intrinsic(receiver, method, args, &expr.ty) {
+                    self.lower_expr(receiver);
+                    for arg in args {
+                        self.lower_expr(arg);
+                    }
+                    let receiver_ty = self.ty_to_jvm(&receiver.ty);
+                    let ret_ty = self.ty_to_jvm(&expr.ty);
+                    let param_tys: Vec<JvmType> =
+                        args.iter().map(|a| self.ty_to_jvm(&a.ty)).collect();
+                    if let JvmType::Object(owner) = receiver_ty {
+                        self.ops.push(JvmOp::InvokeVirtual {
+                            owner,
+                            name: method.to_string(),
+                            params: param_tys,
+                            ret: ret_ty,
+                        });
+                    }
                 }
             }
             TypedExprKind::Binary { op, lhs, rhs } => {
@@ -1792,6 +1795,851 @@ impl<'a> ExprLowering<'a> {
         self.ops.push(JvmOp::Label(break_label));
         self.emit_frame(vec![]);
 
+        self.pop_scope();
+    }
+
+    /// Returns `true` if the method call is on an Iterator and was handled as an intrinsic.
+    fn try_lower_iterator_intrinsic(
+        &mut self,
+        receiver: &TypedExpr,
+        method: &str,
+        args: &[TypedExpr],
+        result_ty: &Ty,
+    ) -> bool {
+        let is_iterator = match &receiver.ty {
+            Ty::Generic(n, _) | Ty::Named(n) => n.as_str() == "Iterator",
+            _ => false,
+        };
+        if !is_iterator {
+            return false;
+        }
+
+        let elem_ty = match &receiver.ty {
+            Ty::Generic(_, targs) if !targs.is_empty() => self.ty_to_jvm(&targs[0]),
+            _ => JvmType::Object(JVM_OBJECT.to_string()),
+        };
+
+        match method {
+            "collect" => self.emit_iter_collect(receiver, &elem_ty),
+            "map" if !args.is_empty() => self.emit_iter_map(receiver, &args[0], &elem_ty, result_ty),
+            "filter" if !args.is_empty() => {
+                self.emit_iter_filter(receiver, &args[0], &elem_ty)
+            }
+            "fold" if args.len() >= 2 => {
+                self.emit_iter_fold(receiver, &args[0], &args[1], result_ty)
+            }
+            "forEach" if !args.is_empty() => {
+                self.emit_iter_for_each(receiver, &args[0], &elem_ty)
+            }
+            "count" => self.emit_iter_count(receiver),
+            "any" if !args.is_empty() => self.emit_iter_any(receiver, &args[0], &elem_ty),
+            "all" if !args.is_empty() => self.emit_iter_all(receiver, &args[0], &elem_ty),
+            "find" if !args.is_empty() => {
+                self.emit_iter_find(receiver, &args[0], &elem_ty)
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    /// Helper: store iterator in a local slot and return (iter_slot, iter_jvm_type).
+    fn store_iterator(&mut self, receiver: &TypedExpr) -> (u16, JvmType) {
+        self.lower_expr(receiver);
+        let iter_jvm = self.ty_to_jvm(&receiver.ty);
+        let iter_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops
+            .push(JvmOp::StoreLocal(iter_slot, iter_jvm.clone()));
+        (iter_slot, iter_jvm)
+    }
+
+    /// Helper: emit `iter.next()` call, leaving Option on the stack.
+    fn emit_iter_next(&mut self, iter_slot: u16, iter_jvm: &JvmType) {
+        self.ops.push(JvmOp::LoadLocal(iter_slot, iter_jvm.clone()));
+        self.ops.push(JvmOp::InvokeInterface {
+            owner: "valen/core/Iterator".to_string(),
+            name: "next".to_string(),
+            params: vec![],
+            ret: JvmType::Object("valen/core/Option".to_string()),
+        });
+    }
+
+    /// Helper: extract value from Option$Some on top of stack, cast/unbox to elem_ty.
+    fn emit_extract_some_value(&mut self, opt_slot: u16, elem_ty: &JvmType) {
+        let some_class = "valen/core/Option$Some";
+        self.ops.push(JvmOp::LoadLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops
+            .push(JvmOp::Checkcast(some_class.to_string()));
+        self.ops.push(JvmOp::GetField {
+            owner: some_class.to_string(),
+            name: "value".to_string(),
+            descriptor: JvmType::Object(JVM_OBJECT.to_string()),
+        });
+        if JvmType::boxed_name(elem_ty).is_some() {
+            self.emit_unbox(elem_ty);
+        } else if let JvmType::Object(ref name) = elem_ty {
+            if name != JVM_OBJECT {
+                self.ops.push(JvmOp::Checkcast(name.clone()));
+            }
+        }
+    }
+
+    /// Helper: invoke a 1-arg closure (Function.apply). Closure ref and arg must be on stack.
+    fn emit_invoke_fn1(&mut self, result_jvm: &JvmType) {
+        self.ops.push(JvmOp::InvokeInterface {
+            owner: "java/util/function/Function".to_string(),
+            name: "apply".to_string(),
+            params: vec![JvmType::Object(JVM_OBJECT.to_string())],
+            ret: JvmType::Object(JVM_OBJECT.to_string()),
+        });
+        if JvmType::boxed_name(result_jvm).is_some() {
+            self.emit_unbox(result_jvm);
+        } else if let JvmType::Object(ref name) = result_jvm {
+            if name != JVM_OBJECT {
+                self.ops.push(JvmOp::Checkcast(name.clone()));
+            }
+        }
+    }
+
+    /// Helper: invoke a 2-arg closure (BiFunction.apply). Closure ref and two args must be on stack.
+    fn emit_invoke_fn2(&mut self, result_jvm: &JvmType) {
+        self.ops.push(JvmOp::InvokeInterface {
+            owner: "java/util/function/BiFunction".to_string(),
+            name: "apply".to_string(),
+            params: vec![
+                JvmType::Object(JVM_OBJECT.to_string()),
+                JvmType::Object(JVM_OBJECT.to_string()),
+            ],
+            ret: JvmType::Object(JVM_OBJECT.to_string()),
+        });
+        if JvmType::boxed_name(result_jvm).is_some() {
+            self.emit_unbox(result_jvm);
+        } else if let JvmType::Object(ref name) = result_jvm {
+            if name != JVM_OBJECT {
+                self.ops.push(JvmOp::Checkcast(name.clone()));
+            }
+        }
+    }
+
+    /// Helper: create new ArrayList and store in a local slot.
+    fn emit_new_arraylist(&mut self) -> u16 {
+        self.ops.push(JvmOp::New("java/util/ArrayList".to_string()));
+        self.ops.push(JvmOp::Dup);
+        self.ops.push(JvmOp::InvokeSpecial {
+            owner: "java/util/ArrayList".to_string(),
+            name: "<init>".to_string(),
+            params: vec![],
+            ret: JvmType::Void,
+        });
+        let slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            slot,
+            JvmType::Object("java/util/ArrayList".to_string()),
+        ));
+        slot
+    }
+
+    /// Helper: call list.add(item). List ref in list_slot, item on stack.
+    fn emit_list_add(&mut self, list_slot: u16, elem_ty: &JvmType) {
+        // box primitive before adding to list
+        self.emit_box(elem_ty);
+        let item_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            item_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            list_slot,
+            JvmType::Object("java/util/ArrayList".to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            item_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.ops.push(JvmOp::InvokeInterface {
+            owner: "java/util/List".to_string(),
+            name: "add".to_string(),
+            params: vec![JvmType::Object(JVM_OBJECT.to_string())],
+            ret: JvmType::Boolean,
+        });
+        self.ops.push(JvmOp::Pop); // discard boolean
+    }
+
+    /// `iter.collect() -> List<T>`: consume all elements into an ArrayList.
+    fn emit_iter_collect(&mut self, receiver: &TypedExpr, elem_ty: &JvmType) {
+        self.push_scope();
+        let (iter_slot, iter_jvm) = self.store_iterator(receiver);
+        let list_slot = self.emit_new_arraylist();
+
+        let loop_label = self.alloc_label();
+        let end_label = self.alloc_label();
+
+        self.ops.push(JvmOp::Label(loop_label));
+        self.emit_frame(vec![]);
+
+        self.emit_iter_next(iter_slot, &iter_jvm);
+        let opt_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops
+            .push(JvmOp::Instanceof("valen/core/Option$Some".to_string()));
+        self.ops.push(JvmOp::IfEq(end_label));
+
+        self.emit_extract_some_value(opt_slot, elem_ty);
+        self.emit_list_add(list_slot, elem_ty);
+
+        self.ops.push(JvmOp::Goto(loop_label));
+
+        self.ops.push(JvmOp::Label(end_label));
+        self.emit_frame(vec![]);
+        self.ops.push(JvmOp::LoadLocal(
+            list_slot,
+            JvmType::Object("java/util/ArrayList".to_string()),
+        ));
+        self.pop_scope();
+    }
+
+    /// `iter.map(f) -> List<U>`: apply f to each element and collect results.
+    fn emit_iter_map(
+        &mut self,
+        receiver: &TypedExpr,
+        f_expr: &TypedExpr,
+        elem_ty: &JvmType,
+        result_ty: &Ty,
+    ) {
+        let mapped_ty = match result_ty {
+            Ty::Generic(_, args) if !args.is_empty() => self.ty_to_jvm(&args[0]),
+            _ => JvmType::Object(JVM_OBJECT.to_string()),
+        };
+
+        self.push_scope();
+        let (iter_slot, iter_jvm) = self.store_iterator(receiver);
+
+        self.lower_expr(f_expr);
+        let f_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            f_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+
+        let list_slot = self.emit_new_arraylist();
+
+        let loop_label = self.alloc_label();
+        let end_label = self.alloc_label();
+
+        self.ops.push(JvmOp::Label(loop_label));
+        self.emit_frame(vec![]);
+
+        self.emit_iter_next(iter_slot, &iter_jvm);
+        let opt_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops
+            .push(JvmOp::Instanceof("valen/core/Option$Some".to_string()));
+        self.ops.push(JvmOp::IfEq(end_label));
+
+        self.emit_extract_some_value(opt_slot, elem_ty);
+        // box elem for Function.apply
+        self.emit_box(elem_ty);
+        let elem_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            elem_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            f_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            elem_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.emit_invoke_fn1(&mapped_ty);
+        self.emit_list_add(list_slot, &mapped_ty);
+
+        self.ops.push(JvmOp::Goto(loop_label));
+
+        self.ops.push(JvmOp::Label(end_label));
+        self.emit_frame(vec![]);
+        self.ops.push(JvmOp::LoadLocal(
+            list_slot,
+            JvmType::Object("java/util/ArrayList".to_string()),
+        ));
+        self.pop_scope();
+    }
+
+    /// `iter.filter(predicate) -> List<T>`: keep elements matching predicate.
+    fn emit_iter_filter(
+        &mut self,
+        receiver: &TypedExpr,
+        pred_expr: &TypedExpr,
+        elem_ty: &JvmType,
+    ) {
+        self.push_scope();
+        let (iter_slot, iter_jvm) = self.store_iterator(receiver);
+
+        self.lower_expr(pred_expr);
+        let pred_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            pred_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+
+        let list_slot = self.emit_new_arraylist();
+
+        let loop_label = self.alloc_label();
+        let end_label = self.alloc_label();
+        let skip_label = self.alloc_label();
+
+        self.ops.push(JvmOp::Label(loop_label));
+        self.emit_frame(vec![]);
+
+        self.emit_iter_next(iter_slot, &iter_jvm);
+        let opt_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops
+            .push(JvmOp::Instanceof("valen/core/Option$Some".to_string()));
+        self.ops.push(JvmOp::IfEq(end_label));
+
+        self.emit_extract_some_value(opt_slot, elem_ty);
+        self.emit_box(elem_ty);
+        let elem_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            elem_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+
+        // Call predicate
+        self.ops.push(JvmOp::LoadLocal(
+            pred_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            elem_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.emit_invoke_fn1(&JvmType::Boolean);
+        self.ops.push(JvmOp::IfEq(skip_label));
+
+        // Predicate true → add to list
+        self.ops.push(JvmOp::LoadLocal(
+            elem_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        if JvmType::boxed_name(elem_ty).is_some() {
+            self.emit_unbox(elem_ty);
+        } else if let JvmType::Object(ref name) = elem_ty {
+            if name != JVM_OBJECT {
+                self.ops.push(JvmOp::Checkcast(name.clone()));
+            }
+        }
+        self.emit_list_add(list_slot, elem_ty);
+
+        self.ops.push(JvmOp::Label(skip_label));
+        self.emit_frame(vec![]);
+        self.ops.push(JvmOp::Goto(loop_label));
+
+        self.ops.push(JvmOp::Label(end_label));
+        self.emit_frame(vec![]);
+        self.ops.push(JvmOp::LoadLocal(
+            list_slot,
+            JvmType::Object("java/util/ArrayList".to_string()),
+        ));
+        self.pop_scope();
+    }
+
+    /// `iter.fold(init, f) -> A`: reduce all elements with an accumulator.
+    fn emit_iter_fold(
+        &mut self,
+        receiver: &TypedExpr,
+        init_expr: &TypedExpr,
+        f_expr: &TypedExpr,
+        result_ty: &Ty,
+    ) {
+        let acc_jvm = self.ty_to_jvm(result_ty);
+
+        self.push_scope();
+        let (iter_slot, iter_jvm) = self.store_iterator(receiver);
+
+        self.lower_expr(init_expr);
+        self.emit_box(&acc_jvm);
+        let acc_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            acc_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+
+        self.lower_expr(f_expr);
+        let f_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            f_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+
+        let elem_ty = match &receiver.ty {
+            Ty::Generic(_, targs) if !targs.is_empty() => self.ty_to_jvm(&targs[0]),
+            _ => JvmType::Object(JVM_OBJECT.to_string()),
+        };
+
+        let loop_label = self.alloc_label();
+        let end_label = self.alloc_label();
+
+        self.ops.push(JvmOp::Label(loop_label));
+        self.emit_frame(vec![]);
+
+        self.emit_iter_next(iter_slot, &iter_jvm);
+        let opt_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops
+            .push(JvmOp::Instanceof("valen/core/Option$Some".to_string()));
+        self.ops.push(JvmOp::IfEq(end_label));
+
+        self.emit_extract_some_value(opt_slot, &elem_ty);
+        self.emit_box(&elem_ty);
+        let elem_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            elem_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+
+        // acc = f(acc, item)
+        self.ops.push(JvmOp::LoadLocal(
+            f_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            acc_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            elem_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.emit_invoke_fn2(&JvmType::Object(JVM_OBJECT.to_string()));
+        self.emit_box(&acc_jvm);
+        self.ops.push(JvmOp::StoreLocal(
+            acc_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+
+        self.ops.push(JvmOp::Goto(loop_label));
+
+        self.ops.push(JvmOp::Label(end_label));
+        self.emit_frame(vec![]);
+        self.ops.push(JvmOp::LoadLocal(
+            acc_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        if JvmType::boxed_name(&acc_jvm).is_some() {
+            self.emit_unbox(&acc_jvm);
+        } else if let JvmType::Object(ref name) = acc_jvm {
+            if name != JVM_OBJECT {
+                self.ops.push(JvmOp::Checkcast(name.clone()));
+            }
+        }
+        self.pop_scope();
+    }
+
+    /// `iter.forEach(f)`: call f for each element, returns Unit.
+    fn emit_iter_for_each(
+        &mut self,
+        receiver: &TypedExpr,
+        f_expr: &TypedExpr,
+        elem_ty: &JvmType,
+    ) {
+        self.push_scope();
+        let (iter_slot, iter_jvm) = self.store_iterator(receiver);
+
+        self.lower_expr(f_expr);
+        let f_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            f_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+
+        let loop_label = self.alloc_label();
+        let end_label = self.alloc_label();
+
+        self.ops.push(JvmOp::Label(loop_label));
+        self.emit_frame(vec![]);
+
+        self.emit_iter_next(iter_slot, &iter_jvm);
+        let opt_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops
+            .push(JvmOp::Instanceof("valen/core/Option$Some".to_string()));
+        self.ops.push(JvmOp::IfEq(end_label));
+
+        self.emit_extract_some_value(opt_slot, elem_ty);
+        self.emit_box(elem_ty);
+        let elem_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            elem_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            f_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            elem_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.emit_invoke_fn1(&JvmType::Void);
+        // Function.apply returns Object, pop unused result
+        self.ops.push(JvmOp::Pop);
+
+        self.ops.push(JvmOp::Goto(loop_label));
+
+        self.ops.push(JvmOp::Label(end_label));
+        self.emit_frame(vec![]);
+        self.pop_scope();
+    }
+
+    /// `iter.count() -> Int`: count elements.
+    fn emit_iter_count(&mut self, receiver: &TypedExpr) {
+        self.push_scope();
+        let (iter_slot, iter_jvm) = self.store_iterator(receiver);
+
+        self.ops.push(JvmOp::PushInt(0));
+        let count_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops
+            .push(JvmOp::StoreLocal(count_slot, JvmType::Int));
+
+        let loop_label = self.alloc_label();
+        let end_label = self.alloc_label();
+
+        self.ops.push(JvmOp::Label(loop_label));
+        self.emit_frame(vec![]);
+
+        self.emit_iter_next(iter_slot, &iter_jvm);
+        let opt_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops
+            .push(JvmOp::Instanceof("valen/core/Option$Some".to_string()));
+        self.ops.push(JvmOp::IfEq(end_label));
+
+        // count++
+        self.ops.push(JvmOp::LoadLocal(count_slot, JvmType::Int));
+        self.ops.push(JvmOp::PushInt(1));
+        self.ops.push(JvmOp::Arith(ArithOp::Add, JvmType::Int));
+        self.ops
+            .push(JvmOp::StoreLocal(count_slot, JvmType::Int));
+
+        self.ops.push(JvmOp::Goto(loop_label));
+
+        self.ops.push(JvmOp::Label(end_label));
+        self.emit_frame(vec![]);
+        self.ops.push(JvmOp::LoadLocal(count_slot, JvmType::Int));
+        self.pop_scope();
+    }
+
+    /// `iter.any(pred) -> Bool`: true if any element matches.
+    fn emit_iter_any(
+        &mut self,
+        receiver: &TypedExpr,
+        pred_expr: &TypedExpr,
+        elem_ty: &JvmType,
+    ) {
+        self.push_scope();
+        let (iter_slot, iter_jvm) = self.store_iterator(receiver);
+
+        self.lower_expr(pred_expr);
+        let pred_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            pred_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+
+        let loop_label = self.alloc_label();
+        let true_label = self.alloc_label();
+        let false_label = self.alloc_label();
+
+        self.ops.push(JvmOp::Label(loop_label));
+        self.emit_frame(vec![]);
+
+        self.emit_iter_next(iter_slot, &iter_jvm);
+        let opt_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops
+            .push(JvmOp::Instanceof("valen/core/Option$Some".to_string()));
+        self.ops.push(JvmOp::IfEq(false_label));
+
+        self.emit_extract_some_value(opt_slot, elem_ty);
+        self.emit_box(elem_ty);
+        let elem_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            elem_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+
+        self.ops.push(JvmOp::LoadLocal(
+            pred_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            elem_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.emit_invoke_fn1(&JvmType::Boolean);
+        self.ops.push(JvmOp::IfNe(true_label));
+        self.ops.push(JvmOp::Goto(loop_label));
+
+        self.ops.push(JvmOp::Label(true_label));
+        self.emit_frame(vec![]);
+        self.ops.push(JvmOp::PushInt(1));
+        let end_label = self.alloc_label();
+        self.ops.push(JvmOp::Goto(end_label));
+
+        self.ops.push(JvmOp::Label(false_label));
+        self.emit_frame(vec![]);
+        self.ops.push(JvmOp::PushInt(0));
+
+        self.ops.push(JvmOp::Label(end_label));
+        self.emit_frame(vec![]);
+        self.pop_scope();
+    }
+
+    /// `iter.all(pred) -> Bool`: true if all elements match.
+    fn emit_iter_all(
+        &mut self,
+        receiver: &TypedExpr,
+        pred_expr: &TypedExpr,
+        elem_ty: &JvmType,
+    ) {
+        self.push_scope();
+        let (iter_slot, iter_jvm) = self.store_iterator(receiver);
+
+        self.lower_expr(pred_expr);
+        let pred_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            pred_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+
+        let loop_label = self.alloc_label();
+        let false_label = self.alloc_label();
+        let true_label = self.alloc_label();
+
+        self.ops.push(JvmOp::Label(loop_label));
+        self.emit_frame(vec![]);
+
+        self.emit_iter_next(iter_slot, &iter_jvm);
+        let opt_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops
+            .push(JvmOp::Instanceof("valen/core/Option$Some".to_string()));
+        self.ops.push(JvmOp::IfEq(true_label));
+
+        self.emit_extract_some_value(opt_slot, elem_ty);
+        self.emit_box(elem_ty);
+        let elem_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            elem_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+
+        self.ops.push(JvmOp::LoadLocal(
+            pred_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            elem_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.emit_invoke_fn1(&JvmType::Boolean);
+        self.ops.push(JvmOp::IfEq(false_label));
+        self.ops.push(JvmOp::Goto(loop_label));
+
+        self.ops.push(JvmOp::Label(false_label));
+        self.emit_frame(vec![]);
+        self.ops.push(JvmOp::PushInt(0));
+        let end_label = self.alloc_label();
+        self.ops.push(JvmOp::Goto(end_label));
+
+        self.ops.push(JvmOp::Label(true_label));
+        self.emit_frame(vec![]);
+        self.ops.push(JvmOp::PushInt(1));
+
+        self.ops.push(JvmOp::Label(end_label));
+        self.emit_frame(vec![]);
+        self.pop_scope();
+    }
+
+    /// `iter.find(pred) -> Option<T>`: return first matching element.
+    fn emit_iter_find(
+        &mut self,
+        receiver: &TypedExpr,
+        pred_expr: &TypedExpr,
+        elem_ty: &JvmType,
+    ) {
+        self.push_scope();
+        let (iter_slot, iter_jvm) = self.store_iterator(receiver);
+
+        self.lower_expr(pred_expr);
+        let pred_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            pred_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+
+        let loop_label = self.alloc_label();
+        let found_label = self.alloc_label();
+        let none_label = self.alloc_label();
+
+        self.ops.push(JvmOp::Label(loop_label));
+        self.emit_frame(vec![]);
+
+        self.emit_iter_next(iter_slot, &iter_jvm);
+        let opt_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            opt_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+        self.ops
+            .push(JvmOp::Instanceof("valen/core/Option$Some".to_string()));
+        self.ops.push(JvmOp::IfEq(none_label));
+
+        self.emit_extract_some_value(opt_slot, elem_ty);
+        self.emit_box(elem_ty);
+        let elem_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            elem_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+
+        self.ops.push(JvmOp::LoadLocal(
+            pred_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.ops.push(JvmOp::LoadLocal(
+            elem_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.emit_invoke_fn1(&JvmType::Boolean);
+        self.ops.push(JvmOp::IfNe(found_label));
+        self.ops.push(JvmOp::Goto(loop_label));
+
+        // Found: wrap in Some
+        self.ops.push(JvmOp::Label(found_label));
+        self.emit_frame(vec![]);
+        self.ops.push(JvmOp::New("valen/core/Option$Some".to_string()));
+        self.ops.push(JvmOp::Dup);
+        self.ops.push(JvmOp::LoadLocal(
+            elem_slot,
+            JvmType::Object(JVM_OBJECT.to_string()),
+        ));
+        self.ops.push(JvmOp::InvokeSpecial {
+            owner: "valen/core/Option$Some".to_string(),
+            name: "<init>".to_string(),
+            params: vec![JvmType::Object(JVM_OBJECT.to_string())],
+            ret: JvmType::Void,
+        });
+        let end_label = self.alloc_label();
+        self.ops.push(JvmOp::Goto(end_label));
+
+        // Not found: return None
+        self.ops.push(JvmOp::Label(none_label));
+        self.emit_frame(vec![]);
+        self.ops.push(JvmOp::New("valen/core/Option$None".to_string()));
+        self.ops.push(JvmOp::Dup);
+        self.ops.push(JvmOp::InvokeSpecial {
+            owner: "valen/core/Option$None".to_string(),
+            name: "<init>".to_string(),
+            params: vec![],
+            ret: JvmType::Void,
+        });
+
+        self.ops.push(JvmOp::Label(end_label));
+        self.emit_frame(vec![]);
         self.pop_scope();
     }
 
