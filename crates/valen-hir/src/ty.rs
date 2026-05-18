@@ -2358,19 +2358,56 @@ impl<'hir> TypeChecker<'hir> {
         lit: &valen_ast::ListLiteralExpr,
         expected: Option<&Ty>,
     ) -> TypedExpr {
-        let typed_elements: Vec<TypedExpr> =
-            lit.elements.iter().map(|e| self.infer_expr(e)).collect();
-
-        let elem_ty = if let Some(Ty::Generic(name, args)) = expected {
-            if (name == "List" || name == "java.util.List") && !args.is_empty() {
-                args[0].clone()
-            } else {
-                self.unify_element_types(&typed_elements)
+        let expected_elem = match expected {
+            Some(Ty::Generic(name, args)) if !args.is_empty() => {
+                let n = name.as_str();
+                if n == "List"
+                    || n == "java.util.List"
+                    || n == "ArrayList"
+                    || n == "java.util.ArrayList"
+                {
+                    Some(args[0].clone())
+                } else {
+                    None
+                }
             }
-        } else {
-            self.unify_element_types(&typed_elements)
+            _ => None,
         };
 
+        let has_list_annotation = expected_elem.is_some()
+            || matches!(expected, Some(Ty::Named(n)) if n.contains("List") || n.contains("java.util"));
+
+        if lit.elements.is_empty() && !has_list_annotation {
+            self.diags.error(
+                DiagCode::TYPE_MISMATCH,
+                lit.span,
+                SmolStr::from("empty list literal requires a type annotation"),
+            );
+        }
+
+        let mut typed_elements = Vec::new();
+        let mut elem_ty = expected_elem;
+
+        for e in &lit.elements {
+            let te = self.infer_expr(e);
+            if let Some(ref expected) = elem_ty {
+                if !te.ty.is_error() && te.ty != *expected && !is_subtype(&te.ty, expected) {
+                    self.diags.error(
+                        DiagCode::TYPE_MISMATCH,
+                        te.span,
+                        SmolStr::from(format!(
+                            "expected list element `{expected}`, found `{}`",
+                            te.ty
+                        )),
+                    );
+                }
+            } else {
+                elem_ty = Some(te.ty.clone());
+            }
+            typed_elements.push(te);
+        }
+
+        let elem_ty = elem_ty.unwrap_or(Ty::Error);
         let list_ty = Ty::Generic(SmolStr::from("List"), vec![elem_ty]);
         let list_ty = self.expand_aliases_in_ty(&list_ty);
 
@@ -2386,22 +2423,69 @@ impl<'hir> TypeChecker<'hir> {
         lit: &valen_ast::MapLiteralExpr,
         expected: Option<&Ty>,
     ) -> TypedExpr {
-        let typed_entries: Vec<(TypedExpr, TypedExpr)> = lit
-            .entries
-            .iter()
-            .map(|(k, v)| (self.infer_expr(k), self.infer_expr(v)))
-            .collect();
-
-        let (key_ty, val_ty) = if let Some(Ty::Generic(name, args)) = expected {
-            if (name == "Map" || name == "java.util.Map") && args.len() >= 2 {
-                (args[0].clone(), args[1].clone())
-            } else {
-                self.unify_map_types(&typed_entries)
+        let expected_kv = match expected {
+            Some(Ty::Generic(name, args))
+                if (name == "Map" || name == "java.util.Map") && args.len() >= 2 =>
+            {
+                Some((args[0].clone(), args[1].clone()))
             }
-        } else {
-            self.unify_map_types(&typed_entries)
+            _ => None,
         };
 
+        let has_map_annotation = expected_kv.is_some()
+            || matches!(expected, Some(Ty::Named(n)) if n.contains("Map") || n.contains("java.util"));
+
+        if lit.entries.is_empty() && !has_map_annotation {
+            self.diags.error(
+                DiagCode::TYPE_MISMATCH,
+                lit.span,
+                SmolStr::from("empty map literal requires a type annotation"),
+            );
+        }
+
+        let mut typed_entries = Vec::new();
+        let mut key_ty = expected_kv.as_ref().map(|(k, _)| k.clone());
+        let mut val_ty = expected_kv.as_ref().map(|(_, v)| v.clone());
+
+        for (k, v) in &lit.entries {
+            let tk = self.infer_expr(k);
+            let tv = self.infer_expr(v);
+
+            if let Some(ref expected_k) = key_ty {
+                if !tk.ty.is_error() && tk.ty != *expected_k && !is_subtype(&tk.ty, expected_k) {
+                    self.diags.error(
+                        DiagCode::TYPE_MISMATCH,
+                        tk.span,
+                        SmolStr::from(format!(
+                            "expected map key `{expected_k}`, found `{}`",
+                            tk.ty
+                        )),
+                    );
+                }
+            } else {
+                key_ty = Some(tk.ty.clone());
+            }
+
+            if let Some(ref expected_v) = val_ty {
+                if !tv.ty.is_error() && tv.ty != *expected_v && !is_subtype(&tv.ty, expected_v) {
+                    self.diags.error(
+                        DiagCode::TYPE_MISMATCH,
+                        tv.span,
+                        SmolStr::from(format!(
+                            "expected map value `{expected_v}`, found `{}`",
+                            tv.ty
+                        )),
+                    );
+                }
+            } else {
+                val_ty = Some(tv.ty.clone());
+            }
+
+            typed_entries.push((tk, tv));
+        }
+
+        let key_ty = key_ty.unwrap_or(Ty::Error);
+        let val_ty = val_ty.unwrap_or(Ty::Error);
         let map_ty = Ty::Generic(SmolStr::from("Map"), vec![key_ty, val_ty]);
         let map_ty = self.expand_aliases_in_ty(&map_ty);
 
@@ -2410,28 +2494,6 @@ impl<'hir> TypeChecker<'hir> {
             ty: map_ty,
             span: lit.span,
         }
-    }
-
-    fn unify_element_types(&self, elements: &[TypedExpr]) -> Ty {
-        if elements.is_empty() {
-            return Ty::Error;
-        }
-        let first = &elements[0].ty;
-        for elem in &elements[1..] {
-            if !elem.ty.is_error() && elem.ty != *first {
-                return first.clone();
-            }
-        }
-        first.clone()
-    }
-
-    fn unify_map_types(&self, entries: &[(TypedExpr, TypedExpr)]) -> (Ty, Ty) {
-        if entries.is_empty() {
-            return (Ty::Error, Ty::Error);
-        }
-        let key_ty = entries[0].0.ty.clone();
-        let val_ty = entries[0].1.ty.clone();
-        (key_ty, val_ty)
     }
 
     fn synth_variant_shorthand(
