@@ -56,7 +56,8 @@ impl Hir {
         id
     }
 
-    /// Resolve a method on `type_name`, checking class body methods first, then trait impls.
+    /// Resolve a method on `type_name`, checking class body methods first, then trait impls,
+    /// then trait method definitions (when type_name is itself a trait).
     pub fn resolve_method(&self, type_name: &str, method_name: &str) -> MethodResolution {
         if let Some(class_methods) = self.type_methods.get(type_name) {
             for &mid in class_methods {
@@ -81,11 +82,29 @@ impl Hir {
             }
         }
 
-        match trait_candidates.len() {
-            0 => MethodResolution::NotFound,
-            1 => MethodResolution::Found(trait_candidates[0]),
-            _ => MethodResolution::Ambiguous(trait_candidates),
+        if !trait_candidates.is_empty() {
+            return match trait_candidates.len() {
+                1 => MethodResolution::Found(trait_candidates[0]),
+                _ => MethodResolution::Ambiguous(trait_candidates),
+            };
         }
+
+        // Check trait method definitions when type_name is a trait
+        for def in self.defs.values() {
+            if def.name == type_name {
+                if let DefKind::Trait(tdef) = &def.kind {
+                    for &mid in &tdef.methods {
+                        if let Some(mdef) = self.defs.get(&mid) {
+                            if mdef.name == method_name {
+                                return MethodResolution::Found(mid);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        MethodResolution::NotFound
     }
 
     /// Check whether `def_id` is visible from the given accessor type context.
@@ -425,6 +444,18 @@ impl Ty {
     /// `true` if this is the `Bool` type.
     pub fn is_bool(&self) -> bool {
         matches!(self, Ty::Prim(PrimTy::Bool))
+    }
+    /// `true` if this type contains any unresolved type parameters.
+    pub fn has_type_params(&self) -> bool {
+        match self {
+            Ty::TypeParam(_) => true,
+            Ty::Generic(_, args) => args.iter().any(|a| a.has_type_params()),
+            Ty::Nullable(inner) => inner.has_type_params(),
+            Ty::Fn(params, ret) => {
+                params.iter().any(|p| p.has_type_params()) || ret.has_type_params()
+            }
+            _ => false,
+        }
     }
 }
 

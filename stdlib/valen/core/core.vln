@@ -44,10 +44,18 @@ pub trait Error {
     fn message(self) -> String;
 }
 
+// --- Collection type aliases ---
+
+pub typealias List<T> = java.util.List<T>;
+
 // --- Iterator trait ---
 
 pub trait Iterator<T> {
     fn next(mut self) -> Option<T>;
+    fn map<U>(mut self, f: fn(T) -> U) -> List<U>;
+    fn filter(mut self, predicate: fn(T) -> Bool) -> List<T>;
+    fn fold<A>(mut self, init: A, f: fn(A, T) -> A) -> A;
+    fn collect(mut self) -> List<T>;
     fn forEach(mut self, f: fn(T) -> Unit);
     fn count(mut self) -> Int;
     fn any(mut self, predicate: fn(T) -> Bool) -> Bool;

@@ -169,6 +169,32 @@ let tags: Set<String> = Set::of("valen", "jvm", "language");
 
 Java のコレクションライブラリがそのまま使えるため、既存の Java エコシステムとの親和性が高くなっています。
 
+### Iterator とコレクション操作
+
+`iter()` 関数を使って `List<T>` を `Iterator<T>` に変換し、高階メソッドでデータを操作できます。
+
+```valen
+let numbers: List<Int> = List::of(1, 2, 3, 4, 5);
+
+// map: 各要素を変換
+let doubled: List<Int> = iter(numbers).map(|x: Int| -> Int { x * 2 });
+
+// filter: 条件に合う要素だけ残す
+let evens: List<Int> = iter(numbers).filter(|x: Int| -> Bool { x % 2 == 0 });
+
+// fold: 畳み込み
+let sum: Int = iter(numbers).fold(0, |acc: Int, x: Int| -> Int { acc + x });
+
+// collect: イテレータをリストに変換
+let all: List<Int> = iter(numbers).collect();
+
+// count, any, all, find
+let n: Int = iter(numbers).count();
+let hasNeg: Bool = iter(numbers).any(|x: Int| -> Bool { x < 0 });
+let allPos: Bool = iter(numbers).all(|x: Int| -> Bool { x > 0 });
+let first: Option<Int> = iter(numbers).find(|x: Int| -> Bool { x > 3 });
+```
+
 ## まとめ
 
 | 操作 | 方法 |

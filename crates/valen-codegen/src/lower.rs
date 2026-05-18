@@ -64,7 +64,197 @@ pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<DefId, TypedBody>) -> Vec<Jv
         }
     }
 
+    classes.push(generate_list_iterator_class());
+
     classes
+}
+
+/// Generates a synthetic `valen/core/ListIterator` class that wraps a `java.util.List`
+/// and implements `valen/core/Iterator` by sequentially returning elements via `next()`.
+fn generate_list_iterator_class() -> JvmClass {
+    use crate::jvm_ir::*;
+    let class_name = "valen/core/ListIterator";
+    let obj = JvmType::Object(JVM_OBJECT.to_string());
+
+    // <init>(Ljava/util/List;)V
+    let ctor = JvmMethod {
+        access: JvmMethodAccess {
+            is_public: true,
+            ..Default::default()
+        },
+        name: "<init>".to_string(),
+        params: vec![JvmType::Object("java/util/List".to_string())],
+        return_type: JvmType::Void,
+        body: Some(JvmMethodBody {
+            max_locals: 3,
+            ops: vec![
+                // super.<init>()
+                JvmOp::LoadLocal(0, obj.clone()),
+                JvmOp::InvokeSpecial {
+                    owner: JVM_OBJECT.to_string(),
+                    name: "<init>".to_string(),
+                    params: vec![],
+                    ret: JvmType::Void,
+                },
+                // this.list = arg
+                JvmOp::LoadLocal(0, obj.clone()),
+                JvmOp::LoadLocal(1, JvmType::Object("java/util/List".to_string())),
+                JvmOp::PutField {
+                    owner: class_name.to_string(),
+                    name: "list".to_string(),
+                    descriptor: JvmType::Object("java/util/List".to_string()),
+                },
+                // this.index = 0
+                JvmOp::LoadLocal(0, obj.clone()),
+                JvmOp::PushInt(0),
+                JvmOp::PutField {
+                    owner: class_name.to_string(),
+                    name: "index".to_string(),
+                    descriptor: JvmType::Int,
+                },
+                JvmOp::Return(JvmType::Void),
+            ],
+            exception_handlers: vec![],
+        }),
+    };
+
+    // next() -> Option<T>  (returns Option$Some or Option$None)
+    let label_none: Label = 0;
+    let _label_end: Label = 1;
+    let next_method = JvmMethod {
+        access: JvmMethodAccess {
+            is_public: true,
+            ..Default::default()
+        },
+        name: "next".to_string(),
+        params: vec![],
+        return_type: JvmType::Object("valen/core/Option".to_string()),
+        body: Some(JvmMethodBody {
+            max_locals: 3,
+            ops: vec![
+                // if (this.index >= this.list.size()) goto none
+                JvmOp::LoadLocal(0, obj.clone()),
+                JvmOp::GetField {
+                    owner: class_name.to_string(),
+                    name: "index".to_string(),
+                    descriptor: JvmType::Int,
+                },
+                JvmOp::LoadLocal(0, obj.clone()),
+                JvmOp::GetField {
+                    owner: class_name.to_string(),
+                    name: "list".to_string(),
+                    descriptor: JvmType::Object("java/util/List".to_string()),
+                },
+                JvmOp::InvokeInterface {
+                    owner: "java/util/List".to_string(),
+                    name: "size".to_string(),
+                    params: vec![],
+                    ret: JvmType::Int,
+                },
+                JvmOp::IfICmpGe(label_none),
+                // Object elem = this.list.get(this.index)
+                JvmOp::LoadLocal(0, obj.clone()),
+                JvmOp::GetField {
+                    owner: class_name.to_string(),
+                    name: "list".to_string(),
+                    descriptor: JvmType::Object("java/util/List".to_string()),
+                },
+                JvmOp::LoadLocal(0, obj.clone()),
+                JvmOp::GetField {
+                    owner: class_name.to_string(),
+                    name: "index".to_string(),
+                    descriptor: JvmType::Int,
+                },
+                JvmOp::InvokeInterface {
+                    owner: "java/util/List".to_string(),
+                    name: "get".to_string(),
+                    params: vec![JvmType::Int],
+                    ret: obj.clone(),
+                },
+                JvmOp::StoreLocal(1, obj.clone()),
+                // this.index++
+                JvmOp::LoadLocal(0, obj.clone()),
+                JvmOp::Dup,
+                JvmOp::GetField {
+                    owner: class_name.to_string(),
+                    name: "index".to_string(),
+                    descriptor: JvmType::Int,
+                },
+                JvmOp::PushInt(1),
+                JvmOp::Arith(ArithOp::Add, JvmType::Int),
+                JvmOp::PutField {
+                    owner: class_name.to_string(),
+                    name: "index".to_string(),
+                    descriptor: JvmType::Int,
+                },
+                // return new Some(elem)
+                JvmOp::New("valen/core/Option$Some".to_string()),
+                JvmOp::Dup,
+                JvmOp::LoadLocal(1, obj.clone()),
+                JvmOp::InvokeSpecial {
+                    owner: "valen/core/Option$Some".to_string(),
+                    name: "<init>".to_string(),
+                    params: vec![obj.clone()],
+                    ret: JvmType::Void,
+                },
+                JvmOp::Return(JvmType::Object("valen/core/Option".to_string())),
+                // none:
+                JvmOp::Label(label_none),
+                JvmOp::Frame {
+                    locals: vec![JvmType::Object(class_name.to_string())],
+                    stack: vec![],
+                },
+                JvmOp::New("valen/core/Option$None".to_string()),
+                JvmOp::Dup,
+                JvmOp::InvokeSpecial {
+                    owner: "valen/core/Option$None".to_string(),
+                    name: "<init>".to_string(),
+                    params: vec![],
+                    ret: JvmType::Void,
+                },
+                JvmOp::Return(JvmType::Object("valen/core/Option".to_string())),
+            ],
+            exception_handlers: vec![],
+        }),
+    };
+
+    JvmClass {
+        version: crate::JvmVersion::Java21,
+        access: JvmClassAccess {
+            is_public: true,
+            is_final: true,
+            ..Default::default()
+        },
+        name: class_name.to_string(),
+        super_class: JVM_OBJECT.to_string(),
+        interfaces: vec!["valen/core/Iterator".to_string()],
+        fields: vec![
+            JvmField {
+                access: JvmFieldAccess {
+                    is_private: true,
+                    is_final: true,
+                    ..Default::default()
+                },
+                name: "list".to_string(),
+                ty: JvmType::Object("java/util/List".to_string()),
+            },
+            JvmField {
+                access: JvmFieldAccess {
+                    is_private: true,
+                    ..Default::default()
+                },
+                name: "index".to_string(),
+                ty: JvmType::Int,
+            },
+        ],
+        methods: vec![ctor, next_method],
+        source_file: Some("ListIterator.vln".to_string()),
+        permitted_subclasses: vec![],
+        is_record: false,
+        bootstrap_methods: vec![],
+        synthetic_methods: vec![],
+        annotations: vec![],
+    }
 }
 
 fn lower_class(
@@ -1021,9 +1211,8 @@ mod tests {
     fn lower_empty_class() {
         let hir = make_hir_with_class("Foo", ClassDefKind::Final, vec![], Vis::Pub);
         let classes = lower_hir(&hir, &IndexMap::new());
-        assert_eq!(classes.len(), 1);
-        let c = &classes[0];
-        assert_eq!(c.name, "Foo");
+        // User class + synthetic ListIterator
+        let c = classes.iter().find(|c| c.name == "Foo").unwrap();
         assert_eq!(c.super_class, "java/lang/Object");
         assert!(c.access.is_public);
         assert!(c.access.is_final);
@@ -1052,7 +1241,10 @@ mod tests {
         ];
         let hir = make_hir_with_class("User", ClassDefKind::Final, params, Vis::Pub);
         let classes = lower_hir(&hir, &IndexMap::new());
-        let c = &classes[0];
+        let c = classes
+            .iter()
+            .find(|c| c.name != "valen/core/ListIterator")
+            .unwrap();
         assert_eq!(c.fields.len(), 2);
 
         assert_eq!(c.fields[0].name, "name");
@@ -1071,7 +1263,10 @@ mod tests {
     fn lower_abstract_class() {
         let hir = make_hir_with_class("Shape", ClassDefKind::Abstract, vec![], Vis::Pub);
         let classes = lower_hir(&hir, &IndexMap::new());
-        let c = &classes[0];
+        let c = classes
+            .iter()
+            .find(|c| c.name != "valen/core/ListIterator")
+            .unwrap();
         assert!(c.access.is_abstract);
         assert!(!c.access.is_final);
     }
@@ -1080,7 +1275,10 @@ mod tests {
     fn lower_open_class() {
         let hir = make_hir_with_class("Animal", ClassDefKind::Open, vec![], Vis::Pub);
         let classes = lower_hir(&hir, &IndexMap::new());
-        let c = &classes[0];
+        let c = classes
+            .iter()
+            .find(|c| c.name != "valen/core/ListIterator")
+            .unwrap();
         assert!(!c.access.is_abstract);
         assert!(!c.access.is_final);
     }
@@ -1124,9 +1322,7 @@ mod tests {
         );
 
         let classes = lower_hir(&hir, &IndexMap::new());
-        assert_eq!(classes.len(), 1);
-        let c = &classes[0];
-        assert_eq!(c.name, "Point");
+        let c = classes.iter().find(|c| c.name == "Point").unwrap();
         assert!(c.access.is_final);
         assert_eq!(c.fields.len(), 2);
         // <init>, equals, hashCode, toString, copy
@@ -1145,7 +1341,7 @@ mod tests {
         let mut hir = make_hir_with_class("Foo", ClassDefKind::Final, vec![], Vis::Pub);
         hir.package = Some(vec!["com".into(), "example".into()]);
         let classes = lower_hir(&hir, &IndexMap::new());
-        assert_eq!(classes[0].name, "com/example/Foo");
+        assert!(classes.iter().any(|c| c.name == "com/example/Foo"));
     }
 
     #[test]
@@ -1204,7 +1400,10 @@ mod tests {
         );
 
         let classes = lower_hir(&hir, &IndexMap::new());
-        let c = &classes[0];
+        let c = classes
+            .iter()
+            .find(|c| c.name != "valen/core/ListIterator")
+            .unwrap();
         assert_eq!(c.methods.len(), 2); // <init> + greet
         let greet = &c.methods[1];
         assert_eq!(greet.name, "greet");
@@ -1281,7 +1480,10 @@ mod tests {
         });
 
         let classes = lower_hir(&hir, &IndexMap::new());
-        let c = &classes[0];
+        let c = classes
+            .iter()
+            .find(|c| c.name != "valen/core/ListIterator")
+            .unwrap();
         assert_eq!(c.name, "Dog");
         assert_eq!(c.interfaces, vec!["Greeter"]);
         assert_eq!(c.methods.len(), 2); // <init> + greet
@@ -1323,11 +1525,9 @@ mod tests {
         );
 
         let classes = lower_hir(&hir, &IndexMap::new());
-        assert_eq!(classes.len(), 3); // sealed iface + Circle + Point
 
         // sealed interface
-        let iface = &classes[0];
-        assert_eq!(iface.name, "Shape");
+        let iface = classes.iter().find(|c| c.name == "Shape").unwrap();
         assert!(iface.access.is_interface);
         assert!(iface.access.is_abstract);
         assert_eq!(iface.permitted_subclasses.len(), 2);
@@ -1339,8 +1539,7 @@ mod tests {
             .contains(&"Shape$Point".to_string()));
 
         // record variant
-        let circle = &classes[1];
-        assert_eq!(circle.name, "Shape$Circle");
+        let circle = classes.iter().find(|c| c.name == "Shape$Circle").unwrap();
         assert!(circle.access.is_final);
         assert!(circle.is_record);
         assert_eq!(circle.super_class, "java/lang/Record");
@@ -1352,8 +1551,7 @@ mod tests {
         assert_eq!(circle.methods.len(), 2); // <init> + getter for r
 
         // unit variant
-        let point = &classes[2];
-        assert_eq!(point.name, "Shape$Point");
+        let point = classes.iter().find(|c| c.name == "Shape$Point").unwrap();
         assert!(point.access.is_final);
         assert!(!point.is_record);
         assert_eq!(point.super_class, "java/lang/Object");
@@ -1395,7 +1593,7 @@ mod tests {
         );
 
         let classes = lower_hir(&hir, &IndexMap::new());
-        assert_eq!(classes[0].name, "com/app/Color");
-        assert_eq!(classes[1].name, "com/app/Color$Red");
+        assert!(classes.iter().any(|c| c.name == "com/app/Color"));
+        assert!(classes.iter().any(|c| c.name == "com/app/Color$Red"));
     }
 }

@@ -138,6 +138,36 @@ impl<'hir> TypeChecker<'hir> {
         }
     }
 
+    fn expand_aliases_in_ty(&self, ty: &Ty) -> Ty {
+        match ty {
+            Ty::Generic(name, args) => {
+                let expanded_args: Vec<Ty> =
+                    args.iter().map(|a| self.expand_aliases_in_ty(a)).collect();
+                if let Some(expanded) = self.expand_type_alias(name, &expanded_args) {
+                    expanded
+                } else {
+                    Ty::Generic(name.clone(), expanded_args)
+                }
+            }
+            Ty::Named(name) => {
+                if let Some(expanded) = self.expand_type_alias(name, &[]) {
+                    expanded
+                } else {
+                    ty.clone()
+                }
+            }
+            Ty::Nullable(inner) => Ty::Nullable(Box::new(self.expand_aliases_in_ty(inner))),
+            Ty::Fn(params, ret) => Ty::Fn(
+                params
+                    .iter()
+                    .map(|p| self.expand_aliases_in_ty(p))
+                    .collect(),
+                Box::new(self.expand_aliases_in_ty(ret)),
+            ),
+            _ => ty.clone(),
+        }
+    }
+
     fn expand_type_alias(&self, name: &str, args: &[Ty]) -> Option<Ty> {
         let def = self.hir.defs.values().find(|d| d.name == name)?;
         let alias = match &def.kind {
@@ -329,6 +359,20 @@ impl<'hir> TypeChecker<'hir> {
             .define(SmolStr::from("println"), string_to_unit.clone(), false);
         self.env
             .define(SmolStr::from("print"), string_to_unit, false);
+
+        let list_t = Ty::Generic(
+            SmolStr::from("List"),
+            vec![Ty::TypeParam(SmolStr::from("T"))],
+        );
+        let iter_t = Ty::Generic(
+            SmolStr::from("Iterator"),
+            vec![Ty::TypeParam(SmolStr::from("T"))],
+        );
+        self.env.define(
+            SmolStr::from("iter"),
+            Ty::Fn(vec![list_t], Box::new(iter_t)),
+            false,
+        );
     }
 
     fn fn_decl_ty(&self, f: &valen_ast::FnDecl) -> Ty {
@@ -1198,7 +1242,7 @@ impl<'hir> TypeChecker<'hir> {
                         }),
                     );
                 } else {
-                    let has_type_params = param_tys.iter().any(|t| matches!(t, Ty::TypeParam(_)));
+                    let has_type_params = param_tys.iter().any(|t| t.has_type_params());
                     if has_type_params {
                         let bindings = infer_type_bindings(param_tys, &args);
                         for (arg, expected) in args.iter().zip(param_tys.iter()) {
@@ -1699,12 +1743,18 @@ impl<'hir> TypeChecker<'hir> {
                                 .as_ref()
                                 .map(&resolve_self_ty)
                                 .unwrap_or_else(Ty::unit);
-                            let ret_ty = if !generic_args.is_empty() {
-                                let bindings = self.build_class_type_bindings(tn, &generic_args);
-                                substitute_ty(&raw_ret_ty, &bindings)
+
+                            let mut bindings = if !generic_args.is_empty() {
+                                self.build_class_type_bindings(tn, &generic_args)
                             } else {
-                                raw_ret_ty
+                                IndexMap::new()
                             };
+
+                            let method_type_params: Vec<SmolStr> = fdef
+                                .generic_bounds
+                                .iter()
+                                .map(|(name, _)| name.clone())
+                                .collect();
 
                             let non_self_params: Vec<_> =
                                 fdef.params.iter().filter(|p| !p.is_self).collect();
@@ -1721,10 +1771,27 @@ impl<'hir> TypeChecker<'hir> {
                                     )),
                                 );
                             } else {
+                                if !method_type_params.is_empty() {
+                                    for (arg, param) in args.iter().zip(non_self_params.iter()) {
+                                        let expected = tyref_to_ty_generic(&param.ty);
+                                        let substituted = if !bindings.is_empty() {
+                                            substitute_ty(&expected, &bindings)
+                                        } else {
+                                            expected
+                                        };
+                                        collect_bindings(&substituted, &arg.ty, &mut bindings);
+                                    }
+                                }
+
                                 for (arg, param) in args.iter().zip(non_self_params.iter()) {
-                                    let expected = tyref_to_ty_generic(&param.ty);
+                                    let mut expected = tyref_to_ty_generic(&param.ty);
+                                    if !bindings.is_empty() {
+                                        expected = substitute_ty(&expected, &bindings);
+                                    }
+                                    expected = self.expand_aliases_in_ty(&expected);
                                     if !arg.ty.is_error()
                                         && !expected.is_error()
+                                        && !expected.has_type_params()
                                         && arg.ty != expected
                                     {
                                         self.diags.error(
@@ -1738,6 +1805,13 @@ impl<'hir> TypeChecker<'hir> {
                                     }
                                 }
                             }
+
+                            let ret_ty = if !bindings.is_empty() {
+                                substitute_ty(&raw_ret_ty, &bindings)
+                            } else {
+                                raw_ret_ty
+                            };
+                            let ret_ty = self.expand_aliases_in_ty(&ret_ty);
 
                             return TypedExpr {
                                 kind: TypedExprKind::MethodCall {
@@ -1916,6 +1990,20 @@ impl<'hir> TypeChecker<'hir> {
                             if let TyRef::Unresolved(n) = &p.ty {
                                 if !param_names.contains(n) {
                                     param_names.push(n.clone());
+                                }
+                            }
+                        }
+                    }
+                    DefKind::Trait(tdef) => {
+                        param_names.extend(tdef.generics.iter().cloned());
+                    }
+                    DefKind::Enum(edef) => {
+                        for v in &edef.variants {
+                            for (_, ty) in &v.fields {
+                                if let TyRef::Unresolved(n) = ty {
+                                    if !param_names.contains(n) {
+                                        param_names.push(n.clone());
+                                    }
                                 }
                             }
                         }
@@ -3207,10 +3295,12 @@ fn collect_bindings(param_ty: &Ty, arg_ty: &Ty, bindings: &mut IndexMap<SmolStr,
                 .entry(name.clone())
                 .or_insert_with(|| arg_ty.clone());
         }
-        Ty::Generic(_, param_args) => {
-            if let Ty::Generic(_, arg_args) = arg_ty {
-                for (p, a) in param_args.iter().zip(arg_args.iter()) {
-                    collect_bindings(p, a, bindings);
+        Ty::Generic(pn, param_args) => {
+            if let Ty::Generic(an, arg_args) = arg_ty {
+                if pn == an {
+                    for (p, a) in param_args.iter().zip(arg_args.iter()) {
+                        collect_bindings(p, a, bindings);
+                    }
                 }
             }
         }

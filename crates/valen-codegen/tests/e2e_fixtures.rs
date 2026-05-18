@@ -15,10 +15,16 @@ fn fixture_path(name: &str) -> std::path::PathBuf {
 
 fn compile_fixture_outputs(name: &str) -> Vec<valen_codegen::ClassFileOutput> {
     compile_fixture_impl(name, true)
+        .into_iter()
+        .filter(|o| o.internal_name != "valen/core/ListIterator")
+        .collect()
 }
 
 fn compile_fixture_outputs_skip_typecheck(name: &str) -> Vec<valen_codegen::ClassFileOutput> {
     compile_fixture_impl(name, false)
+        .into_iter()
+        .filter(|o| o.internal_name != "valen/core/ListIterator")
+        .collect()
 }
 
 fn compile_fixture_impl(name: &str, assert_typecheck: bool) -> Vec<valen_codegen::ClassFileOutput> {
@@ -69,6 +75,7 @@ fn compile_fixture_impl(name: &str, assert_typecheck: bool) -> Vec<valen_codegen
 fn compile_fixture(name: &str) -> Vec<ClassFile<'static>> {
     compile_fixture_outputs(name)
         .iter()
+        .filter(|o| o.internal_name != "valen/core/ListIterator")
         .map(|o| ClassFile::from_bytes(&o.bytes).expect("ClassFile::from_bytes failed"))
         .collect()
 }
@@ -881,4 +888,14 @@ fn fixture_variant_shorthand() {
         methods.contains(&"isRed".to_string()),
         "missing isRed method"
     );
+}
+
+#[test]
+fn fixture_iterator_collection_ops() {
+    let classes = compile_fixture("iterator_collection_ops.vln");
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+    assert_eq!(c.class_name().unwrap(), "com/example/IterOps");
+    // <init> + 8 iterator methods + synthetic lambda methods
+    assert!(c.methods.len() >= 9);
 }

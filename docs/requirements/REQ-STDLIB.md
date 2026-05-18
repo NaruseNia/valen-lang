@@ -77,8 +77,8 @@ Valen 標準ライブラリに関する要件。`valen.core`（Option / Result /
 |------|------|
 | **ID** | REQ-STDLIB-002 |
 | **優先度** | Must |
-| **ステータス** | Draft |
-| **Phase** | MVP |
+| **ステータス** | Done |
+| **Phase** | MVP + Phase 1.5 |
 
 ### 説明
 
@@ -92,18 +92,27 @@ Valen 標準ライブラリに関する要件。`valen.core`（Option / Result /
 | `Map<K, V>` | `java.util.Map<K, V>` |
 | `Set<T>` | `java.util.Set<T>` |
 
-**trait 注入（MVP）:**
+`List<T>` は `valen.core` の prelude に含まれ、import なしで利用可能。
 
-Iterator trait の impl により、以下のメソッドを typealias 経由で利用可能にする。
+**Iterator trait メソッド（codegen intrinsics）:**
+
+Iterator trait に以下の高階メソッドを定義。コンパイラが codegen intrinsics として直接バイトコード生成する。
 
 | メソッド | シグネチャ | 機能 |
 |---------|----------|------|
-| `map` | `fn map<U>(self, f: (T) -> U) -> List<U>` | 変換 |
-| `filter` | `fn filter(self, f: (T) -> Bool) -> List<T>` | フィルタ |
+| `map` | `fn map<U>(mut self, f: fn(T) -> U) -> List<U>` | 変換 |
+| `filter` | `fn filter(mut self, predicate: fn(T) -> Bool) -> List<T>` | フィルタ |
+| `fold` | `fn fold<A>(mut self, init: A, f: fn(A, T) -> A) -> A` | 畳み込み |
+| `collect` | `fn collect(mut self) -> List<T>` | リストへ収集 |
+| `forEach` | `fn forEach(mut self, f: fn(T) -> Unit)` | 各要素に適用 |
+| `count` | `fn count(mut self) -> Int` | 要素数 |
+| `any` | `fn any(mut self, predicate: fn(T) -> Bool) -> Bool` | いずれか一致 |
+| `all` | `fn all(mut self, predicate: fn(T) -> Bool) -> Bool` | すべて一致 |
+| `find` | `fn find(mut self, predicate: fn(T) -> Bool) -> Option<T>` | 最初の一致 |
 
-- `java.util.List` → `List<T>` として import し、`.map()` / `.filter()` が UFCS で呼び出せる
-- `for x in list` が動作する（`java.lang.Iterable` → Iterator アダプト経由）
-- Phase 1.5 で `reduce` / `fold` / `groupBy` 等を追加予定
+**iter() アダプタ関数:**
+
+`iter(list)` prelude 関数により `List<T>` を `Iterator<T>` に変換可能。内部的に `ListIterator` クラスを生成する。
 
 ### 受入条件
 

@@ -178,6 +178,7 @@ pub fn compile_and_verify(hir: &Hir) -> Vec<ristretto_classfile::ClassFile<'stat
     let outputs = crate::compile_hir(hir, &indexmap::IndexMap::new()).expect("compile_hir failed");
     outputs
         .iter()
+        .filter(|o| o.internal_name != "valen/core/ListIterator")
         .map(|o| {
             assert_eq!(&o.bytes[0..4], &[0xCA, 0xFE, 0xBA, 0xBE]);
             ristretto_classfile::ClassFile::from_bytes(&o.bytes)
