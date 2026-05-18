@@ -115,6 +115,7 @@ pub enum TokenKind {
     Amp,
     AmpAmp,
     Pipe,
+    PipeGt, // |>
     PipePipe,
     Caret,
     Shl,

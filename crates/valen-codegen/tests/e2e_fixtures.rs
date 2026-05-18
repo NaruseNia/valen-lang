@@ -909,3 +909,13 @@ fn fixture_collection_literals() {
     // <init> + makeList + emptyList + makeMap + emptyMap + singleElement
     assert_eq!(c.methods.len(), 6);
 }
+
+#[test]
+fn fixture_pipeline() {
+    let classes = compile_fixture("pipeline.vln");
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+    assert_eq!(c.class_name().unwrap(), "com/example/Pipes");
+    // <init> + pipeline method(s)
+    assert!(c.methods.len() >= 2);
+}

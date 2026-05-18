@@ -1,0 +1,7 @@
+package com.example;
+
+pub class Pipes {
+    fn printValue(self, x: Int) -> Unit {
+        "hello" |> println
+    }
+}
