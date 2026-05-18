@@ -3295,10 +3295,12 @@ fn collect_bindings(param_ty: &Ty, arg_ty: &Ty, bindings: &mut IndexMap<SmolStr,
                 .entry(name.clone())
                 .or_insert_with(|| arg_ty.clone());
         }
-        Ty::Generic(_, param_args) => {
-            if let Ty::Generic(_, arg_args) = arg_ty {
-                for (p, a) in param_args.iter().zip(arg_args.iter()) {
-                    collect_bindings(p, a, bindings);
+        Ty::Generic(pn, param_args) => {
+            if let Ty::Generic(an, arg_args) = arg_ty {
+                if pn == an {
+                    for (p, a) in param_args.iter().zip(arg_args.iter()) {
+                        collect_bindings(p, a, bindings);
+                    }
                 }
             }
         }

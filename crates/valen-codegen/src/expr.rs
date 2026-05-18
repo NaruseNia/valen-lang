@@ -245,16 +245,26 @@ impl<'a> ExprLowering<'a> {
                 PrimTy::Unit => JvmType::Void,
                 PrimTy::Nothing => JvmType::Void,
             },
-            Ty::Named(n) => JvmType::Object(crate::descriptor::resolve_type_internal_name(
-                n,
-                self.pkg,
-                &self.hir.imports,
-            )),
-            Ty::Generic(n, _) => JvmType::Object(crate::descriptor::resolve_type_internal_name(
-                n,
-                self.pkg,
-                &self.hir.imports,
-            )),
+            Ty::Named(n) => {
+                if let Some(target) = self.resolve_type_alias(n) {
+                    return self.ty_to_jvm(&target);
+                }
+                JvmType::Object(crate::descriptor::resolve_type_internal_name(
+                    n,
+                    self.pkg,
+                    &self.hir.imports,
+                ))
+            }
+            Ty::Generic(n, _) => {
+                if let Some(target) = self.resolve_type_alias(n) {
+                    return self.ty_to_jvm(&target);
+                }
+                JvmType::Object(crate::descriptor::resolve_type_internal_name(
+                    n,
+                    self.pkg,
+                    &self.hir.imports,
+                ))
+            }
             Ty::Nullable(inner) => {
                 let inner_jvm = self.ty_to_jvm(inner);
                 match JvmType::boxed_name(&inner_jvm) {
@@ -264,6 +274,19 @@ impl<'a> ExprLowering<'a> {
             }
             Ty::TypeParam(_) | Ty::Fn(_, _) | Ty::Error => JvmType::Object(JVM_OBJECT.to_string()),
         }
+    }
+
+    fn resolve_type_alias(&self, name: &str) -> Option<Ty> {
+        use valen_hir::DefKind;
+        for def in self.hir.defs.values() {
+            if def.name == name {
+                if let DefKind::TypeAlias(alias) = &def.kind {
+                    let target = valen_hir::tyref_to_ty(&alias.target);
+                    return Some(target);
+                }
+            }
+        }
+        None
     }
 
     fn lower_body(&mut self, body: &TypedBody) {

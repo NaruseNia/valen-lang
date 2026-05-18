@@ -201,7 +201,7 @@ fn generate_list_iterator_class() -> JvmClass {
                 // none:
                 JvmOp::Label(label_none),
                 JvmOp::Frame {
-                    locals: vec![obj.clone(), obj.clone(), JvmType::Int],
+                    locals: vec![JvmType::Object(class_name.to_string())],
                     stack: vec![],
                 },
                 JvmOp::New("valen/core/Option$None".to_string()),
