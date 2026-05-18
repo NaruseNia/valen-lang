@@ -1699,8 +1699,14 @@ impl<'hir> TypeChecker<'hir> {
                                 .as_ref()
                                 .map(&resolve_self_ty)
                                 .unwrap_or_else(Ty::unit);
-                            let ret_ty = if !generic_args.is_empty() {
-                                let bindings = self.build_class_type_bindings(tn, &generic_args);
+
+                            let bindings = if !generic_args.is_empty() {
+                                self.build_class_type_bindings(tn, &generic_args)
+                            } else {
+                                IndexMap::new()
+                            };
+
+                            let ret_ty = if !bindings.is_empty() {
                                 substitute_ty(&raw_ret_ty, &bindings)
                             } else {
                                 raw_ret_ty
@@ -1722,7 +1728,10 @@ impl<'hir> TypeChecker<'hir> {
                                 );
                             } else {
                                 for (arg, param) in args.iter().zip(non_self_params.iter()) {
-                                    let expected = tyref_to_ty_generic(&param.ty);
+                                    let mut expected = tyref_to_ty_generic(&param.ty);
+                                    if !bindings.is_empty() {
+                                        expected = substitute_ty(&expected, &bindings);
+                                    }
                                     if !arg.ty.is_error()
                                         && !expected.is_error()
                                         && arg.ty != expected
@@ -1916,6 +1925,20 @@ impl<'hir> TypeChecker<'hir> {
                             if let TyRef::Unresolved(n) = &p.ty {
                                 if !param_names.contains(n) {
                                     param_names.push(n.clone());
+                                }
+                            }
+                        }
+                    }
+                    DefKind::Trait(tdef) => {
+                        param_names.extend(tdef.generics.iter().cloned());
+                    }
+                    DefKind::Enum(edef) => {
+                        for v in &edef.variants {
+                            for (_, ty) in &v.fields {
+                                if let TyRef::Unresolved(n) = ty {
+                                    if !param_names.contains(n) {
+                                        param_names.push(n.clone());
+                                    }
                                 }
                             }
                         }
