@@ -499,7 +499,7 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 | TASK-041 | Prelude variant names | #109 | M10 | M9.5 | S | ✅ PR #139 |
 | TASK-042 | JVM reserved word handling | #113 | M10 | — | S | ✅ PR #141 |
 | TASK-045 | f-string | #117 | M10 | — | M | ✅ PR #142 |
-| TASK-050 | Collection operations | #114 | M11 | TASK-033 | M |
+| TASK-050 | Collection operations | #114 | M11 | TASK-033 | M | ✅ |
 | TASK-046 | if let / while let | #111, VEP-029 | M12 | M9 | L | ✅ PR #145 |
 | TASK-047 | let-else | VEP-028 | M12 | M9 | L | ✅ PR #146 |
 | TASK-048 | derive | VEP-013 | M12 | TASK-030 ✅ | L | ✅ PR #152 |
@@ -662,3 +662,4 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 | 2026-05-17 | 初版策定。Issue 17件 + VEP 8件 + Phase 1/1.5 残5件を統合。grill-me レビューで構文設計 11 項目確定 |
 | 2026-05-17 | M9/M9.5/M10 全タスク完了（11 PR マージ）。TASK-028, 031 既存完了を確認。VEP-031 (ref mut T) 起票 |
 | 2026-05-18 | M12 全タスク完了。TASK-046 (if let/while let, PR #145)、TASK-048 (derive, PR #152)、TASK-049 (variant shorthand, PR #153) を完了マーク。TASK-033 (stdlib 二層化) を Phase 1-5 完了として反映。M8 クローズ |
+| 2026-05-18 | TASK-050 (Iterator collection operations) 完了。Iterator trait に map/filter/fold/collect 追加。ListIterator + iter() アダプタ実装。型チェッカーに trait メソッド解決・メソッドレベルジェネリクス推論・typealias 展開を追加 |
