@@ -1505,9 +1505,9 @@ mod tests {
         );
 
         let jvm_classes = crate::lower::lower_hir(&hir, &indexmap::IndexMap::new());
-        assert_eq!(jvm_classes.len(), 1);
+        let point_class = jvm_classes.iter().find(|c| c.name == "Point").unwrap();
 
-        let output = emit_class(&jvm_classes[0]).unwrap();
+        let output = emit_class(point_class).unwrap();
         let parsed = ClassFile::from_bytes(&output.bytes).unwrap();
         assert_eq!(parsed.class_name().unwrap(), "Point");
         assert!(parsed.access_flags.contains(ClassAccessFlags::FINAL));

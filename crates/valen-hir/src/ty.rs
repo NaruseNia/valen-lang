@@ -329,6 +329,11 @@ impl<'hir> TypeChecker<'hir> {
             .define(SmolStr::from("println"), string_to_unit.clone(), false);
         self.env
             .define(SmolStr::from("print"), string_to_unit, false);
+
+        let list_t = Ty::Generic(SmolStr::from("List"), vec![Ty::TypeParam(SmolStr::from("T"))]);
+        let iter_t = Ty::Generic(SmolStr::from("Iterator"), vec![Ty::TypeParam(SmolStr::from("T"))]);
+        self.env
+            .define(SmolStr::from("iter"), Ty::Fn(vec![list_t], Box::new(iter_t)), false);
     }
 
     fn fn_decl_ty(&self, f: &valen_ast::FnDecl) -> Ty {
@@ -1198,7 +1203,7 @@ impl<'hir> TypeChecker<'hir> {
                         }),
                     );
                 } else {
-                    let has_type_params = param_tys.iter().any(|t| matches!(t, Ty::TypeParam(_)));
+                    let has_type_params = param_tys.iter().any(|t| t.has_type_params());
                     if has_type_params {
                         let bindings = infer_type_bindings(param_tys, &args);
                         for (arg, expected) in args.iter().zip(param_tys.iter()) {

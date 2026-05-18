@@ -502,6 +502,10 @@ impl<'a> ExprLowering<'a> {
                     self.lower_builtin_print(name, args);
                     return;
                 }
+                if name == "iter" {
+                    self.lower_builtin_iter(args);
+                    return;
+                }
                 // Check if the callee is a function-typed local variable (lambda).
                 if matches!(callee.ty, Ty::Fn(_, _)) {
                     self.lower_lambda_call(callee, args, result_ty);
@@ -2705,6 +2709,22 @@ impl<'a> ExprLowering<'a> {
             params: vec![JvmType::Object(JVM_STRING.to_string())],
             ret: JvmType::Void,
         });
+    }
+
+    /// `iter(list)` → `new ListIterator(list)`
+    fn lower_builtin_iter(&mut self, args: &[TypedExpr]) {
+        if let Some(arg) = args.first() {
+            self.ops
+                .push(JvmOp::New("valen/core/ListIterator".to_string()));
+            self.ops.push(JvmOp::Dup);
+            self.lower_expr(arg);
+            self.ops.push(JvmOp::InvokeSpecial {
+                owner: "valen/core/ListIterator".to_string(),
+                name: "<init>".to_string(),
+                params: vec![JvmType::Object("java/util/List".to_string())],
+                ret: JvmType::Void,
+            });
+        }
     }
 
     fn lower_if_let(
