@@ -919,3 +919,12 @@ fn fixture_pipeline() {
     // <init> + pipeline method(s)
     assert!(c.methods.len() >= 2);
 }
+
+#[test]
+fn fixture_intersection_constraints() {
+    let classes = compile_fixture("intersection_constraints.vln");
+    assert!(classes.len() >= 2);
+    assert!(classes
+        .iter()
+        .any(|c| c.class_name().unwrap() == "com/example/Inspector"));
+}
