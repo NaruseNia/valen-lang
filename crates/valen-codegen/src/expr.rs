@@ -246,6 +246,9 @@ impl<'a> ExprLowering<'a> {
                 PrimTy::Nothing => JvmType::Void,
             },
             Ty::Named(n) => {
+                if n == "Any" {
+                    return JvmType::Object(JVM_OBJECT.to_string());
+                }
                 if let Some(target) = self.resolve_type_alias(n) {
                     return self.ty_to_jvm(&target);
                 }

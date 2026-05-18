@@ -68,3 +68,16 @@ typealias UserId = Int;
 ```
 
 **所有権を生まない** — orphan rule 判定上、typealias は元の型の所有として扱われない。
+
+## 2.6 Any 型
+
+`Any` は `java.lang.Object` に対応するトップ型。全ての型は暗黙に `Any` のサブタイプであり、アップキャストは暗黙に行われる。
+
+```valen
+let x: Any = 42;           // Int → Any（暗黙アップキャスト）
+let y: Any = "hello";      // String → Any
+fn accept(value: Any) {}   // 任意の型を受け取る
+```
+
+- `Any` へのアップキャストは暗黙（boxing される）
+- ダウンキャストは `unsafe`（VEP-001）または `is` チェック（Phase 3）

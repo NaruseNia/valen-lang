@@ -1,0 +1,12 @@
+package com.example;
+
+pub class AnyTest {
+    fn acceptAny(self, x: Any) -> Any {
+        x
+    }
+
+    fn upcast(self, n: Int) -> Any {
+        let a: Any = n;
+        a
+    }
+}
