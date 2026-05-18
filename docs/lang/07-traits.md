@@ -230,3 +230,16 @@ impl Add<Vec2> for Vec2 {
 ### プリミティブ型
 
 `Int`、`Float` 等のプリミティブ型の演算子は組み込みで直接処理される（`iadd` / `fadd` 等）。プリミティブ型に対して演算子 trait を impl する必要はない。
+
+## 7.8 交差制約（Intersection Constraints）
+
+`+` 構文で複数の trait bound を同時に要求できる。
+
+```valen
+fn process<T: System + EventHandler>(system: T, world: World) -> Unit { ... }
+pub trait Queryable: Component + Eq { ... }
+```
+
+型パラメータ `T` に対して、`T: A + B` と宣言すると:
+- `T` 上で `A` と `B` 両方のメソッドが呼び出し可能
+- 呼び出し側で `T` に代入される具体型は `A` と `B` 両方を impl していなければコンパイルエラー

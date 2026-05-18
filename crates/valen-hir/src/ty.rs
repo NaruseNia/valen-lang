@@ -1809,6 +1809,23 @@ impl<'hir> TypeChecker<'hir> {
                                 }
                             }
 
+                            // Check generic bounds at call site
+                            for (tp_name, tp_bounds) in &fdef.generic_bounds {
+                                if let Some(actual_ty) = bindings.get(tp_name) {
+                                    for bound_trait in tp_bounds {
+                                        if !self.type_satisfies_bound(actual_ty, bound_trait) {
+                                            self.diags.error(
+                                                DiagCode::BOUND_NOT_SATISFIED,
+                                                mc.span,
+                                                SmolStr::from(format!(
+                                                    "type `{actual_ty}` does not satisfy bound `{bound_trait}` required by type parameter `{tp_name}`"
+                                                )),
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+
                             let ret_ty = if !bindings.is_empty() {
                                 substitute_ty(&raw_ret_ty, &bindings)
                             } else {
@@ -2067,13 +2084,44 @@ impl<'hir> TypeChecker<'hir> {
     fn type_satisfies_bound(&self, ty: &Ty, trait_name: &SmolStr) -> bool {
         let type_name = match ty {
             Ty::Named(n) => n.clone(),
+            Ty::Generic(n, _) => n.clone(),
             Ty::Prim(p) => SmolStr::from(format!("{p}")),
             _ => return false,
         };
-        self.hir
+
+        // Check explicit trait impls
+        if self
+            .hir
             .trait_impls
             .iter()
             .any(|entry| entry.trait_name == *trait_name && entry.target_name == type_name)
+        {
+            return true;
+        }
+
+        // Check data class implicit traits (Eq, Hash, Display, Clone)
+        for def in self.hir.defs.values() {
+            if def.name == type_name {
+                if let DefKind::DataClass(_) = &def.kind {
+                    if trait_name == "Eq"
+                        || trait_name == "Hash"
+                        || trait_name == "Display"
+                        || trait_name == "Clone"
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // Check type parameter bounds (if ty is itself a type param with bounds)
+        if let Ty::TypeParam(tp_name) = ty {
+            if let Some(bounds) = self.type_param_bounds.get(tp_name) {
+                return bounds.iter().any(|b| b == trait_name);
+            }
+        }
+
+        false
     }
 
     fn min_required_args_for_callee(&self, callee: &valen_ast::Expr, total: usize) -> usize {

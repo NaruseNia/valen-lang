@@ -1,0 +1,30 @@
+package com.example;
+
+pub trait Printable {
+    fn print(self) -> String;
+}
+
+pub trait Countable {
+    fn count(self) -> Int;
+}
+
+pub class Widget {
+}
+
+impl Printable for Widget {
+    fn print(self) -> String { "widget" }
+}
+
+impl Countable for Widget {
+    fn count(self) -> Int { 1 }
+}
+
+pub class Inspector {
+    fn inspect<T: Printable + Countable>(self, item: T) -> String {
+        item.print()
+    }
+
+    fn measure<T: Printable + Countable>(self, item: T) -> Int {
+        item.count()
+    }
+}
