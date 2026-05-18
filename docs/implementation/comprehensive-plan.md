@@ -508,7 +508,7 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 | TASK-052 | Pipeline operator | VEP-005 | M13 | — | S | ✅ |
 | TASK-053 | Refinement / newtype | VEP-011 | M13 | — | L | ✅ |
 | TASK-054 | Intersection constraints（+ 型チェック） | VEP-012 | M13 | — | S | ✅ |
-| TASK-043 | Generic Java collection tracking | #115 | M13 | TASK-025 ✅ | L |
+| TASK-043 | Generic Java collection tracking | #115 | M13 | TASK-025 ✅ | L | ✅ |
 | TASK-044 | Any type | #122 | M13 | — | M | ✅ |
 | TASK-055 | unsafe block / unsafe fn | VEP-001 | M14 | — | M |
 

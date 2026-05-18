@@ -1889,7 +1889,8 @@ impl<'hir> TypeChecker<'hir> {
                     );
                 }
                 crate::MethodResolution::NotFound => {
-                    if let Some(foreign_result) = self.resolve_foreign_method(tn, &mc.method, &args)
+                    if let Some(foreign_result) =
+                        self.resolve_foreign_method_with_generics(tn, &mc.method, &generic_args)
                     {
                         return TypedExpr {
                             kind: TypedExprKind::MethodCall {
@@ -2191,6 +2192,15 @@ impl<'hir> TypeChecker<'hir> {
         method_name: &str,
         _args: &[TypedExpr],
     ) -> Option<Ty> {
+        self.resolve_foreign_method_with_generics(type_name, method_name, &[])
+    }
+
+    fn resolve_foreign_method_with_generics(
+        &self,
+        type_name: &str,
+        method_name: &str,
+        generic_args: &[Ty],
+    ) -> Option<Ty> {
         let info = self.hir.foreign_types.get(type_name)?;
         let matching: Vec<_> = info
             .methods
@@ -2198,6 +2208,21 @@ impl<'hir> TypeChecker<'hir> {
             .filter(|m| m.name == method_name)
             .collect();
         let m = matching.first()?;
+
+        if let Some(generic_ret) = &m.generic_return_ty {
+            if generic_args.len() == info.type_params.len() && !info.type_params.is_empty() {
+                let mut bindings = IndexMap::new();
+                for (param, arg) in info.type_params.iter().zip(generic_args.iter()) {
+                    bindings.insert(param.clone(), arg.clone());
+                }
+                let ret = tyref_to_ty_generic(generic_ret);
+                let substituted = substitute_ty(&ret, &bindings);
+                if !substituted.has_type_params() {
+                    return Some(nullable_if_reference(&substituted));
+                }
+            }
+        }
+
         Some(tyref_to_ty(&m.return_ty))
     }
 
@@ -3596,6 +3621,25 @@ fn collect_bindings(param_ty: &Ty, arg_ty: &Ty, bindings: &mut IndexMap<SmolStr,
     }
 }
 
+fn nullable_if_reference(ty: &Ty) -> Ty {
+    match ty {
+        Ty::Prim(
+            PrimTy::Unit
+            | PrimTy::Bool
+            | PrimTy::Byte
+            | PrimTy::Short
+            | PrimTy::Int
+            | PrimTy::Long
+            | PrimTy::Float
+            | PrimTy::Double
+            | PrimTy::Char
+            | PrimTy::Nothing,
+        ) => ty.clone(),
+        Ty::Nullable(_) => ty.clone(),
+        other => Ty::Nullable(Box::new(other.clone())),
+    }
+}
+
 fn substitute_ty(ty: &Ty, bindings: &IndexMap<SmolStr, Ty>) -> Ty {
     match ty {
         Ty::TypeParam(name) => bindings.get(name).cloned().unwrap_or_else(|| ty.clone()),
@@ -4217,6 +4261,7 @@ mod tests {
                 interfaces: vec![],
                 permitted_subclasses: vec![],
                 has_valen_closed: false,
+                type_params: vec![],
             },
         );
         let r = type_check(&resolved.hir, &parsed.items);

@@ -169,6 +169,18 @@ let tags: Set<String> = Set::of("valen", "jvm", "language");
 
 Java のコレクションライブラリがそのまま使えるため、既存の Java エコシステムとの親和性が高くなっています。
 
+### ジェネリクス型追跡
+
+Valen コンパイラは Java クラスの `Signature` 属性を解析し、ジェネリクス型引数を追跡します。これにより、Java コレクションのメソッド呼び出しで正確な型が得られます。
+
+```valen
+import java.util.HashMap;
+let map = HashMap<String, Int>();
+let v = map.get("key");   // v: Int? (nullableとして返される)
+```
+
+型変数（`K`, `V` など）はインスタンスの型引数で具体化され、戻り値は null 安全のため nullable (`T?`) として扱われます。
+
 ### Iterator とコレクション操作
 
 `iter()` 関数を使って `List<T>` を `Iterator<T>` に変換し、高階メソッドでデータを操作できます。
