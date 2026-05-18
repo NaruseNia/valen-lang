@@ -3505,6 +3505,10 @@ fn is_subtype(sub: &Ty, sup: &Ty) -> bool {
     if matches!(sup, Ty::TypeParam(_)) {
         return true;
     }
+    // All types are subtypes of Any (java.lang.Object)
+    if matches!(sup, Ty::Named(n) if n == "Any") {
+        return true;
+    }
     // T is subtype of T? (Nullable<T>)
     if let Ty::Nullable(inner) = sup {
         if sub == inner.as_ref() || is_subtype(sub, inner) {

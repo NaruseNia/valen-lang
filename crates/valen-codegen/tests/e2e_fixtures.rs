@@ -928,3 +928,13 @@ fn fixture_intersection_constraints() {
         .iter()
         .any(|c| c.class_name().unwrap() == "com/example/Inspector"));
 }
+
+#[test]
+fn fixture_any_type() {
+    let classes = compile_fixture("any_type.vln");
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+    assert_eq!(c.class_name().unwrap(), "com/example/AnyTest");
+    // <init> + acceptAny + upcast
+    assert_eq!(c.methods.len(), 3);
+}
