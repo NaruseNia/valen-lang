@@ -1592,15 +1592,18 @@ impl<'hir> TypeChecker<'hir> {
             return None;
         }
 
-        let param_tys: Vec<Ty> = fn_def
-            .params
-            .iter()
-            .map(|p| tyref_to_ty_generic(&p.ty))
-            .collect();
+        let resolve_self = |tyref: &TyRef| -> Ty {
+            if *tyref == TyRef::SelfTy {
+                Ty::Named(class_name.clone())
+            } else {
+                tyref_to_ty_generic(tyref)
+            }
+        };
+        let param_tys: Vec<Ty> = fn_def.params.iter().map(|p| resolve_self(&p.ty)).collect();
         let ret_ty = fn_def
             .return_ty
             .as_ref()
-            .map(tyref_to_ty_generic)
+            .map(&resolve_self)
             .unwrap_or_else(Ty::unit);
 
         let min_args = fn_def.params.iter().filter(|p| !p.has_default).count();
@@ -1684,10 +1687,17 @@ impl<'hir> TypeChecker<'hir> {
                 crate::MethodResolution::Found(def_id) => {
                     if let Some(def) = self.hir.defs.get(&def_id) {
                         if let DefKind::Fn(fdef) = &def.kind {
+                            let resolve_self_ty = |tyref: &TyRef| -> Ty {
+                                if *tyref == TyRef::SelfTy {
+                                    Ty::Named(tn.clone())
+                                } else {
+                                    tyref_to_ty_generic(tyref)
+                                }
+                            };
                             let raw_ret_ty = fdef
                                 .return_ty
                                 .as_ref()
-                                .map(tyref_to_ty_generic)
+                                .map(&resolve_self_ty)
                                 .unwrap_or_else(Ty::unit);
                             let ret_ty = if !generic_args.is_empty() {
                                 let bindings = self.build_class_type_bindings(tn, &generic_args);
