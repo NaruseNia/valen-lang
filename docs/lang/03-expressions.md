@@ -77,3 +77,23 @@ while condition() {
     }
 }
 ```
+
+## 3.8 コレクションリテラル
+
+### リストリテラル
+
+`[expr, ...]` 構文で `List<T>`（`java.util.ArrayList`）を生成する。要素型は最初の要素から推論されるか、ターゲット型から決定される。
+
+```valen
+let nums = [1, 2, 3];                     // List<Int>
+let empty: List<String> = [];             // 空リストは型アノテーション必須
+```
+
+### マップリテラル
+
+`#{key: value, ...}` 構文で `Map<K, V>`（`java.util.HashMap`）を生成する。`#` プレフィックスにより `{}` ブロックとの曖昧性を回避。
+
+```valen
+let scores = #{"alice": 100, "bob": 85};  // Map<String, Int>
+let empty: Map<String, Int> = #{};        // 空マップは型アノテーション必須
+```

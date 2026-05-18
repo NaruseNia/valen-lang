@@ -94,6 +94,7 @@ pub enum TokenKind {
     Question,   // ?
     Bang,       // !
     At,         // @
+    Hash,       // #
     Underscore, // _
 
     // Operators

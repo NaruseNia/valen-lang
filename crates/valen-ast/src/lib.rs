@@ -421,6 +421,10 @@ pub enum Expr {
     WhileLet(Box<WhileLetExpr>),
     /// `.Variant` or `.Variant(args)` — enum variant shorthand with inferred enum type.
     VariantShorthand(VariantShorthandExpr),
+    /// `[expr, expr, ...]` — list literal.
+    ListLiteral(ListLiteralExpr),
+    /// `#{key: value, ...}` — map literal.
+    MapLiteral(MapLiteralExpr),
 }
 
 /// Literal value (integer, float, string, etc.).
@@ -482,6 +486,8 @@ impl Expr {
             Expr::IfLet(i) => i.span,
             Expr::WhileLet(w) => w.span,
             Expr::VariantShorthand(v) => v.span,
+            Expr::ListLiteral(l) => l.span,
+            Expr::MapLiteral(m) => m.span,
         }
     }
 }
@@ -726,6 +732,20 @@ pub struct AtPattern {
 pub struct VariantShorthandExpr {
     pub variant_name: SmolStr,
     pub args: Vec<CallArg>,
+    pub span: Span,
+}
+
+/// `[expr, expr, ...]` — list literal expression.
+#[derive(Debug, Clone)]
+pub struct ListLiteralExpr {
+    pub elements: Vec<Expr>,
+    pub span: Span,
+}
+
+/// `#{key: value, ...}` — map literal expression.
+#[derive(Debug, Clone)]
+pub struct MapLiteralExpr {
+    pub entries: Vec<(Expr, Expr)>,
     pub span: Span,
 }
 

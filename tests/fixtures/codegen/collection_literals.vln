@@ -1,0 +1,25 @@
+package com.example;
+
+pub class Collections {
+    fn makeList(self) -> List<Int> {
+        [1, 2, 3]
+    }
+
+    fn emptyList(self) -> List<String> {
+        let empty: List<String> = [];
+        empty
+    }
+
+    fn makeMap(self) -> Map<String, Int> {
+        #{"alice": 100, "bob": 85}
+    }
+
+    fn emptyMap(self) -> Map<String, Int> {
+        let empty: Map<String, Int> = #{};
+        empty
+    }
+
+    fn singleElement(self) -> List<Int> {
+        [42]
+    }
+}

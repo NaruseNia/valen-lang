@@ -775,6 +775,8 @@ impl<'hir> TypeChecker<'hir> {
             valen_ast::Expr::IfLet(il) => self.synth_if_let(il, expected),
             valen_ast::Expr::WhileLet(wl) => self.synth_while_let(wl),
             valen_ast::Expr::VariantShorthand(vs) => self.synth_variant_shorthand(vs, expected),
+            valen_ast::Expr::ListLiteral(l) => self.synth_list_literal(l, expected),
+            valen_ast::Expr::MapLiteral(m) => self.synth_map_literal(m, expected),
         }
     }
 
@@ -2351,6 +2353,87 @@ impl<'hir> TypeChecker<'hir> {
 
     /// Synthesize `.Variant` or `.Variant(args)` by resolving the enum from the
     /// expected type context (or by searching all enums).
+    fn synth_list_literal(
+        &mut self,
+        lit: &valen_ast::ListLiteralExpr,
+        expected: Option<&Ty>,
+    ) -> TypedExpr {
+        let typed_elements: Vec<TypedExpr> =
+            lit.elements.iter().map(|e| self.infer_expr(e)).collect();
+
+        let elem_ty = if let Some(Ty::Generic(name, args)) = expected {
+            if (name == "List" || name == "java.util.List") && !args.is_empty() {
+                args[0].clone()
+            } else {
+                self.unify_element_types(&typed_elements)
+            }
+        } else {
+            self.unify_element_types(&typed_elements)
+        };
+
+        let list_ty = Ty::Generic(SmolStr::from("List"), vec![elem_ty]);
+        let list_ty = self.expand_aliases_in_ty(&list_ty);
+
+        TypedExpr {
+            kind: TypedExprKind::ListLiteral(typed_elements),
+            ty: list_ty,
+            span: lit.span,
+        }
+    }
+
+    fn synth_map_literal(
+        &mut self,
+        lit: &valen_ast::MapLiteralExpr,
+        expected: Option<&Ty>,
+    ) -> TypedExpr {
+        let typed_entries: Vec<(TypedExpr, TypedExpr)> = lit
+            .entries
+            .iter()
+            .map(|(k, v)| (self.infer_expr(k), self.infer_expr(v)))
+            .collect();
+
+        let (key_ty, val_ty) = if let Some(Ty::Generic(name, args)) = expected {
+            if (name == "Map" || name == "java.util.Map") && args.len() >= 2 {
+                (args[0].clone(), args[1].clone())
+            } else {
+                self.unify_map_types(&typed_entries)
+            }
+        } else {
+            self.unify_map_types(&typed_entries)
+        };
+
+        let map_ty = Ty::Generic(SmolStr::from("Map"), vec![key_ty, val_ty]);
+        let map_ty = self.expand_aliases_in_ty(&map_ty);
+
+        TypedExpr {
+            kind: TypedExprKind::MapLiteral(typed_entries),
+            ty: map_ty,
+            span: lit.span,
+        }
+    }
+
+    fn unify_element_types(&self, elements: &[TypedExpr]) -> Ty {
+        if elements.is_empty() {
+            return Ty::Error;
+        }
+        let first = &elements[0].ty;
+        for elem in &elements[1..] {
+            if !elem.ty.is_error() && elem.ty != *first {
+                return first.clone();
+            }
+        }
+        first.clone()
+    }
+
+    fn unify_map_types(&self, entries: &[(TypedExpr, TypedExpr)]) -> (Ty, Ty) {
+        if entries.is_empty() {
+            return (Ty::Error, Ty::Error);
+        }
+        let key_ty = entries[0].0.ty.clone();
+        let val_ty = entries[0].1.ty.clone();
+        (key_ty, val_ty)
+    }
+
     fn synth_variant_shorthand(
         &mut self,
         vs: &valen_ast::VariantShorthandExpr,

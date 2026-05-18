@@ -1404,6 +1404,8 @@ impl Parser {
             TokenKind::Return => self.parse_return_expr(),
             TokenKind::Pipe | TokenKind::PipePipe => self.parse_lambda_expr(),
             TokenKind::Safe => self.parse_safe_expr(),
+            TokenKind::LBracket => self.parse_list_literal(),
+            TokenKind::Hash if self.peek_ahead_is(&TokenKind::LBrace) => self.parse_map_literal(),
             TokenKind::Dot if self.is_variant_shorthand_start() => {
                 self.parse_variant_shorthand_expr()
             }
@@ -1416,6 +1418,50 @@ impl Parser {
                 None
             }
         }
+    }
+
+    /// `[expr, expr, ...]` — empty `[]` allowed with type annotation.
+    fn parse_list_literal(&mut self) -> Option<Expr> {
+        let start = self.expect(TokenKind::LBracket)?;
+        let mut elements = Vec::new();
+        while !self.at(&TokenKind::RBracket) && !self.at_eof() {
+            if !elements.is_empty() {
+                self.expect(TokenKind::Comma)?;
+                if self.at(&TokenKind::RBracket) {
+                    break;
+                }
+            }
+            elements.push(self.parse_expr()?);
+        }
+        let end = self.expect(TokenKind::RBracket)?;
+        Some(Expr::ListLiteral(valen_ast::ListLiteralExpr {
+            elements,
+            span: start.merge(end),
+        }))
+    }
+
+    /// `#{key: value, ...}` — empty `#{}` allowed with type annotation.
+    fn parse_map_literal(&mut self) -> Option<Expr> {
+        let start = self.expect(TokenKind::Hash)?;
+        self.expect(TokenKind::LBrace)?;
+        let mut entries = Vec::new();
+        while !self.at(&TokenKind::RBrace) && !self.at_eof() {
+            if !entries.is_empty() {
+                self.expect(TokenKind::Comma)?;
+                if self.at(&TokenKind::RBrace) {
+                    break;
+                }
+            }
+            let key = self.parse_expr()?;
+            self.expect(TokenKind::Colon)?;
+            let value = self.parse_expr()?;
+            entries.push((key, value));
+        }
+        let end = self.expect(TokenKind::RBrace)?;
+        Some(Expr::MapLiteral(valen_ast::MapLiteralExpr {
+            entries,
+            span: start.merge(end),
+        }))
     }
 
     fn is_variant_shorthand_start(&self) -> bool {
@@ -2303,6 +2349,8 @@ fn expr_span(expr: &Expr) -> Span {
         Expr::IfLet(i) => i.span,
         Expr::WhileLet(w) => w.span,
         Expr::VariantShorthand(v) => v.span,
+        Expr::ListLiteral(l) => l.span,
+        Expr::MapLiteral(m) => m.span,
     }
 }
 

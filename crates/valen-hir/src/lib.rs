@@ -744,6 +744,10 @@ pub enum TypedExprKind {
         expr: Box<TypedExpr>,
         body: Box<TypedBody>,
     },
+    /// `[expr, ...]` — list literal lowered to ArrayList construction.
+    ListLiteral(Vec<TypedExpr>),
+    /// `#{key: value, ...}` — map literal lowered to HashMap construction.
+    MapLiteral(Vec<(TypedExpr, TypedExpr)>),
     Error,
 }
 
