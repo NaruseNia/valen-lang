@@ -1700,17 +1700,17 @@ impl<'hir> TypeChecker<'hir> {
                                 .map(&resolve_self_ty)
                                 .unwrap_or_else(Ty::unit);
 
-                            let bindings = if !generic_args.is_empty() {
+                            let mut bindings = if !generic_args.is_empty() {
                                 self.build_class_type_bindings(tn, &generic_args)
                             } else {
                                 IndexMap::new()
                             };
 
-                            let ret_ty = if !bindings.is_empty() {
-                                substitute_ty(&raw_ret_ty, &bindings)
-                            } else {
-                                raw_ret_ty
-                            };
+                            let method_type_params: Vec<SmolStr> = fdef
+                                .generic_bounds
+                                .iter()
+                                .map(|(name, _)| name.clone())
+                                .collect();
 
                             let non_self_params: Vec<_> =
                                 fdef.params.iter().filter(|p| !p.is_self).collect();
@@ -1727,6 +1727,22 @@ impl<'hir> TypeChecker<'hir> {
                                     )),
                                 );
                             } else {
+                                if !method_type_params.is_empty() {
+                                    for (arg, param) in args.iter().zip(non_self_params.iter()) {
+                                        let expected = tyref_to_ty_generic(&param.ty);
+                                        let substituted = if !bindings.is_empty() {
+                                            substitute_ty(&expected, &bindings)
+                                        } else {
+                                            expected
+                                        };
+                                        collect_bindings(
+                                            &substituted,
+                                            &arg.ty,
+                                            &mut bindings,
+                                        );
+                                    }
+                                }
+
                                 for (arg, param) in args.iter().zip(non_self_params.iter()) {
                                     let mut expected = tyref_to_ty_generic(&param.ty);
                                     if !bindings.is_empty() {
@@ -1734,6 +1750,7 @@ impl<'hir> TypeChecker<'hir> {
                                     }
                                     if !arg.ty.is_error()
                                         && !expected.is_error()
+                                        && !expected.has_type_params()
                                         && arg.ty != expected
                                     {
                                         self.diags.error(
@@ -1747,6 +1764,12 @@ impl<'hir> TypeChecker<'hir> {
                                     }
                                 }
                             }
+
+                            let ret_ty = if !bindings.is_empty() {
+                                substitute_ty(&raw_ret_ty, &bindings)
+                            } else {
+                                raw_ret_ty
+                            };
 
                             return TypedExpr {
                                 kind: TypedExprKind::MethodCall {

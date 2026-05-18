@@ -426,6 +426,18 @@ impl Ty {
     pub fn is_bool(&self) -> bool {
         matches!(self, Ty::Prim(PrimTy::Bool))
     }
+    /// `true` if this type contains any unresolved type parameters.
+    pub fn has_type_params(&self) -> bool {
+        match self {
+            Ty::TypeParam(_) => true,
+            Ty::Generic(_, args) => args.iter().any(|a| a.has_type_params()),
+            Ty::Nullable(inner) => inner.has_type_params(),
+            Ty::Fn(params, ret) => {
+                params.iter().any(|p| p.has_type_params()) || ret.has_type_params()
+            }
+            _ => false,
+        }
+    }
 }
 
 impl std::fmt::Display for Ty {
