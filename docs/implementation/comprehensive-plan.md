@@ -18,10 +18,11 @@ ECS テストプロジェクト（`examples/ecs-system`）から発見された 
 | Phase 1 (MVP) | 15/17 | TASK-013, 016 | Gradle plugin + サンプル |
 | Phase 1.5 M6 | 5/5 | — | stub 全潰し完了（StubBody 除去済み） |
 | Phase 1.5 M7 | 4/4 | — | 基盤整備完了 |
-| Phase 1.5 M8 | 6/7 | TASK-033 | TASK-028 ✅, TASK-031 ✅ |
+| Phase 1.5 M8 | 7/7 | — | ✅ TASK-028, TASK-031, TASK-033 完了 |
 | M9 | 5/5 | — | ✅ Critical Fixes 完了 |
 | M9.5 | 2/2 | — | ✅ Bug Polish 完了 |
 | M10 | 4/4 | — | ✅ Practical Usability 完了 |
+| M12 | 4/4 | — | ✅ Phase 2 Core 完了 |
 | 要件 | 42/45 Done | 3 Draft | REQ-EMIT-004, REQ-TOOL-002, REQ-STDLIB-003 |
 
 ---
@@ -499,10 +500,10 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 | TASK-042 | JVM reserved word handling | #113 | M10 | — | S | ✅ PR #141 |
 | TASK-045 | f-string | #117 | M10 | — | M | ✅ PR #142 |
 | TASK-050 | Collection operations | #114 | M11 | TASK-033 | M |
-| TASK-046 | if let / while let | #111, VEP-029 | M12 | M9 | L |
-| TASK-047 | let-else | VEP-028 | M12 | M9 | L | ✅ |
-| TASK-048 | derive | VEP-013 | M12 | TASK-030 ✅ | L |
-| TASK-049 | enum variant shorthand | #110 | M12 | TASK-046 | M | ✅ |
+| TASK-046 | if let / while let | #111, VEP-029 | M12 | M9 | L | ✅ PR #145 |
+| TASK-047 | let-else | VEP-028 | M12 | M9 | L | ✅ PR #146 |
+| TASK-048 | derive | VEP-013 | M12 | TASK-030 ✅ | L | ✅ PR #152 |
+| TASK-049 | enum variant shorthand | #110 | M12 | TASK-046 | M | ✅ PR #153 |
 | TASK-051 | Collection literal | VEP-030 | M13 | — | M |
 | TASK-052 | Pipeline operator | VEP-005 | M13 | — | S |
 | TASK-053 | Refinement / newtype | VEP-011 | M13 | — | L |
@@ -519,7 +520,7 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 | TASK-016 | サンプルプロジェクト | M11 | 未着手 |
 | TASK-028 | 演算子オーバーロード | M11 | ✅ 実装済み（M8 時点で完了、e2e テスト green） |
 | TASK-031 | valenfmt 最小実装 | M11 | ✅ 実装済み（CLI + 32 テスト + --check モード） |
-| TASK-033 | stdlib 二層化 + 強化 | M11 | 未着手 |
+| TASK-033 | stdlib 二層化 + 強化 | M11 | ✅ 実装済み（core.vln Phase 1-5 完了、collections typealias、trait 群定義） |
 
 ---
 
@@ -660,3 +661,4 @@ unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
 |------|------|
 | 2026-05-17 | 初版策定。Issue 17件 + VEP 8件 + Phase 1/1.5 残5件を統合。grill-me レビューで構文設計 11 項目確定 |
 | 2026-05-17 | M9/M9.5/M10 全タスク完了（11 PR マージ）。TASK-028, 031 既存完了を確認。VEP-031 (ref mut T) 起票 |
+| 2026-05-18 | M12 全タスク完了。TASK-046 (if let/while let, PR #145)、TASK-048 (derive, PR #152)、TASK-049 (variant shorthand, PR #153) を完了マーク。TASK-033 (stdlib 二層化) を Phase 1-5 完了として反映。M8 クローズ |
