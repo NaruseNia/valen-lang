@@ -1825,22 +1825,18 @@ impl<'a> ExprLowering<'a> {
 
         match method {
             "collect" => self.emit_iter_collect(receiver, &elem_ty),
-            "map" if !args.is_empty() => self.emit_iter_map(receiver, &args[0], &elem_ty, result_ty),
-            "filter" if !args.is_empty() => {
-                self.emit_iter_filter(receiver, &args[0], &elem_ty)
+            "map" if !args.is_empty() => {
+                self.emit_iter_map(receiver, &args[0], &elem_ty, result_ty)
             }
+            "filter" if !args.is_empty() => self.emit_iter_filter(receiver, &args[0], &elem_ty),
             "fold" if args.len() >= 2 => {
                 self.emit_iter_fold(receiver, &args[0], &args[1], result_ty)
             }
-            "forEach" if !args.is_empty() => {
-                self.emit_iter_for_each(receiver, &args[0], &elem_ty)
-            }
+            "forEach" if !args.is_empty() => self.emit_iter_for_each(receiver, &args[0], &elem_ty),
             "count" => self.emit_iter_count(receiver),
             "any" if !args.is_empty() => self.emit_iter_any(receiver, &args[0], &elem_ty),
             "all" if !args.is_empty() => self.emit_iter_all(receiver, &args[0], &elem_ty),
-            "find" if !args.is_empty() => {
-                self.emit_iter_find(receiver, &args[0], &elem_ty)
-            }
+            "find" if !args.is_empty() => self.emit_iter_find(receiver, &args[0], &elem_ty),
             _ => return false,
         }
         true
@@ -1875,8 +1871,7 @@ impl<'a> ExprLowering<'a> {
             opt_slot,
             JvmType::Object("valen/core/Option".to_string()),
         ));
-        self.ops
-            .push(JvmOp::Checkcast(some_class.to_string()));
+        self.ops.push(JvmOp::Checkcast(some_class.to_string()));
         self.ops.push(JvmOp::GetField {
             owner: some_class.to_string(),
             name: "value".to_string(),
@@ -2094,12 +2089,7 @@ impl<'a> ExprLowering<'a> {
     }
 
     /// `iter.filter(predicate) -> List<T>`: keep elements matching predicate.
-    fn emit_iter_filter(
-        &mut self,
-        receiver: &TypedExpr,
-        pred_expr: &TypedExpr,
-        elem_ty: &JvmType,
-    ) {
+    fn emit_iter_filter(&mut self, receiver: &TypedExpr, pred_expr: &TypedExpr, elem_ty: &JvmType) {
         self.push_scope();
         let (iter_slot, iter_jvm) = self.store_iterator(receiver);
 
@@ -2262,7 +2252,7 @@ impl<'a> ExprLowering<'a> {
             JvmType::Object(JVM_OBJECT.to_string()),
         ));
         self.emit_invoke_fn2(&JvmType::Object(JVM_OBJECT.to_string()));
-        self.emit_box(&acc_jvm);
+        // Result is already Object from BiFunction.apply — store directly
         self.ops.push(JvmOp::StoreLocal(
             acc_slot,
             JvmType::Object(JVM_OBJECT.to_string()),
@@ -2287,12 +2277,7 @@ impl<'a> ExprLowering<'a> {
     }
 
     /// `iter.forEach(f)`: call f for each element, returns Unit.
-    fn emit_iter_for_each(
-        &mut self,
-        receiver: &TypedExpr,
-        f_expr: &TypedExpr,
-        elem_ty: &JvmType,
-    ) {
+    fn emit_iter_for_each(&mut self, receiver: &TypedExpr, f_expr: &TypedExpr, elem_ty: &JvmType) {
         self.push_scope();
         let (iter_slot, iter_jvm) = self.store_iterator(receiver);
 
@@ -2360,8 +2345,7 @@ impl<'a> ExprLowering<'a> {
         self.ops.push(JvmOp::PushInt(0));
         let count_slot = self.next_slot;
         self.next_slot += 1;
-        self.ops
-            .push(JvmOp::StoreLocal(count_slot, JvmType::Int));
+        self.ops.push(JvmOp::StoreLocal(count_slot, JvmType::Int));
 
         let loop_label = self.alloc_label();
         let end_label = self.alloc_label();
@@ -2388,8 +2372,7 @@ impl<'a> ExprLowering<'a> {
         self.ops.push(JvmOp::LoadLocal(count_slot, JvmType::Int));
         self.ops.push(JvmOp::PushInt(1));
         self.ops.push(JvmOp::Arith(ArithOp::Add, JvmType::Int));
-        self.ops
-            .push(JvmOp::StoreLocal(count_slot, JvmType::Int));
+        self.ops.push(JvmOp::StoreLocal(count_slot, JvmType::Int));
 
         self.ops.push(JvmOp::Goto(loop_label));
 
@@ -2400,12 +2383,7 @@ impl<'a> ExprLowering<'a> {
     }
 
     /// `iter.any(pred) -> Bool`: true if any element matches.
-    fn emit_iter_any(
-        &mut self,
-        receiver: &TypedExpr,
-        pred_expr: &TypedExpr,
-        elem_ty: &JvmType,
-    ) {
+    fn emit_iter_any(&mut self, receiver: &TypedExpr, pred_expr: &TypedExpr, elem_ty: &JvmType) {
         self.push_scope();
         let (iter_slot, iter_jvm) = self.store_iterator(receiver);
 
@@ -2417,9 +2395,14 @@ impl<'a> ExprLowering<'a> {
             JvmType::Object(JVM_OBJECT.to_string()),
         ));
 
+        // result = false
+        self.ops.push(JvmOp::PushInt(0));
+        let result_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(result_slot, JvmType::Int));
+
         let loop_label = self.alloc_label();
-        let true_label = self.alloc_label();
-        let false_label = self.alloc_label();
+        let end_label = self.alloc_label();
 
         self.ops.push(JvmOp::Label(loop_label));
         self.emit_frame(vec![]);
@@ -2437,7 +2420,7 @@ impl<'a> ExprLowering<'a> {
         ));
         self.ops
             .push(JvmOp::Instanceof("valen/core/Option$Some".to_string()));
-        self.ops.push(JvmOp::IfEq(false_label));
+        self.ops.push(JvmOp::IfEq(end_label));
 
         self.emit_extract_some_value(opt_slot, elem_ty);
         self.emit_box(elem_ty);
@@ -2457,31 +2440,19 @@ impl<'a> ExprLowering<'a> {
             JvmType::Object(JVM_OBJECT.to_string()),
         ));
         self.emit_invoke_fn1(&JvmType::Boolean);
-        self.ops.push(JvmOp::IfNe(true_label));
-        self.ops.push(JvmOp::Goto(loop_label));
-
-        self.ops.push(JvmOp::Label(true_label));
-        self.emit_frame(vec![]);
+        self.ops.push(JvmOp::IfEq(loop_label));
+        // predicate matched — store true and exit
         self.ops.push(JvmOp::PushInt(1));
-        let end_label = self.alloc_label();
-        self.ops.push(JvmOp::Goto(end_label));
-
-        self.ops.push(JvmOp::Label(false_label));
-        self.emit_frame(vec![]);
-        self.ops.push(JvmOp::PushInt(0));
+        self.ops.push(JvmOp::StoreLocal(result_slot, JvmType::Int));
 
         self.ops.push(JvmOp::Label(end_label));
         self.emit_frame(vec![]);
+        self.ops.push(JvmOp::LoadLocal(result_slot, JvmType::Int));
         self.pop_scope();
     }
 
     /// `iter.all(pred) -> Bool`: true if all elements match.
-    fn emit_iter_all(
-        &mut self,
-        receiver: &TypedExpr,
-        pred_expr: &TypedExpr,
-        elem_ty: &JvmType,
-    ) {
+    fn emit_iter_all(&mut self, receiver: &TypedExpr, pred_expr: &TypedExpr, elem_ty: &JvmType) {
         self.push_scope();
         let (iter_slot, iter_jvm) = self.store_iterator(receiver);
 
@@ -2493,9 +2464,14 @@ impl<'a> ExprLowering<'a> {
             JvmType::Object(JVM_OBJECT.to_string()),
         ));
 
+        // result = true (assume all match until proven otherwise)
+        self.ops.push(JvmOp::PushInt(1));
+        let result_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(result_slot, JvmType::Int));
+
         let loop_label = self.alloc_label();
-        let false_label = self.alloc_label();
-        let true_label = self.alloc_label();
+        let end_label = self.alloc_label();
 
         self.ops.push(JvmOp::Label(loop_label));
         self.emit_frame(vec![]);
@@ -2513,7 +2489,7 @@ impl<'a> ExprLowering<'a> {
         ));
         self.ops
             .push(JvmOp::Instanceof("valen/core/Option$Some".to_string()));
-        self.ops.push(JvmOp::IfEq(true_label));
+        self.ops.push(JvmOp::IfEq(end_label));
 
         self.emit_extract_some_value(opt_slot, elem_ty);
         self.emit_box(elem_ty);
@@ -2533,31 +2509,19 @@ impl<'a> ExprLowering<'a> {
             JvmType::Object(JVM_OBJECT.to_string()),
         ));
         self.emit_invoke_fn1(&JvmType::Boolean);
-        self.ops.push(JvmOp::IfEq(false_label));
-        self.ops.push(JvmOp::Goto(loop_label));
-
-        self.ops.push(JvmOp::Label(false_label));
-        self.emit_frame(vec![]);
+        self.ops.push(JvmOp::IfNe(loop_label));
+        // predicate failed — store false and exit
         self.ops.push(JvmOp::PushInt(0));
-        let end_label = self.alloc_label();
-        self.ops.push(JvmOp::Goto(end_label));
-
-        self.ops.push(JvmOp::Label(true_label));
-        self.emit_frame(vec![]);
-        self.ops.push(JvmOp::PushInt(1));
+        self.ops.push(JvmOp::StoreLocal(result_slot, JvmType::Int));
 
         self.ops.push(JvmOp::Label(end_label));
         self.emit_frame(vec![]);
+        self.ops.push(JvmOp::LoadLocal(result_slot, JvmType::Int));
         self.pop_scope();
     }
 
     /// `iter.find(pred) -> Option<T>`: return first matching element.
-    fn emit_iter_find(
-        &mut self,
-        receiver: &TypedExpr,
-        pred_expr: &TypedExpr,
-        elem_ty: &JvmType,
-    ) {
+    fn emit_iter_find(&mut self, receiver: &TypedExpr, pred_expr: &TypedExpr, elem_ty: &JvmType) {
         self.push_scope();
         let (iter_slot, iter_jvm) = self.store_iterator(receiver);
 
@@ -2569,9 +2533,25 @@ impl<'a> ExprLowering<'a> {
             JvmType::Object(JVM_OBJECT.to_string()),
         ));
 
+        // result = None initially
+        self.ops
+            .push(JvmOp::New("valen/core/Option$None".to_string()));
+        self.ops.push(JvmOp::Dup);
+        self.ops.push(JvmOp::InvokeSpecial {
+            owner: "valen/core/Option$None".to_string(),
+            name: "<init>".to_string(),
+            params: vec![],
+            ret: JvmType::Void,
+        });
+        let result_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            result_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
+
         let loop_label = self.alloc_label();
-        let found_label = self.alloc_label();
-        let none_label = self.alloc_label();
+        let end_label = self.alloc_label();
 
         self.ops.push(JvmOp::Label(loop_label));
         self.emit_frame(vec![]);
@@ -2589,7 +2569,7 @@ impl<'a> ExprLowering<'a> {
         ));
         self.ops
             .push(JvmOp::Instanceof("valen/core/Option$Some".to_string()));
-        self.ops.push(JvmOp::IfEq(none_label));
+        self.ops.push(JvmOp::IfEq(end_label));
 
         self.emit_extract_some_value(opt_slot, elem_ty);
         self.emit_box(elem_ty);
@@ -2609,13 +2589,11 @@ impl<'a> ExprLowering<'a> {
             JvmType::Object(JVM_OBJECT.to_string()),
         ));
         self.emit_invoke_fn1(&JvmType::Boolean);
-        self.ops.push(JvmOp::IfNe(found_label));
-        self.ops.push(JvmOp::Goto(loop_label));
+        self.ops.push(JvmOp::IfEq(loop_label));
 
-        // Found: wrap in Some
-        self.ops.push(JvmOp::Label(found_label));
-        self.emit_frame(vec![]);
-        self.ops.push(JvmOp::New("valen/core/Option$Some".to_string()));
+        // predicate matched — store Some(elem) and exit
+        self.ops
+            .push(JvmOp::New("valen/core/Option$Some".to_string()));
         self.ops.push(JvmOp::Dup);
         self.ops.push(JvmOp::LoadLocal(
             elem_slot,
@@ -2627,23 +2605,17 @@ impl<'a> ExprLowering<'a> {
             params: vec![JvmType::Object(JVM_OBJECT.to_string())],
             ret: JvmType::Void,
         });
-        let end_label = self.alloc_label();
-        self.ops.push(JvmOp::Goto(end_label));
-
-        // Not found: return None
-        self.ops.push(JvmOp::Label(none_label));
-        self.emit_frame(vec![]);
-        self.ops.push(JvmOp::New("valen/core/Option$None".to_string()));
-        self.ops.push(JvmOp::Dup);
-        self.ops.push(JvmOp::InvokeSpecial {
-            owner: "valen/core/Option$None".to_string(),
-            name: "<init>".to_string(),
-            params: vec![],
-            ret: JvmType::Void,
-        });
+        self.ops.push(JvmOp::StoreLocal(
+            result_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
 
         self.ops.push(JvmOp::Label(end_label));
         self.emit_frame(vec![]);
+        self.ops.push(JvmOp::LoadLocal(
+            result_slot,
+            JvmType::Object("valen/core/Option".to_string()),
+        ));
         self.pop_scope();
     }
 

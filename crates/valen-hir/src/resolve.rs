@@ -559,7 +559,6 @@ impl Resolver {
         let generic_bounds = f
             .generics
             .iter()
-            .filter(|g| !g.bounds.is_empty())
             .map(|g| {
                 let bounds = g
                     .bounds

@@ -889,3 +889,13 @@ fn fixture_variant_shorthand() {
         "missing isRed method"
     );
 }
+
+#[test]
+fn fixture_iterator_collection_ops() {
+    let classes = compile_fixture("iterator_collection_ops.vln");
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+    assert_eq!(c.class_name().unwrap(), "com/example/IterOps");
+    // <init> + 8 iterator methods + synthetic lambda methods
+    assert!(c.methods.len() >= 9);
+}

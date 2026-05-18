@@ -201,11 +201,7 @@ fn generate_list_iterator_class() -> JvmClass {
                 // none:
                 JvmOp::Label(label_none),
                 JvmOp::Frame {
-                    locals: vec![
-                        obj.clone(),
-                        obj.clone(),
-                        JvmType::Int,
-                    ],
+                    locals: vec![obj.clone(), obj.clone(), JvmType::Int],
                     stack: vec![],
                 },
                 JvmOp::New("valen/core/Option$None".to_string()),
@@ -1245,7 +1241,10 @@ mod tests {
         ];
         let hir = make_hir_with_class("User", ClassDefKind::Final, params, Vis::Pub);
         let classes = lower_hir(&hir, &IndexMap::new());
-        let c = classes.iter().find(|c| c.name != "valen/core/ListIterator").unwrap();
+        let c = classes
+            .iter()
+            .find(|c| c.name != "valen/core/ListIterator")
+            .unwrap();
         assert_eq!(c.fields.len(), 2);
 
         assert_eq!(c.fields[0].name, "name");
@@ -1264,7 +1263,10 @@ mod tests {
     fn lower_abstract_class() {
         let hir = make_hir_with_class("Shape", ClassDefKind::Abstract, vec![], Vis::Pub);
         let classes = lower_hir(&hir, &IndexMap::new());
-        let c = classes.iter().find(|c| c.name != "valen/core/ListIterator").unwrap();
+        let c = classes
+            .iter()
+            .find(|c| c.name != "valen/core/ListIterator")
+            .unwrap();
         assert!(c.access.is_abstract);
         assert!(!c.access.is_final);
     }
@@ -1273,7 +1275,10 @@ mod tests {
     fn lower_open_class() {
         let hir = make_hir_with_class("Animal", ClassDefKind::Open, vec![], Vis::Pub);
         let classes = lower_hir(&hir, &IndexMap::new());
-        let c = classes.iter().find(|c| c.name != "valen/core/ListIterator").unwrap();
+        let c = classes
+            .iter()
+            .find(|c| c.name != "valen/core/ListIterator")
+            .unwrap();
         assert!(!c.access.is_abstract);
         assert!(!c.access.is_final);
     }
@@ -1395,7 +1400,10 @@ mod tests {
         );
 
         let classes = lower_hir(&hir, &IndexMap::new());
-        let c = classes.iter().find(|c| c.name != "valen/core/ListIterator").unwrap();
+        let c = classes
+            .iter()
+            .find(|c| c.name != "valen/core/ListIterator")
+            .unwrap();
         assert_eq!(c.methods.len(), 2); // <init> + greet
         let greet = &c.methods[1];
         assert_eq!(greet.name, "greet");
@@ -1472,7 +1480,10 @@ mod tests {
         });
 
         let classes = lower_hir(&hir, &IndexMap::new());
-        let c = classes.iter().find(|c| c.name != "valen/core/ListIterator").unwrap();
+        let c = classes
+            .iter()
+            .find(|c| c.name != "valen/core/ListIterator")
+            .unwrap();
         assert_eq!(c.name, "Dog");
         assert_eq!(c.interfaces, vec!["Greeter"]);
         assert_eq!(c.methods.len(), 2); // <init> + greet

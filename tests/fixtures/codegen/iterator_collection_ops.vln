@@ -1,0 +1,35 @@
+package com.example;
+
+pub class IterOps {
+    fn sumFold(self, iter: Iterator<Int>) -> Int {
+        iter.fold(0, |acc: Int, x: Int| -> Int { acc + x })
+    }
+
+    fn countItems(self, iter: Iterator<Int>) -> Int {
+        iter.count()
+    }
+
+    fn hasPositive(self, iter: Iterator<Int>) -> Bool {
+        iter.any(|x: Int| -> Bool { x > 0 })
+    }
+
+    fn allPositive(self, iter: Iterator<Int>) -> Bool {
+        iter.all(|x: Int| -> Bool { x > 0 })
+    }
+
+    fn findNegative(self, iter: Iterator<Int>) -> Option<Int> {
+        iter.find(|x: Int| -> Bool { x < 0 })
+    }
+
+    fn collectAll(self, iter: Iterator<Int>) -> List<Int> {
+        iter.collect()
+    }
+
+    fn filterPositive(self, iter: Iterator<Int>) -> List<Int> {
+        iter.filter(|x: Int| -> Bool { x > 0 })
+    }
+
+    fn doubleAll(self, iter: Iterator<Int>) -> List<Int> {
+        iter.map(|x: Int| -> Int { x * 2 })
+    }
+}

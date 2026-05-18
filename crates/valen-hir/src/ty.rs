@@ -138,6 +138,36 @@ impl<'hir> TypeChecker<'hir> {
         }
     }
 
+    fn expand_aliases_in_ty(&self, ty: &Ty) -> Ty {
+        match ty {
+            Ty::Generic(name, args) => {
+                let expanded_args: Vec<Ty> =
+                    args.iter().map(|a| self.expand_aliases_in_ty(a)).collect();
+                if let Some(expanded) = self.expand_type_alias(name, &expanded_args) {
+                    expanded
+                } else {
+                    Ty::Generic(name.clone(), expanded_args)
+                }
+            }
+            Ty::Named(name) => {
+                if let Some(expanded) = self.expand_type_alias(name, &[]) {
+                    expanded
+                } else {
+                    ty.clone()
+                }
+            }
+            Ty::Nullable(inner) => Ty::Nullable(Box::new(self.expand_aliases_in_ty(inner))),
+            Ty::Fn(params, ret) => Ty::Fn(
+                params
+                    .iter()
+                    .map(|p| self.expand_aliases_in_ty(p))
+                    .collect(),
+                Box::new(self.expand_aliases_in_ty(ret)),
+            ),
+            _ => ty.clone(),
+        }
+    }
+
     fn expand_type_alias(&self, name: &str, args: &[Ty]) -> Option<Ty> {
         let def = self.hir.defs.values().find(|d| d.name == name)?;
         let alias = match &def.kind {
@@ -330,10 +360,19 @@ impl<'hir> TypeChecker<'hir> {
         self.env
             .define(SmolStr::from("print"), string_to_unit, false);
 
-        let list_t = Ty::Generic(SmolStr::from("List"), vec![Ty::TypeParam(SmolStr::from("T"))]);
-        let iter_t = Ty::Generic(SmolStr::from("Iterator"), vec![Ty::TypeParam(SmolStr::from("T"))]);
-        self.env
-            .define(SmolStr::from("iter"), Ty::Fn(vec![list_t], Box::new(iter_t)), false);
+        let list_t = Ty::Generic(
+            SmolStr::from("List"),
+            vec![Ty::TypeParam(SmolStr::from("T"))],
+        );
+        let iter_t = Ty::Generic(
+            SmolStr::from("Iterator"),
+            vec![Ty::TypeParam(SmolStr::from("T"))],
+        );
+        self.env.define(
+            SmolStr::from("iter"),
+            Ty::Fn(vec![list_t], Box::new(iter_t)),
+            false,
+        );
     }
 
     fn fn_decl_ty(&self, f: &valen_ast::FnDecl) -> Ty {
@@ -1740,11 +1779,7 @@ impl<'hir> TypeChecker<'hir> {
                                         } else {
                                             expected
                                         };
-                                        collect_bindings(
-                                            &substituted,
-                                            &arg.ty,
-                                            &mut bindings,
-                                        );
+                                        collect_bindings(&substituted, &arg.ty, &mut bindings);
                                     }
                                 }
 
@@ -1753,6 +1788,7 @@ impl<'hir> TypeChecker<'hir> {
                                     if !bindings.is_empty() {
                                         expected = substitute_ty(&expected, &bindings);
                                     }
+                                    expected = self.expand_aliases_in_ty(&expected);
                                     if !arg.ty.is_error()
                                         && !expected.is_error()
                                         && !expected.has_type_params()
@@ -1775,6 +1811,7 @@ impl<'hir> TypeChecker<'hir> {
                             } else {
                                 raw_ret_ty
                             };
+                            let ret_ty = self.expand_aliases_in_ty(&ret_ty);
 
                             return TypedExpr {
                                 kind: TypedExprKind::MethodCall {
