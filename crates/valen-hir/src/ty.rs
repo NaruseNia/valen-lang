@@ -95,6 +95,8 @@ struct TypeChecker<'hir> {
     in_loop: bool,
     type_params: IndexSet<SmolStr>,
     type_param_bounds: IndexMap<SmolStr, Vec<SmolStr>>,
+    /// The concrete type that `Self` resolves to in the current class/impl context.
+    current_self_ty: Option<Ty>,
 }
 
 impl<'hir> TypeChecker<'hir> {
@@ -103,6 +105,7 @@ impl<'hir> TypeChecker<'hir> {
             hir,
             env: TypeEnv::new(),
             diags: Diagnostics::new(),
+            current_self_ty: None,
             bodies: IndexMap::new(),
             return_ty: None,
             in_loop: false,
@@ -348,6 +351,11 @@ impl<'hir> TypeChecker<'hir> {
             valen_ast::Type::Path(tp) => {
                 if tp.segments.len() == 1 {
                     let seg = &tp.segments[0];
+                    if seg.name == "Self" {
+                        if let Some(ref sty) = self.current_self_ty {
+                            return sty.clone();
+                        }
+                    }
                     if let Some(prim) = crate::resolve_prim(&seg.name) {
                         return Ty::Prim(prim);
                     }
@@ -472,6 +480,7 @@ impl<'hir> TypeChecker<'hir> {
     fn check_class(&mut self, c: &valen_ast::ClassDecl) {
         let prev_type_params = std::mem::take(&mut self.type_params);
         let prev_bounds = std::mem::take(&mut self.type_param_bounds);
+        let prev_self_ty = self.current_self_ty.take();
         for g in &c.generics {
             self.type_params.insert(g.name.clone());
             let bounds: Vec<SmolStr> = g
@@ -491,6 +500,7 @@ impl<'hir> TypeChecker<'hir> {
             }
         }
         let self_ty = Ty::Named(c.name.clone());
+        self.current_self_ty = Some(self_ty.clone());
         for member in &c.body {
             if let valen_ast::ClassMember::Method(m) = member {
                 let def_id = self.lookup_method_def_id(&c.name, &m.name);
@@ -499,6 +509,7 @@ impl<'hir> TypeChecker<'hir> {
         }
         self.type_params = prev_type_params;
         self.type_param_bounds = prev_bounds;
+        self.current_self_ty = prev_self_ty;
     }
 
     fn check_impl(&mut self, imp: &valen_ast::ImplBlock) {
@@ -523,6 +534,7 @@ impl<'hir> TypeChecker<'hir> {
             }
         }
         let self_ty = self.resolve_ast_type(&imp.target);
+        let prev_self_ty = self.current_self_ty.replace(self_ty.clone());
         let target_type_name = self.impl_target_name(&imp.target);
         for item in &imp.items {
             if let valen_ast::ImplItem::Fn(m) = item {
@@ -536,6 +548,7 @@ impl<'hir> TypeChecker<'hir> {
         }
         self.type_params = prev_type_params;
         self.type_param_bounds = prev_bounds;
+        self.current_self_ty = prev_self_ty;
     }
 
     fn check_trait(&mut self, t: &valen_ast::TraitDecl) {
