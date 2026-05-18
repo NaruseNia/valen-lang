@@ -899,3 +899,13 @@ fn fixture_iterator_collection_ops() {
     // <init> + 8 iterator methods + synthetic lambda methods
     assert!(c.methods.len() >= 9);
 }
+
+#[test]
+fn fixture_collection_literals() {
+    let classes = compile_fixture("collection_literals.vln");
+    assert_eq!(classes.len(), 1);
+    let c = &classes[0];
+    assert_eq!(c.class_name().unwrap(), "com/example/Collections");
+    // <init> + makeList + emptyList + makeMap + emptyMap + singleElement
+    assert_eq!(c.methods.len(), 6);
+}

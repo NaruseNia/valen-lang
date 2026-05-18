@@ -775,6 +775,8 @@ impl<'hir> TypeChecker<'hir> {
             valen_ast::Expr::IfLet(il) => self.synth_if_let(il, expected),
             valen_ast::Expr::WhileLet(wl) => self.synth_while_let(wl),
             valen_ast::Expr::VariantShorthand(vs) => self.synth_variant_shorthand(vs, expected),
+            valen_ast::Expr::ListLiteral(l) => self.synth_list_literal(l, expected),
+            valen_ast::Expr::MapLiteral(m) => self.synth_map_literal(m, expected),
         }
     }
 
@@ -2351,6 +2353,149 @@ impl<'hir> TypeChecker<'hir> {
 
     /// Synthesize `.Variant` or `.Variant(args)` by resolving the enum from the
     /// expected type context (or by searching all enums).
+    fn synth_list_literal(
+        &mut self,
+        lit: &valen_ast::ListLiteralExpr,
+        expected: Option<&Ty>,
+    ) -> TypedExpr {
+        let expected_elem = match expected {
+            Some(Ty::Generic(name, args)) if !args.is_empty() => {
+                let n = name.as_str();
+                if n == "List"
+                    || n == "java.util.List"
+                    || n == "ArrayList"
+                    || n == "java.util.ArrayList"
+                {
+                    Some(args[0].clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+
+        let has_list_annotation = expected_elem.is_some()
+            || matches!(expected, Some(Ty::Named(n)) if n.contains("List") || n.contains("java.util"));
+
+        if lit.elements.is_empty() && !has_list_annotation {
+            self.diags.error(
+                DiagCode::TYPE_MISMATCH,
+                lit.span,
+                SmolStr::from("empty list literal requires a type annotation"),
+            );
+        }
+
+        let mut typed_elements = Vec::new();
+        let mut elem_ty = expected_elem;
+
+        for e in &lit.elements {
+            let te = self.infer_expr(e);
+            if let Some(ref expected) = elem_ty {
+                if !te.ty.is_error() && te.ty != *expected && !is_subtype(&te.ty, expected) {
+                    self.diags.error(
+                        DiagCode::TYPE_MISMATCH,
+                        te.span,
+                        SmolStr::from(format!(
+                            "expected list element `{expected}`, found `{}`",
+                            te.ty
+                        )),
+                    );
+                }
+            } else {
+                elem_ty = Some(te.ty.clone());
+            }
+            typed_elements.push(te);
+        }
+
+        let elem_ty = elem_ty.unwrap_or(Ty::Error);
+        let list_ty = Ty::Generic(SmolStr::from("List"), vec![elem_ty]);
+        let list_ty = self.expand_aliases_in_ty(&list_ty);
+
+        TypedExpr {
+            kind: TypedExprKind::ListLiteral(typed_elements),
+            ty: list_ty,
+            span: lit.span,
+        }
+    }
+
+    fn synth_map_literal(
+        &mut self,
+        lit: &valen_ast::MapLiteralExpr,
+        expected: Option<&Ty>,
+    ) -> TypedExpr {
+        let expected_kv = match expected {
+            Some(Ty::Generic(name, args))
+                if (name == "Map" || name == "java.util.Map") && args.len() >= 2 =>
+            {
+                Some((args[0].clone(), args[1].clone()))
+            }
+            _ => None,
+        };
+
+        let has_map_annotation = expected_kv.is_some()
+            || matches!(expected, Some(Ty::Named(n)) if n.contains("Map") || n.contains("java.util"));
+
+        if lit.entries.is_empty() && !has_map_annotation {
+            self.diags.error(
+                DiagCode::TYPE_MISMATCH,
+                lit.span,
+                SmolStr::from("empty map literal requires a type annotation"),
+            );
+        }
+
+        let mut typed_entries = Vec::new();
+        let mut key_ty = expected_kv.as_ref().map(|(k, _)| k.clone());
+        let mut val_ty = expected_kv.as_ref().map(|(_, v)| v.clone());
+
+        for (k, v) in &lit.entries {
+            let tk = self.infer_expr(k);
+            let tv = self.infer_expr(v);
+
+            if let Some(ref expected_k) = key_ty {
+                if !tk.ty.is_error() && tk.ty != *expected_k && !is_subtype(&tk.ty, expected_k) {
+                    self.diags.error(
+                        DiagCode::TYPE_MISMATCH,
+                        tk.span,
+                        SmolStr::from(format!(
+                            "expected map key `{expected_k}`, found `{}`",
+                            tk.ty
+                        )),
+                    );
+                }
+            } else {
+                key_ty = Some(tk.ty.clone());
+            }
+
+            if let Some(ref expected_v) = val_ty {
+                if !tv.ty.is_error() && tv.ty != *expected_v && !is_subtype(&tv.ty, expected_v) {
+                    self.diags.error(
+                        DiagCode::TYPE_MISMATCH,
+                        tv.span,
+                        SmolStr::from(format!(
+                            "expected map value `{expected_v}`, found `{}`",
+                            tv.ty
+                        )),
+                    );
+                }
+            } else {
+                val_ty = Some(tv.ty.clone());
+            }
+
+            typed_entries.push((tk, tv));
+        }
+
+        let key_ty = key_ty.unwrap_or(Ty::Error);
+        let val_ty = val_ty.unwrap_or(Ty::Error);
+        let map_ty = Ty::Generic(SmolStr::from("Map"), vec![key_ty, val_ty]);
+        let map_ty = self.expand_aliases_in_ty(&map_ty);
+
+        TypedExpr {
+            kind: TypedExprKind::MapLiteral(typed_entries),
+            ty: map_ty,
+            span: lit.span,
+        }
+    }
+
     fn synth_variant_shorthand(
         &mut self,
         vs: &valen_ast::VariantShorthandExpr,

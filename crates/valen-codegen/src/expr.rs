@@ -511,6 +511,12 @@ impl<'a> ExprLowering<'a> {
             } => {
                 self.lower_while_let(pattern, scrutinee, body);
             }
+            TypedExprKind::ListLiteral(elements) => {
+                self.lower_list_literal(elements, &expr.ty);
+            }
+            TypedExprKind::MapLiteral(entries) => {
+                self.lower_map_literal(entries, &expr.ty);
+            }
             TypedExprKind::Error => {}
         }
     }
@@ -2704,6 +2710,70 @@ impl<'a> ExprLowering<'a> {
             params: vec![JvmType::Object(JVM_STRING.to_string())],
             ret: JvmType::Void,
         });
+    }
+
+    /// `[expr, ...]` → `new ArrayList(); .add(expr); ...`
+    fn lower_list_literal(&mut self, elements: &[TypedExpr], result_ty: &Ty) {
+        let elem_ty = match result_ty {
+            Ty::Generic(_, args) if !args.is_empty() => self.ty_to_jvm(&args[0]),
+            _ => JvmType::Object(JVM_OBJECT.to_string()),
+        };
+
+        let list_slot = self.emit_new_arraylist();
+        for elem in elements {
+            self.lower_expr(elem);
+            self.emit_list_add(list_slot, &elem_ty);
+        }
+        self.ops.push(JvmOp::LoadLocal(
+            list_slot,
+            JvmType::Object("java/util/ArrayList".to_string()),
+        ));
+    }
+
+    /// `#{key: value, ...}` → `new HashMap(); .put(key, value); ...`
+    fn lower_map_literal(&mut self, entries: &[(TypedExpr, TypedExpr)], _result_ty: &Ty) {
+        self.ops.push(JvmOp::New("java/util/HashMap".to_string()));
+        self.ops.push(JvmOp::Dup);
+        self.ops.push(JvmOp::InvokeSpecial {
+            owner: "java/util/HashMap".to_string(),
+            name: "<init>".to_string(),
+            params: vec![],
+            ret: JvmType::Void,
+        });
+        let map_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(
+            map_slot,
+            JvmType::Object("java/util/HashMap".to_string()),
+        ));
+
+        for (key, value) in entries {
+            self.ops.push(JvmOp::LoadLocal(
+                map_slot,
+                JvmType::Object("java/util/HashMap".to_string()),
+            ));
+            self.lower_expr(key);
+            let key_ty = self.ty_to_jvm(&key.ty);
+            self.emit_box(&key_ty);
+            self.lower_expr(value);
+            let val_ty = self.ty_to_jvm(&value.ty);
+            self.emit_box(&val_ty);
+            self.ops.push(JvmOp::InvokeInterface {
+                owner: "java/util/Map".to_string(),
+                name: "put".to_string(),
+                params: vec![
+                    JvmType::Object(JVM_OBJECT.to_string()),
+                    JvmType::Object(JVM_OBJECT.to_string()),
+                ],
+                ret: JvmType::Object(JVM_OBJECT.to_string()),
+            });
+            self.ops.push(JvmOp::Pop);
+        }
+
+        self.ops.push(JvmOp::LoadLocal(
+            map_slot,
+            JvmType::Object("java/util/HashMap".to_string()),
+        ));
     }
 
     /// `iter(list)` → `new ListIterator(list)`

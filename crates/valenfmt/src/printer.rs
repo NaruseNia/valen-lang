@@ -797,6 +797,28 @@ impl<'a> Printer<'a> {
             Expr::IfLet(il) => self.print_if_let(il),
             Expr::WhileLet(wl) => self.print_while_let(wl),
             Expr::VariantShorthand(vs) => self.print_variant_shorthand_expr(vs),
+            Expr::ListLiteral(l) => {
+                self.w("[");
+                for (i, elem) in l.elements.iter().enumerate() {
+                    if i > 0 {
+                        self.w(", ");
+                    }
+                    self.print_expr(elem);
+                }
+                self.w("]");
+            }
+            Expr::MapLiteral(m) => {
+                self.w("#{");
+                for (i, (key, value)) in m.entries.iter().enumerate() {
+                    if i > 0 {
+                        self.w(", ");
+                    }
+                    self.print_expr(key);
+                    self.w(": ");
+                    self.print_expr(value);
+                }
+                self.w("}");
+            }
         }
     }
 

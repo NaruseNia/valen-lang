@@ -160,6 +160,8 @@ enum RawTok {
     Question,
     #[token("@")]
     At,
+    #[token("#")]
+    Hash,
     #[token("_", priority = 3)]
     Underscore,
 
@@ -545,6 +547,7 @@ fn map_token(raw: RawTok) -> TokenKind {
         RawTok::FatArrow => TokenKind::FatArrow,
         RawTok::Question => TokenKind::Question,
         RawTok::At => TokenKind::At,
+        RawTok::Hash => TokenKind::Hash,
         RawTok::Underscore => TokenKind::Underscore,
         // Operators
         RawTok::Eq => TokenKind::Eq,

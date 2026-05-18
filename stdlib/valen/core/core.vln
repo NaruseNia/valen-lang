@@ -47,6 +47,8 @@ pub trait Error {
 // --- Collection type aliases ---
 
 pub typealias List<T> = java.util.List<T>;
+pub typealias Map<K, V> = java.util.Map<K, V>;
+pub typealias Set<T> = java.util.Set<T>;
 
 // --- Iterator trait ---
 
