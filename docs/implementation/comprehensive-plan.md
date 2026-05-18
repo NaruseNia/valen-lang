@@ -446,23 +446,55 @@ pub trait Queryable: Component + Eq { ... }
 
 ### TASK-055: unsafe block / unsafe fn
 
-**構文:**
+**構文（grill-me S12〜S19 確定）:**
 ```valen
-let pos = unsafe { obj as Position };  // unchecked cast
-unsafe fn rawAccess(ptr: Long) -> Int { ... }  // unsafe 関数
+// unsafe ブロック式（値を返す）
+let pos: Position = unsafe { obj as Position };
+
+// unsafe 短縮構文（1行）
+let pos: Position = unsafe obj as Position;
+
+// unsafe fn — 本体全体が暗黙 unsafe コンテキスト
+unsafe fn rawAccess(ptr: Long) -> Int { ... }
+
+// unsafe fn の呼び出しは unsafe コンテキスト内でのみ
+let v = unsafe { rawAccess(ptr) };
+
+// safe 短縮構文 + safe? 合体構文
+let r = safe file.readString();             // Result<String?, JavaException>
+let s: String? = safe? file.readString();   // = safe { file.readString() }?
 ```
 
-**設計決定 — unsafe 内で許可される操作（初期セット）:**
-1. **unchecked cast** (`obj as ConcreteType`): ClassCastException リスクのあるダウンキャスト
-2. **Java exception 無視**: safe ブロックなしで Java メソッドを呼び出し、例外を catch しない
-3. **null 使用**: `T?` でない型で null を扱う（JNI / Panama 連携で必要）
+**`as` キャスト式（S12）:**
+- **safe:** 数値 widening（`42 as Long`）、upcast（暗黙）
+- **unsafe 必須:** ダウンキャスト（`obj as Position` — ClassCastException リスク）
 
-**safe ブロック（既存）との関係:** safe は `Result` でラップして安全に扱う。unsafe は保証なし（呼び出し側の責任）。
+**unsafe 内で許可される操作:**
+1. **unchecked downcast** (`obj as ConcreteType`)
+2. **Java exception 無視** — `unsafe` 内の Java メソッド呼び出しは例外を catch せず素通り
+3. **non-nullable null** — `let x: String = unsafe { null };`
+
+**Java メソッド呼び出しの3モード（S14）:**
+
+| 記法 | 戻り値型 | 例外処理 | null 処理 |
+|------|---------|---------|----------|
+| `safe { expr }` / `safe expr` | `Result<T?, JavaException>` | `Result::Err` にラップ | `T?`（nullable） |
+| `safe? expr` | `T?`（`?` で unwrap） | 早期 return | `T?`（nullable） |
+| `unsafe { expr }` / `unsafe expr` | `T`（non-nullable） | 素通り（crash） | NPE リスク |
+| 素呼び出し | **コンパイルエラー** | — | — |
+
+**例外:** Java コンストラクタ呼び出しは `safe`/`unsafe` 不要（S15）。
+
+**`unsafe fn` セマンティクス（S13, S18）:**
+- `unsafe fn` の呼び出しは `unsafe { }` ブロック内でのみ許可
+- `unsafe fn` の本体全体が暗黙 unsafe コンテキスト
 
 **実装方針:**
-1. parser: `unsafe { ... }` ブロック + `unsafe fn` 宣言
-2. HIR: unsafe コンテキストフラグ。上記3操作は unsafe コンテキスト外ではコンパイルエラー
-3. `unsafe fn` 呼び出し元にも `unsafe` を要求
+1. parser: `as` キャスト式、`unsafe { }` ブロック式、`unsafe fn` 宣言、`safe expr` / `unsafe expr` 短縮構文、`safe?` 合体構文
+2. AST: `CastExpr`（`as`）、`UnsafeExpr`（ブロック/短縮）ノード追加。既存 `SafeExpr` に短縮形対応
+3. HIR: unsafe コンテキストフラグ。ダウンキャスト・素 Java 呼び出し・non-nullable null は unsafe 外でコンパイルエラー
+4. type_check: `as` の安全性判定（widening vs downcast）、Java メソッド呼び出しの `safe`/`unsafe` 必須チェック
+5. codegen: `unsafe` ブロックは中身をそのまま emit。`as` ダウンキャストは `checkcast`
 
 ### TASK-056: Mutable Reference (`ref mut T`)
 
@@ -649,6 +681,14 @@ let inc = || { *r = *r + 1; };
 | S9 | derive × data class | data class は暗黙に Eq/Hash/Display/Clone 保持。Java equals() 等へのブリッジ | TASK-048 |
 | S10 | unsafe 許可操作 | unchecked cast + exception 無視 + null 使用 | TASK-055 |
 | S11 | Intersection constraints | 既存 `+` 構文のまま。`&` は追加しない | TASK-054 |
+| S12 | `as` キャストのスコープ | 二段構え: widening/upcast は safe、downcast は unsafe 必須 | TASK-055 |
+| S13 | `unsafe fn` 呼び出し伝播 | Rust 方式: `unsafe { }` 内でのみ呼べる | TASK-055 |
+| S14 | 素の Java メソッド呼び出し | コンパイルエラー（`safe` か `unsafe` 必須）。コンストラクタは例外 | TASK-055 |
+| S15 | `unsafe` 内 Java 戻り値 | non-nullable, non-Result（全安全ネットを外す） | TASK-055 |
+| S16 | `unsafe` ブロック | ブロック式（最後の式の値を返す） | TASK-055 |
+| S17 | `null` リテラル | nullable 型のみ safe、non-nullable への代入は unsafe | TASK-055 |
+| S18 | `unsafe fn` 本体 | 全体が暗黙 unsafe コンテキスト | TASK-055 |
+| S19 | safe/unsafe 短縮構文 | `safe expr` / `unsafe expr` / `safe? expr`（= `safe { expr }?`） | TASK-055 |
 
 ---
 
@@ -712,3 +752,4 @@ let inc = || { *r = *r + 1; };
 | 2026-05-18 | TASK-050 (Iterator collection operations) 完了。Iterator trait に map/filter/fold/collect 追加。ListIterator + iter() アダプタ実装。型チェッカーに trait メソッド解決・メソッドレベルジェネリクス推論・typealias 展開を追加 |
 | 2026-05-18 | M13 全タスク完了（6 PR マージ: #168〜#173）。TASK-051 (collection literal)、TASK-052 (pipeline)、TASK-054 (intersection)、TASK-044 (Any)、TASK-053 (newtype)、TASK-043 (Java generic tracking) |
 | 2026-05-18 | VEP-031 (ref mut T) を TASK-056 として M14 に組み込み。M14 を「Phase 2 Safety & Mutability」に改称 |
+| 2026-05-18 | grill-me セッションで TASK-055 unsafe 仕様 8 項目確定（S12〜S19）。as キャスト二段構え、素 Java 呼び出しエラー化、safe/unsafe 短縮構文、safe? 合体構文 |
