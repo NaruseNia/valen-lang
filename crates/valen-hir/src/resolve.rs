@@ -504,6 +504,21 @@ impl Resolver {
                 self.hir.defs.insert(id, def);
                 self.define_name(ta.name.clone(), id, ta.span);
             }
+            Item::NewType(nt) => {
+                let id = self.hir.alloc_id();
+                let def = Def {
+                    id,
+                    name: nt.name.clone(),
+                    kind: DefKind::NewType(crate::NewTypeDef {
+                        inner_ty: lower_type_ref_with_params(&nt.inner_ty, &[]),
+                    }),
+                    vis: lower_vis(nt.visibility),
+                    span: nt.span,
+                    package: self.current_package.clone(),
+                };
+                self.hir.defs.insert(id, def);
+                self.define_name(nt.name.clone(), id, nt.span);
+            }
             Item::AnnotationClass(ac) => {
                 let id = self.hir.alloc_id();
                 let params = ac
@@ -659,6 +674,7 @@ fn item_name(item: &Item) -> Option<SmolStr> {
         Item::Enum(e) => Some(e.name.clone()),
         Item::Trait(t) => Some(t.name.clone()),
         Item::TypeAlias(ta) => Some(ta.name.clone()),
+        Item::NewType(nt) => Some(nt.name.clone()),
         Item::AnnotationClass(ac) => Some(ac.name.clone()),
         Item::Impl(_) | Item::Package(_) | Item::Import(_) => None,
     }

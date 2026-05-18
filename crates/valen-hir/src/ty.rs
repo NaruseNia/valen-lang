@@ -348,6 +348,10 @@ impl<'hir> TypeChecker<'hir> {
                     self.env
                         .define(t.name.clone(), Ty::Named(t.name.clone()), false);
                 }
+                valen_ast::Item::NewType(nt) => {
+                    self.env
+                        .define(nt.name.clone(), Ty::Named(nt.name.clone()), false);
+                }
                 _ => {}
             }
         }
@@ -1504,6 +1508,35 @@ impl<'hir> TypeChecker<'hir> {
                                     )),
                                 );
                             }
+                        }
+                    }
+                    return Ty::Named(name.clone());
+                }
+                DefKind::NewType(nt) => {
+                    if args.len() != 1 {
+                        self.diags.error(
+                            DiagCode::ARG_COUNT_MISMATCH,
+                            span,
+                            SmolStr::from(format!(
+                                "`{name}` newtype constructor expects 1 argument, found {}",
+                                args.len()
+                            )),
+                        );
+                    } else {
+                        let expected = tyref_to_ty_generic(&nt.inner_ty);
+                        if !args[0].ty.is_error()
+                            && !expected.is_error()
+                            && args[0].ty != expected
+                            && !is_subtype(&args[0].ty, &expected)
+                        {
+                            self.diags.error(
+                                DiagCode::TYPE_MISMATCH,
+                                args[0].span,
+                                SmolStr::from(format!(
+                                    "expected `{expected}`, found `{}`",
+                                    args[0].ty
+                                )),
+                            );
                         }
                     }
                     return Ty::Named(name.clone());

@@ -127,6 +127,7 @@ impl Parser {
                 .map(Item::Trait),
             TokenKind::Impl => self.parse_impl(start).map(Item::Impl),
             TokenKind::TypeAlias => self.parse_type_alias(vis, start).map(Item::TypeAlias),
+            TokenKind::NewType => self.parse_newtype(vis, start).map(Item::NewType),
             _ => {
                 let span = self.peek_span();
                 self.diagnostics.error(
@@ -840,6 +841,24 @@ impl Parser {
             name,
             generics,
             ty,
+            span: start.merge(end),
+        })
+    }
+
+    fn parse_newtype(
+        &mut self,
+        visibility: Visibility,
+        start: Span,
+    ) -> Option<valen_ast::NewTypeDecl> {
+        self.expect(TokenKind::NewType)?;
+        let name = self.expect_ident()?;
+        self.expect(TokenKind::Eq)?;
+        let inner_ty = self.parse_type()?;
+        let end = self.expect(TokenKind::Semi)?;
+        Some(valen_ast::NewTypeDecl {
+            visibility,
+            name,
+            inner_ty,
             span: start.merge(end),
         })
     }

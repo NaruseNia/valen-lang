@@ -178,6 +178,14 @@ impl<'a> Printer<'a> {
             Item::Trait(t) => self.print_trait(t),
             Item::Impl(i) => self.print_impl_block(i),
             Item::TypeAlias(t) => self.print_type_alias(t),
+            Item::NewType(nt) => {
+                self.print_visibility(&nt.visibility);
+                self.w("newtype ");
+                self.w(&nt.name);
+                self.w(" = ");
+                self.print_type(&nt.inner_ty);
+                self.w(";\n");
+            }
             Item::AnnotationClass(a) => self.print_annotation_class(a),
         }
     }
@@ -1364,6 +1372,7 @@ fn item_span(item: &Item) -> Span {
         Item::Trait(t) => t.span,
         Item::Impl(i) => i.span,
         Item::TypeAlias(t) => t.span,
+        Item::NewType(nt) => nt.span,
         Item::AnnotationClass(a) => a.span,
     }
 }

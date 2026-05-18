@@ -57,6 +57,9 @@ pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<DefId, TypedBody>) -> Vec<Jv
             DefKind::Trait(trait_def) if trait_def.is_sealed => {
                 classes.push(lower_sealed_trait(hir, def, pkg, source_file));
             }
+            DefKind::NewType(nt_def) => {
+                classes.push(lower_newtype(def, nt_def, pkg, source_file, &hir.imports));
+            }
             DefKind::AnnotationClass(ann_def) => {
                 classes.push(lower_annotation_class(def, ann_def, pkg, source_file));
             }
@@ -67,6 +70,103 @@ pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<DefId, TypedBody>) -> Vec<Jv
     classes.push(generate_list_iterator_class());
 
     classes
+}
+
+/// Generates a JVM class for a `newtype` wrapper with a single `value` field and constructor.
+fn lower_newtype(
+    def: &Def,
+    nt_def: &valen_hir::NewTypeDef,
+    pkg: Option<&[SmolStr]>,
+    source_file: Option<String>,
+    imports: &IndexMap<SmolStr, Vec<SmolStr>>,
+) -> JvmClass {
+    let internal = class_internal_name(&def.name, pkg);
+    let inner_jvm = tyref_to_jvm(&nt_def.inner_ty, pkg, imports);
+    let obj = JvmType::Object(JVM_OBJECT.to_string());
+
+    // Constructor: takes inner value, stores in field
+    let ctor = JvmMethod {
+        access: JvmMethodAccess {
+            is_public: true,
+            ..Default::default()
+        },
+        name: "<init>".to_string(),
+        params: vec![inner_jvm.clone()],
+        return_type: JvmType::Void,
+        body: Some(JvmMethodBody {
+            max_locals: 3,
+            ops: vec![
+                JvmOp::LoadLocal(0, obj.clone()),
+                JvmOp::InvokeSpecial {
+                    owner: JVM_OBJECT.to_string(),
+                    name: "<init>".to_string(),
+                    params: vec![],
+                    ret: JvmType::Void,
+                },
+                JvmOp::LoadLocal(0, obj.clone()),
+                JvmOp::LoadLocal(1, inner_jvm.clone()),
+                JvmOp::PutField {
+                    owner: internal.clone(),
+                    name: "value".to_string(),
+                    descriptor: inner_jvm.clone(),
+                },
+                JvmOp::Return(JvmType::Void),
+            ],
+            exception_handlers: vec![],
+        }),
+    };
+
+    // Getter: value()
+    let getter = JvmMethod {
+        access: JvmMethodAccess {
+            is_public: true,
+            ..Default::default()
+        },
+        name: "value".to_string(),
+        params: vec![],
+        return_type: inner_jvm.clone(),
+        body: Some(JvmMethodBody {
+            max_locals: 1,
+            ops: vec![
+                JvmOp::LoadLocal(0, obj),
+                JvmOp::GetField {
+                    owner: internal.clone(),
+                    name: "value".to_string(),
+                    descriptor: inner_jvm.clone(),
+                },
+                JvmOp::Return(inner_jvm.clone()),
+            ],
+            exception_handlers: vec![],
+        }),
+    };
+
+    JvmClass {
+        version: crate::JvmVersion::Java21,
+        access: JvmClassAccess {
+            is_public: def.vis == Vis::Pub,
+            is_final: true,
+            ..Default::default()
+        },
+        name: internal,
+        super_class: JVM_OBJECT.to_string(),
+        interfaces: vec![],
+        fields: vec![JvmField {
+            access: JvmFieldAccess {
+                is_private: true,
+                is_final: true,
+                ..Default::default()
+            },
+            name: "value".to_string(),
+            ty: inner_jvm,
+        }],
+        methods: vec![ctor, getter],
+        source_file,
+        permitted_subclasses: vec![],
+        is_record: false,
+        bootstrap_methods: vec![],
+        synthetic_methods: vec![],
+        annotations: vec![],
+    }
 }
 
 /// Generates a synthetic `valen/core/ListIterator` class that wraps a `java.util.List`

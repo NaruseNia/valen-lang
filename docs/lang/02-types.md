@@ -69,7 +69,23 @@ typealias UserId = Int;
 
 **所有権を生まない** — orphan rule 判定上、typealias は元の型の所有として扱われない。
 
-## 2.6 Any 型
+## 2.6 newtype
+
+`newtype` は内部型をラップする新しい独立した型を作成する。`typealias` と異なり、orphan rule で自モジュール所有の型として扱われる。
+
+```valen
+newtype EntityId = Int;
+newtype ComponentName = String;
+
+let eid = EntityId(42);           // コンストラクタ構文
+```
+
+- コンストラクタ `TypeName(value)` でラップ
+- `.value()` メソッドでアンラップ
+- JVM 上では単一フィールド `value` を持つ class として表現
+- `impl Eq for EntityId { ... }` が可能（自モジュール所有型のため）
+
+## 2.7 Any 型
 
 `Any` は `java.lang.Object` に対応するトップ型。全ての型は暗黙に `Any` のサブタイプであり、アップキャストは暗黙に行われる。
 

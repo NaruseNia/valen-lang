@@ -95,6 +95,8 @@ enum RawTok {
     Yield,
     #[token("typealias")]
     TypeAlias,
+    #[token("newtype")]
+    NewType,
     #[token("type")]
     Type,
     #[token("annotation")]
@@ -517,6 +519,7 @@ fn map_token(raw: RawTok) -> TokenKind {
         RawTok::Await => TokenKind::Await,
         RawTok::Yield => TokenKind::Yield,
         RawTok::TypeAlias => TokenKind::TypeAlias,
+        RawTok::NewType => TokenKind::NewType,
         RawTok::Type => TokenKind::Type,
         RawTok::Annotation => TokenKind::Annotation,
         RawTok::Static => TokenKind::Static,
