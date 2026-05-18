@@ -383,7 +383,11 @@ impl ServerState {
                     if let Some(mdef) = hir.defs.get(&mid) {
                         let (detail, documentation) = if let DefKind::Fn(f) = &mdef.kind {
                             (
-                                Some(format_fn_signature(&mdef.name, f)),
+                                Some(format_fn_signature_with_owner(
+                                    &mdef.name,
+                                    f,
+                                    Some(tn.as_str()),
+                                )),
                                 build_fn_documentation(&mdef.name, f, &doc.text, mdef.span.start),
                             )
                         } else {
@@ -407,7 +411,11 @@ impl ServerState {
                         if let Some(mdef) = hir.defs.get(&mid) {
                             let (detail, documentation) = if let DefKind::Fn(f) = &mdef.kind {
                                 (
-                                    Some(format_fn_signature(&mdef.name, f)),
+                                    Some(format_fn_signature_with_owner(
+                                        &mdef.name,
+                                        f,
+                                        Some(tn.as_str()),
+                                    )),
                                     build_fn_documentation(
                                         &mdef.name,
                                         f,
@@ -1349,6 +1357,17 @@ fn build_type_param_documentation(name: &str, bounds_joined: &str) -> Option<Doc
 }
 
 fn format_fn_signature(name: &str, f: &valen_hir::FnDef) -> String {
+    format_fn_signature_with_owner(name, f, None)
+}
+
+fn format_fn_signature_with_owner(name: &str, f: &valen_hir::FnDef, owner: Option<&str>) -> String {
+    let format_ty = |ty: &valen_hir::TyRef| -> String {
+        if *ty == valen_hir::TyRef::SelfTy {
+            owner.unwrap_or("Self").to_string()
+        } else {
+            format!("{ty}")
+        }
+    };
     let params: Vec<String> = f
         .params
         .iter()
@@ -1360,7 +1379,7 @@ fn format_fn_signature(name: &str, f: &valen_hir::FnDef) -> String {
                     "self".into()
                 }
             } else {
-                format!("{}: {}", p.name, p.ty)
+                format!("{}: {}", p.name, format_ty(&p.ty))
             }
         })
         .collect();
@@ -1383,7 +1402,7 @@ fn format_fn_signature(name: &str, f: &valen_hir::FnDef) -> String {
     let ret = f
         .return_ty
         .as_ref()
-        .map(|t| format!(" -> {t}"))
+        .map(|t| format!(" -> {}", format_ty(t)))
         .unwrap_or_default();
     format!("fn {}{generics}({}){}", name, params.join(", "), ret)
 }
