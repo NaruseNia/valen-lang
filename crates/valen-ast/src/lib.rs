@@ -421,6 +421,8 @@ pub enum Expr {
     WhileLet(Box<WhileLetExpr>),
     /// `.Variant` or `.Variant(args)` — enum variant shorthand with inferred enum type.
     VariantShorthand(VariantShorthandExpr),
+    /// `lhs |> rhs` — pipeline operator, desugar to first-arg insertion.
+    Pipeline(Box<PipelineExpr>),
     /// `[expr, expr, ...]` — list literal.
     ListLiteral(ListLiteralExpr),
     /// `#{key: value, ...}` — map literal.
@@ -486,6 +488,7 @@ impl Expr {
             Expr::IfLet(i) => i.span,
             Expr::WhileLet(w) => w.span,
             Expr::VariantShorthand(v) => v.span,
+            Expr::Pipeline(p) => p.span,
             Expr::ListLiteral(l) => l.span,
             Expr::MapLiteral(m) => m.span,
         }
@@ -732,6 +735,14 @@ pub struct AtPattern {
 pub struct VariantShorthandExpr {
     pub variant_name: SmolStr,
     pub args: Vec<CallArg>,
+    pub span: Span,
+}
+
+/// `lhs |> rhs` — pipeline expression.
+#[derive(Debug, Clone)]
+pub struct PipelineExpr {
+    pub lhs: Expr,
+    pub rhs: Expr,
     pub span: Span,
 }
 

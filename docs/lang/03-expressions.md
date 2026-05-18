@@ -97,3 +97,15 @@ let empty: List<String> = [];             // 空リストは型アノテーシ�
 let scores = #{"alice": 100, "bob": 85};  // Map<String, Int>
 let empty: Map<String, Int> = #{};        // 空マップは型アノテーション必須
 ```
+
+## 3.9 パイプライン演算子
+
+`|>` 演算子は最低優先度の中置演算子で、左辺の値を右辺の関数呼び出しの第1引数に挿入する。
+
+```valen
+// x |> f(a, b) は f(x, a, b) にデシュガーされる
+"hello" |> println;                        // println("hello")
+data |> process(config) |> format(style);  // format(process(data, config), style)
+```
+
+右辺は関数呼び出しまたは関数名でなければならない。チェーン可能（左結合）。

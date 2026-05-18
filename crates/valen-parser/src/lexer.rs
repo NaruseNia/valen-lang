@@ -193,6 +193,8 @@ enum RawTok {
     AmpAmp,
     #[token("||")]
     PipePipe,
+    #[token("|>")]
+    PipeGt,
     #[token("&")]
     Amp,
     #[token("|")]
@@ -563,6 +565,7 @@ fn map_token(raw: RawTok) -> TokenKind {
         RawTok::Shr => TokenKind::Shr,
         RawTok::AmpAmp => TokenKind::AmpAmp,
         RawTok::PipePipe => TokenKind::PipePipe,
+        RawTok::PipeGt => TokenKind::PipeGt,
         RawTok::Amp => TokenKind::Amp,
         RawTok::Pipe => TokenKind::Pipe,
         RawTok::Caret => TokenKind::Caret,

@@ -1053,7 +1053,7 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Option<Expr> {
-        let lhs = self.parse_or()?;
+        let lhs = self.parse_pipeline()?;
 
         if self.at(&TokenKind::Eq)
             || self.at(&TokenKind::PlusEq)
@@ -1082,6 +1082,17 @@ impl Parser {
             }));
         }
 
+        Some(lhs)
+    }
+
+    fn parse_pipeline(&mut self) -> Option<Expr> {
+        let mut lhs = self.parse_or()?;
+        while self.at(&TokenKind::PipeGt) {
+            self.bump();
+            let rhs = self.parse_or()?;
+            let span = expr_span(&lhs).merge(expr_span(&rhs));
+            lhs = Expr::Pipeline(Box::new(valen_ast::PipelineExpr { lhs, rhs, span }));
+        }
         Some(lhs)
     }
 
@@ -2349,6 +2360,7 @@ fn expr_span(expr: &Expr) -> Span {
         Expr::IfLet(i) => i.span,
         Expr::WhileLet(w) => w.span,
         Expr::VariantShorthand(v) => v.span,
+        Expr::Pipeline(p) => p.span,
         Expr::ListLiteral(l) => l.span,
         Expr::MapLiteral(m) => m.span,
     }

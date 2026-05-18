@@ -775,6 +775,7 @@ impl<'hir> TypeChecker<'hir> {
             valen_ast::Expr::IfLet(il) => self.synth_if_let(il, expected),
             valen_ast::Expr::WhileLet(wl) => self.synth_while_let(wl),
             valen_ast::Expr::VariantShorthand(vs) => self.synth_variant_shorthand(vs, expected),
+            valen_ast::Expr::Pipeline(p) => self.synth_pipeline(p),
             valen_ast::Expr::ListLiteral(l) => self.synth_list_literal(l, expected),
             valen_ast::Expr::MapLiteral(m) => self.synth_map_literal(m, expected),
         }
@@ -2353,6 +2354,50 @@ impl<'hir> TypeChecker<'hir> {
 
     /// Synthesize `.Variant` or `.Variant(args)` by resolving the enum from the
     /// expected type context (or by searching all enums).
+    /// `lhs |> f(a, b)` desugars to `f(lhs, a, b)`.
+    fn synth_pipeline(&mut self, p: &valen_ast::PipelineExpr) -> TypedExpr {
+        match &p.rhs {
+            valen_ast::Expr::Call(call) => {
+                let mut new_args = vec![valen_ast::CallArg {
+                    name: None,
+                    value: p.lhs.clone(),
+                    span: p.span,
+                }];
+                new_args.extend(call.args.iter().cloned());
+                let desugared = valen_ast::CallExpr {
+                    callee: call.callee.clone(),
+                    args: new_args,
+                    span: p.span,
+                };
+                self.synth_call(&desugared, None)
+            }
+            valen_ast::Expr::Path(_) => {
+                let desugared = valen_ast::CallExpr {
+                    callee: Box::new(p.rhs.clone()),
+                    args: vec![valen_ast::CallArg {
+                        name: None,
+                        value: p.lhs.clone(),
+                        span: p.span,
+                    }],
+                    span: p.span,
+                };
+                self.synth_call(&desugared, None)
+            }
+            _ => {
+                self.diags.error(
+                    DiagCode::TYPE_MISMATCH,
+                    p.span,
+                    SmolStr::from("pipeline RHS must be a function call or function name"),
+                );
+                TypedExpr {
+                    kind: TypedExprKind::Error,
+                    ty: Ty::Error,
+                    span: p.span,
+                }
+            }
+        }
+    }
+
     fn synth_list_literal(
         &mut self,
         lit: &valen_ast::ListLiteralExpr,
