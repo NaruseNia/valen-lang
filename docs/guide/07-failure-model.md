@@ -211,13 +211,94 @@ fn process_file(path: String) -> Result<Int, JavaException> {
 }
 ```
 
+## safe の短縮構文
+
+`safe { }` ブロックの代わりに、1行の式には `safe expr` の短縮形が使えます。
+
+```valen
+// ブロック形式
+let r = safe { file.readString() };  // Result<String?, JavaException>
+
+// 短縮形（同じ意味）
+let r = safe file.readString();      // Result<String?, JavaException>
+```
+
+### safe? — safe と ? の合体
+
+`safe? expr` は `safe { expr }?` と同じです。`Result` を `?` で unwrap して、成功時の値を直接受け取ります。
+
+```valen
+fn read_content(path: String) -> Result<String, JavaException> {
+    // safe? で Java メソッドを呼び、例外は ? で早期 return
+    let text: String? = safe? Files.readString(Paths.get(path));
+    match text {
+        Some(t) => Ok(t),
+        None => Err(...),
+    }
+}
+```
+
+## unsafe — 安全ネットを外す
+
+`unsafe { }` ブロックは Valen の安全保証をすべて bypass します。Java メソッドの例外は catch されず、戻り値は non-nullable として扱われ、ダウンキャストも無検証です。
+
+```valen
+// unsafe ブロック — 例外は素通り、戻り値は non-nullable
+let content: String = unsafe { file.readString() };
+
+// 短縮形（同じ意味）
+let content: String = unsafe file.readString();
+```
+
+### unsafe fn
+
+`unsafe fn` は関数全体を unsafe コンテキストにします。呼び出し側は `unsafe { }` ブロック内でのみ呼び出せます。
+
+```valen
+unsafe fn rawAccess(ptr: Long) -> Int {
+    // 本体全体が暗黙 unsafe
+    ...
+}
+
+// 呼び出し側
+let v = unsafe { rawAccess(ptr) };
+```
+
+### Java メソッド呼び出しの3モード
+
+Java メソッドは `safe` か `unsafe` で囲む必要があります。囲まない素呼び出しはコンパイルエラーです。
+
+| 記法 | 戻り値型 | 例外 | null |
+|------|---------|------|------|
+| `safe { expr }` / `safe expr` | `Result<T?, JavaException>` | `Err` ラップ | nullable |
+| `safe? expr` | `T?` | 早期 return | nullable |
+| `unsafe { expr }` / `unsafe expr` | `T`（non-nullable） | crash | NPE リスク |
+| 素呼び出し | **コンパイルエラー** | — | — |
+
+**例外:** Java コンストラクタ呼び出しは `safe`/`unsafe` 不要です。
+
+```valen
+let list = ArrayList();  // OK — コンストラクタは safe/unsafe 不要
+```
+
+### as キャスト式
+
+`expr as Type` で型キャストを行います。安全な変換（数値の widening）は `unsafe` 不要ですが、ダウンキャストは `unsafe` が必要です。
+
+```valen
+let x: Long = 42 as Long;                        // OK — Int → Long は安全
+let pos: Position = unsafe { obj as Position };   // ダウンキャストは unsafe 必須
+```
+
 ## まとめ: どれを使うか
 
 ```
 値がないかも？             → Option<T>
 失敗するかも、呼び出し側で対処？ → Result<T, E>
 バグ、到達不能？            → panic
-Java メソッドの例外？       → safe { } で Result に変換
+Java メソッドの例外？       → safe { } / safe expr で Result に変換
+Java 呼び出しを短く？       → safe? expr で ? まで一括
+安全ネットを外す？          → unsafe { } / unsafe expr
 ```
 
-Valen では「失敗がどの種類か」を型で表現します。`throw` による暗黙の制御フロー変更はなく、失敗の可能性は常にシグネチャから読み取れます。
+Valen では「失敗がどの種類か」を型で表現します。`throw` による暗黙の制御フロー変更はなく、失敗の可能性は常にシグネチャから読み取れます。`unsafe` は安全保証を意図的に外す箇所を明示するため、コードレビューで注目すべき箇所が一目で分かります。

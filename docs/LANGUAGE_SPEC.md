@@ -1,7 +1,7 @@
 # Valen Language Specification
 
-Version: 0.2-draft (Phase 1.5 実装反映)
-Last updated: 2026-05-15
+Version: 0.3-draft (Phase 2 M14 反映)
+Last updated: 2026-05-19
 
 ---
 
@@ -23,13 +23,13 @@ Valen の芯は以下の4点。新機能提案はこの芯を補強するかで�
 ### 実装済み仕様
 
 - [1. 字句構文](lang/01-lexical.md)
-- [2. 型](lang/02-types.md)
-- [3. 式と文](lang/03-expressions.md)
+- [2. 型](lang/02-types.md)（ref mut T ミュータブル参照型）
+- [3. 式と文](lang/03-expressions.md)（unsafe 式 / as キャスト / deref / ref mut 式）
 - [4. 関数](lang/04-functions.md)
 - [5. クラス](lang/05-classes.md)
 - [6. enum（ADT）](lang/06-enum.md)
 - [7. trait / impl](lang/07-traits.md)
-- [8. 失敗モデル](lang/08-failure.md)
+- [8. 失敗モデル](lang/08-failure.md)（unsafe block / unsafe fn / safe 短縮構文 / as キャスト / Java 呼び出しモード）
 - [9. パターンマッチ](lang/09-pattern.md)
 - [10. 可視性・モジュール](lang/10-modules.md)
 - [16. ターゲット JVM](lang/16-jvm-target.md)

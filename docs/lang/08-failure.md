@@ -96,8 +96,90 @@ safe { list.add("item") };  // Unit
 
 **根拠:** Java メソッドの戻り値は常に null 可能性がある（`@NonNull` annotation があっても保証されない）。Valen の芯「整合した失敗モデル」に従い、曖昧さを排除する。Kotlin の platform type (`T!`) のような判断遅延は採用しない。
 
-### Phase 1.5+ 検討
+## 8.5 `unsafe` ブロック / `unsafe fn`
 
-- 方針 A: `unsafe fn` で生呼び出し
-- 方針 B: Java Exception を型付きで catch し、`Result` / ユーザ定義エラーへ明示変換
-- 方針 C: `@catch` attribute で opt-in
+`unsafe` は Valen の型・失敗モデルの安全保証を明示的に bypass する機構。通常の `safe` パスでは保証される例外ラップ・null 正規化・キャスト検証を全てスキップする。
+
+### unsafe ブロック式
+
+`unsafe { expr }` はブロック式であり、最後の式の値を返す。
+
+```valen
+let pos: Position = unsafe { obj as Position };
+```
+
+### unsafe 短縮構文
+
+1行の式には `unsafe expr` の短縮形が使える。`unsafe { expr }` と等価。
+
+```valen
+let pos: Position = unsafe obj as Position;
+```
+
+### `unsafe fn`
+
+関数宣言に `unsafe` を付けると、本体全体が暗黙の unsafe コンテキストになる。`unsafe fn` の呼び出しは `unsafe { }` ブロック内でのみ許可される。
+
+```valen
+unsafe fn rawAccess(ptr: Long) -> Int { ... }
+
+// 呼び出し側
+let v = unsafe { rawAccess(ptr) };
+```
+
+### unsafe 内で許可される操作
+
+1. **unchecked downcast** — `obj as ConcreteType`（ClassCastException リスク）
+2. **Java exception 無視** — Java メソッド呼び出しの例外を catch せず素通り
+3. **non-nullable null** — `let x: String = unsafe { null };`
+
+## 8.6 `safe` 短縮構文 / `safe?` 合体構文
+
+### `safe expr`
+
+`safe { expr }` の短縮形。結果は `Result<T?, JavaException>`。
+
+```valen
+let r = safe file.readString();  // Result<String?, JavaException>
+```
+
+### `safe? expr`
+
+`safe { expr }?` と等価。`Result` を `?` で早期 return し、`T?` を返す。
+
+```valen
+let s: String? = safe? file.readString();
+// ↑ safe { file.readString() }? と同じ
+```
+
+## 8.7 `as` キャスト式
+
+`expr as Type` で型キャストを行う。安全性は変換の種類で決まる。
+
+- **safe（unsafe 不要）:** 数値 widening（`42 as Long`、`Int` → `Long` 等）
+- **unsafe 必須:** ダウンキャスト（`obj as Position` — ClassCastException リスク）
+
+```valen
+// 安全な widening — unsafe 不要
+let x: Long = 42 as Long;
+
+// ダウンキャスト — unsafe 必須
+let pos: Position = unsafe { obj as Position };
+```
+
+## 8.8 Java メソッド呼び出しモード
+
+Java メソッド呼び出しは `safe` か `unsafe` で囲む必要がある。素呼び出しはコンパイルエラー。
+
+| 記法 | 戻り値型 | 例外処理 | null 処理 |
+|------|---------|---------|----------|
+| `safe { expr }` / `safe expr` | `Result<T?, JavaException>` | `Err` にラップ | `T?`（nullable） |
+| `safe? expr` | `T?` | 早期 return | `T?`（nullable） |
+| `unsafe { expr }` / `unsafe expr` | `T`（non-nullable） | 素通り（crash） | NPE リスク |
+| 素呼び出し | **コンパイルエラー** | — | — |
+
+**例外:** Java コンストラクタ呼び出しは `safe`/`unsafe` 不要。コンストラクタは必ず non-null を返し、例外発生時はそもそもオブジェクトが生成されないため。
+
+```valen
+let list = ArrayList();  // safe/unsafe 不要
+```

@@ -97,3 +97,52 @@ fn accept(value: Any) {}   // 任意の型を受け取る
 
 - `Any` へのアップキャストは暗黙（boxing される）
 - ダウンキャストは `unsafe`（VEP-001）または `is` チェック（Phase 3）
+
+## 2.8 `ref mut T` — ミュータブル参照型
+
+`ref mut T` は `T` への可変参照を表す型。`Ty::RefMut(Box<Ty>)` として表現され、`T` とは別の型であり暗黙変換は存在しない。
+
+### 操作
+
+| 構文 | 意味 |
+|------|------|
+| `ref mut expr` | 可変参照の作成 |
+| `*r` | 参照の読み取り（deref） |
+| `*r = expr` | 参照先への書き込み |
+
+```valen
+fn increment(x: ref mut Int) -> Unit {
+    *x = *x + 1;
+}
+
+let mut n = 10;
+increment(ref mut n);
+// n == 11
+```
+
+### Lambda での使用
+
+Lambda 内で外側の変数を変更するには、明示的に `ref mut` で参照を作成してキャプチャする。自動キャプチャは行わない。
+
+```valen
+let mut count = 0;
+let r = ref mut count;
+let inc = || { *r = *r + 1; };
+```
+
+### JVM 実装
+
+プリミティブ型は専用ラッパークラス、オブジェクト型はジェネリッククラスで実装する。
+
+| Valen 型 | JVM クラス | フィールド |
+|-----------|-----------|----------|
+| `ref mut Int` | `valen/core/IntRef` | `int value` |
+| `ref mut Long` | `valen/core/LongRef` | `long value` |
+| `ref mut Float` | `valen/core/FloatRef` | `float value` |
+| `ref mut Double` | `valen/core/DoubleRef` | `double value` |
+| `ref mut Bool` | `valen/core/BoolRef` | `boolean value` |
+| `ref mut T`（object） | `valen/core/Ref<T>` | `Object value` |
+
+### Java interop
+
+`ref mut T` は Valen 内部専用。Java メソッドに `ref mut T` を渡すとコンパイルエラーになる。

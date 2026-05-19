@@ -24,6 +24,7 @@ ECS テストプロジェクト（`examples/ecs-system`）から発見された 
 | M10 | 4/4 | — | ✅ Practical Usability 完了 |
 | M12 | 4/4 | — | ✅ Phase 2 Core 完了 |
 | M13 | 6/6 | — | ✅ Phase 2 Extended 完了 |
+| M14 | 2/2 | — | ✅ Phase 2 Safety & Mutability 完了 |
 | 要件 | 42/45 Done | 3 Draft | REQ-EMIT-004, REQ-TOOL-002, REQ-STDLIB-003 |
 
 ---
@@ -587,8 +588,8 @@ let inc = || { *r = *r + 1; };
 | TASK-054 | Intersection constraints（+ 型チェック） | VEP-012 | M13 | — | S | ✅ |
 | TASK-043 | Generic Java collection tracking | #115 | M13 | TASK-025 ✅ | L | ✅ |
 | TASK-044 | Any type | #122 | M13 | — | M | ✅ |
-| TASK-055 | unsafe block / unsafe fn | VEP-001 | M14 | — | M |
-| TASK-056 | Mutable Reference (ref mut T) | VEP-031 | M14 | — | L |
+| TASK-055 | unsafe block / unsafe fn | VEP-001 | M14 | — | M | ✅ |
+| TASK-056 | Mutable Reference (ref mut T) | VEP-031 | M14 | — | L | ✅ |
 
 ### 既存残タスク
 
@@ -753,3 +754,4 @@ let inc = || { *r = *r + 1; };
 | 2026-05-18 | M13 全タスク完了（6 PR マージ: #168〜#173）。TASK-051 (collection literal)、TASK-052 (pipeline)、TASK-054 (intersection)、TASK-044 (Any)、TASK-053 (newtype)、TASK-043 (Java generic tracking) |
 | 2026-05-18 | VEP-031 (ref mut T) を TASK-056 として M14 に組み込み。M14 を「Phase 2 Safety & Mutability」に改称 |
 | 2026-05-18 | grill-me セッションで TASK-055 unsafe 仕様 8 項目確定（S12〜S19）。as キャスト二段構え、素 Java 呼び出しエラー化、safe/unsafe 短縮構文、safe? 合体構文 |
+| 2026-05-19 | M14 全タスク完了。TASK-055 (unsafe block/fn, as cast, safe shorthand, safe?) + TASK-056 (ref mut T, deref, deref assign, synthetic ref wrapper classes)。Phase 2 全マイルストーン完了 |
