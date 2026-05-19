@@ -2994,8 +2994,17 @@ impl<'a> ExprLowering<'a> {
         self.ops.push(JvmOp::GetField {
             owner: wrapper,
             name: "value".to_string(),
-            descriptor: field_ty,
+            descriptor: field_ty.clone(),
         });
+        // For object refs, checkcast to the concrete type
+        if matches!(field_ty, JvmType::Object(_)) {
+            let target = self.ty_to_jvm(inner);
+            if let JvmType::Object(ref target_name) = target {
+                if target_name != JVM_OBJECT {
+                    self.ops.push(JvmOp::Checkcast(target_name.clone()));
+                }
+            }
+        }
     }
 
     fn lower_deref_write(&mut self, ref_ty: &Ty, _value_ty: &Ty) {
@@ -3025,7 +3034,7 @@ impl<'a> ExprLowering<'a> {
 
     fn inner_jvm_for_ref(&self, inner: &Ty) -> JvmType {
         match inner {
-            Ty::Prim(PrimTy::Int) => JvmType::Int,
+            Ty::Prim(PrimTy::Int | PrimTy::Byte | PrimTy::Short | PrimTy::Char) => JvmType::Int,
             Ty::Prim(PrimTy::Long) => JvmType::Long,
             Ty::Prim(PrimTy::Float) => JvmType::Float,
             Ty::Prim(PrimTy::Double) => JvmType::Double,
@@ -3242,7 +3251,9 @@ impl<'a> ExprLowering<'a> {
 
 fn ref_mut_wrapper_class(inner: &Ty) -> String {
     match inner {
-        Ty::Prim(PrimTy::Int) => "valen/core/IntRef".to_string(),
+        Ty::Prim(PrimTy::Int | PrimTy::Byte | PrimTy::Short | PrimTy::Char) => {
+            "valen/core/IntRef".to_string()
+        }
         Ty::Prim(PrimTy::Long) => "valen/core/LongRef".to_string(),
         Ty::Prim(PrimTy::Float) => "valen/core/FloatRef".to_string(),
         Ty::Prim(PrimTy::Double) => "valen/core/DoubleRef".to_string(),

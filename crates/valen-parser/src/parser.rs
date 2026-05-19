@@ -655,10 +655,31 @@ impl Parser {
                 | TokenKind::Override
                 | TokenKind::Abstract
                 | TokenKind::Unsafe => {
-                    let is_unsafe = self.eat(&TokenKind::Unsafe).is_some();
-                    let is_open = self.eat(&TokenKind::Open).is_some();
-                    let is_override = self.eat(&TokenKind::Override).is_some();
-                    let is_abstract = self.eat(&TokenKind::Abstract).is_some();
+                    let mut is_unsafe = false;
+                    let mut is_open = false;
+                    let mut is_override = false;
+                    let mut is_abstract = false;
+                    loop {
+                        match self.peek() {
+                            TokenKind::Unsafe => {
+                                is_unsafe = true;
+                                self.bump();
+                            }
+                            TokenKind::Open => {
+                                is_open = true;
+                                self.bump();
+                            }
+                            TokenKind::Override => {
+                                is_override = true;
+                                self.bump();
+                            }
+                            TokenKind::Abstract => {
+                                is_abstract = true;
+                                self.bump();
+                            }
+                            _ => break,
+                        }
+                    }
                     let mut method = self.parse_fn_decl(
                         member_annotations,
                         vis,

@@ -1310,6 +1310,32 @@ impl<'hir> TypeChecker<'hir> {
                 if !bindings.is_empty() {
                     self.check_call_site_bounds(&call.callee, &bindings, call.span);
                 }
+
+                // Check unsafe fn call outside unsafe context
+                if !self.in_unsafe {
+                    if let valen_ast::Expr::Path(path) = &*call.callee {
+                        if path.segments.len() == 1 {
+                            let fn_name = &path.segments[0].name;
+                            for def in self.hir.defs.values() {
+                                if def.name == *fn_name {
+                                    if let DefKind::Fn(f) = &def.kind {
+                                        if f.is_unsafe {
+                                            self.diags.error(
+                                                DiagCode::UNSAFE_CONTEXT_REQUIRED,
+                                                call.span,
+                                                SmolStr::from(
+                                                    "call to `unsafe fn` requires an `unsafe` block",
+                                                ),
+                                            );
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
                 let ret = substitute_ty(ret_ty, &bindings);
                 TypedExpr {
                     kind: TypedExprKind::Call {
@@ -1686,6 +1712,13 @@ impl<'hir> TypeChecker<'hir> {
             DefKind::Fn(f) => f,
             _ => return None,
         };
+        if fn_def.is_unsafe && !self.in_unsafe {
+            self.diags.error(
+                DiagCode::UNSAFE_CONTEXT_REQUIRED,
+                span,
+                SmolStr::from("call to `unsafe fn` requires an `unsafe` block"),
+            );
+        }
         if fn_def.params.iter().any(|p| p.is_self) {
             return None;
         }
@@ -1785,6 +1818,13 @@ impl<'hir> TypeChecker<'hir> {
                 crate::MethodResolution::Found(def_id) => {
                     if let Some(def) = self.hir.defs.get(&def_id) {
                         if let DefKind::Fn(fdef) = &def.kind {
+                            if fdef.is_unsafe && !self.in_unsafe {
+                                self.diags.error(
+                                    DiagCode::UNSAFE_CONTEXT_REQUIRED,
+                                    mc.span,
+                                    SmolStr::from("call to `unsafe fn` requires an `unsafe` block"),
+                                );
+                            }
                             let resolve_self_ty = |tyref: &TyRef| -> Ty {
                                 if *tyref == TyRef::SelfTy {
                                     Ty::Named(tn.clone())
@@ -3566,6 +3606,13 @@ impl<'hir> TypeChecker<'hir> {
     fn synth_cast(&mut self, c: &valen_ast::CastExpr) -> TypedExpr {
         let inner = self.synth_expr(&c.expr, None);
         let target = self.resolve_ast_type(&c.target_ty);
+        if !self.is_valid_cast(&inner.ty, &target) {
+            self.diags.error(
+                DiagCode::INVALID_CAST,
+                c.span,
+                SmolStr::from(format!("cannot cast `{}` to `{}`", inner.ty, target)),
+            );
+        }
         let is_safe = self.is_safe_cast(&inner.ty, &target);
         if !is_safe && !self.in_unsafe {
             self.diags.error(
@@ -3611,6 +3658,29 @@ impl<'hir> TypeChecker<'hir> {
             ) => true,
             _ => false,
         }
+    }
+
+    /// Returns true if the cast from `from` to `to` is structurally valid
+    /// (safe or unsafe). Returns false for impossible casts like String→Int.
+    fn is_valid_cast(&self, from: &Ty, to: &Ty) -> bool {
+        if from == to || from.is_error() || to.is_error() {
+            return true;
+        }
+        // Numeric casts (widening or narrowing) are all valid
+        if from.is_numeric() && to.is_numeric() {
+            return true;
+        }
+        // Char to numeric
+        if matches!(from, Ty::Prim(PrimTy::Char)) && to.is_numeric() {
+            return true;
+        }
+        // Reference types: downcast between named/generic types
+        let is_ref_from = matches!(from, Ty::Named(_) | Ty::Generic(_, _) | Ty::Nullable(_));
+        let is_ref_to = matches!(to, Ty::Named(_) | Ty::Generic(_, _) | Ty::Nullable(_));
+        if is_ref_from && is_ref_to {
+            return true;
+        }
+        false
     }
 
     fn synth_deref(&mut self, d: &valen_ast::DerefExpr) -> TypedExpr {
