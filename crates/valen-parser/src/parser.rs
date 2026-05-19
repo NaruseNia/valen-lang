@@ -20,14 +20,15 @@ use valen_ast::token::TokenKind;
 use valen_ast::{
     Annotation, AnnotationArg, AnnotationClassDecl, AnnotationParam, AssignExpr, AssocTypeDecl,
     AssocTypeDef, AtPattern, BinaryExpr, BinaryOp, BindingPattern, Block, BreakExpr, CallArg,
-    CallExpr, ClassDecl, ClassKind, ClassMember, ContinueExpr, CtorParam, DataClassDecl, EnumDecl,
-    EnumField, EnumVariant, EnumVariantFields, Expr, FieldAccess, FileId, FnDecl, ForExpr,
-    GenericParam, IfExpr, IfLetExpr, ImplBlock, ImplItem, ImportDecl, Item, LambdaExpr,
-    LambdaParam, LetElseStmt, LetStmt, Literal, LoopExpr, MatchArm, MatchExpr, MethodCallExpr,
-    PackageDecl, Param, Path, PathSegment, Pattern, RangeExpr, RangePattern, ReturnExpr, Span,
-    Stmt, StringInterpExpr, StructPattern, StructPatternField, TraitDecl, TraitItem, TryExpr, Type,
-    TypeAliasDecl, TypePath, TypePathSegment, UnaryExpr, UnaryOp, Variance, VariantShorthandExpr,
-    VariantShorthandPattern, Visibility, WhileExpr, WhileLetExpr,
+    CallExpr, CastExpr, ClassDecl, ClassKind, ClassMember, ContinueExpr, CtorParam, DataClassDecl,
+    DerefExpr, EnumDecl, EnumField, EnumVariant, EnumVariantFields, Expr, FieldAccess, FileId,
+    FnDecl, ForExpr, GenericParam, IfExpr, IfLetExpr, ImplBlock, ImplItem, ImportDecl, Item,
+    LambdaExpr, LambdaParam, LetElseStmt, LetStmt, Literal, LoopExpr, MatchArm, MatchExpr,
+    MethodCallExpr, PackageDecl, Param, Path, PathSegment, Pattern, RangeExpr, RangePattern,
+    RefMutExpr, ReturnExpr, Span, Stmt, StringInterpExpr, StructPattern, StructPatternField,
+    TraitDecl, TraitItem, TryExpr, Type, TypeAliasDecl, TypePath, TypePathSegment, UnaryExpr,
+    UnaryOp, UnsafeExpr, Variance, VariantShorthandExpr, VariantShorthandPattern, Visibility,
+    WhileExpr, WhileLetExpr,
 };
 use valen_diagnostics::{DiagCode, Diagnostics};
 
@@ -97,6 +98,12 @@ impl Parser {
             TokenKind::Annotation => self
                 .parse_annotation_class(annotations, vis, start)
                 .map(Item::AnnotationClass),
+            TokenKind::Unsafe => {
+                self.bump();
+                let mut f = self.parse_fn_decl(annotations, vis, start, false, false, false)?;
+                f.is_unsafe = true;
+                Some(Item::Fn(f))
+            }
             TokenKind::Fn => self
                 .parse_fn_decl(annotations, vis, start, false, false, false)
                 .map(Item::Fn),
@@ -386,6 +393,18 @@ impl Parser {
     fn parse_type(&mut self) -> Option<Type> {
         let start = self.peek_span();
 
+        // `ref mut T` — mutable reference type
+        if self.at(&TokenKind::Ref) && self.lookahead(1) == &TokenKind::Mut {
+            self.bump(); // ref
+            self.bump(); // mut
+            let inner = self.parse_type()?;
+            let span = start.merge(type_span(&inner));
+            return Some(Type::RefMut {
+                inner: Box::new(inner),
+                span,
+            });
+        }
+
         // Function type: `fn(A, B) -> C`
         if self.at(&TokenKind::Fn) {
             self.bump();
@@ -631,11 +650,16 @@ impl Parser {
             let member_annotations = self.parse_annotations();
             let vis = self.parse_visibility();
             match self.peek() {
-                TokenKind::Fn | TokenKind::Open | TokenKind::Override | TokenKind::Abstract => {
+                TokenKind::Fn
+                | TokenKind::Open
+                | TokenKind::Override
+                | TokenKind::Abstract
+                | TokenKind::Unsafe => {
+                    let is_unsafe = self.eat(&TokenKind::Unsafe).is_some();
                     let is_open = self.eat(&TokenKind::Open).is_some();
                     let is_override = self.eat(&TokenKind::Override).is_some();
                     let is_abstract = self.eat(&TokenKind::Abstract).is_some();
-                    let method = self.parse_fn_decl(
+                    let mut method = self.parse_fn_decl(
                         member_annotations,
                         vis,
                         member_start,
@@ -643,6 +667,7 @@ impl Parser {
                         is_override,
                         is_abstract,
                     )?;
+                    method.is_unsafe = is_unsafe;
                     members.push(ClassMember::Method(method));
                 }
                 _ => {
@@ -1275,6 +1300,17 @@ impl Parser {
     }
 
     fn parse_unary(&mut self) -> Option<Expr> {
+        // `*expr` — dereference
+        if self.at(&TokenKind::Star) {
+            let start = self.peek_span();
+            self.bump();
+            let inner = self.parse_unary()?;
+            let span = start.merge(expr_span(&inner));
+            return Some(Expr::Deref(DerefExpr {
+                expr: Box::new(inner),
+                span,
+            }));
+        }
         let op = match self.peek() {
             TokenKind::Minus => Some(UnaryOp::Neg),
             TokenKind::Bang => Some(UnaryOp::Not),
@@ -1329,6 +1365,14 @@ impl Parser {
                 let span = expr_span(&expr).merge(self.prev_span());
                 expr = Expr::Try(TryExpr {
                     expr: Box::new(expr),
+                    span,
+                });
+            } else if self.eat(&TokenKind::As).is_some() {
+                let target_ty = self.parse_type()?;
+                let span = expr_span(&expr).merge(type_span(&target_ty));
+                expr = Expr::Cast(CastExpr {
+                    expr: Box::new(expr),
+                    target_ty,
                     span,
                 });
             } else {
@@ -1436,6 +1480,8 @@ impl Parser {
             TokenKind::Return => self.parse_return_expr(),
             TokenKind::Pipe | TokenKind::PipePipe => self.parse_lambda_expr(),
             TokenKind::Safe => self.parse_safe_expr(),
+            TokenKind::Unsafe => self.parse_unsafe_expr(),
+            TokenKind::Ref if self.lookahead(1) == &TokenKind::Mut => self.parse_ref_mut_expr(),
             TokenKind::LBracket => self.parse_list_literal(),
             TokenKind::Hash if self.peek_ahead_is(&TokenKind::LBrace) => self.parse_map_literal(),
             TokenKind::Dot if self.is_variant_shorthand_start() => {
@@ -1980,9 +2026,67 @@ impl Parser {
 
     fn parse_safe_expr(&mut self) -> Option<Expr> {
         let start = self.expect(TokenKind::Safe)?;
-        let block = self.parse_block()?;
-        let span = start.merge(block.span);
-        Some(Expr::Safe(valen_ast::SafeExpr { block, span }))
+        if self.at(&TokenKind::LBrace) {
+            let block = self.parse_block()?;
+            let span = start.merge(block.span);
+            Some(Expr::Safe(valen_ast::SafeExpr { block, span }))
+        } else if self.eat(&TokenKind::Question).is_some() {
+            // `safe? expr` => `safe { expr }?`
+            let inner = self.parse_expr()?;
+            let inner_span = expr_span(&inner);
+            let block = Block {
+                stmts: vec![],
+                tail: Some(Box::new(inner)),
+                span: inner_span,
+            };
+            let safe_span = start.merge(inner_span);
+            let safe_expr = Expr::Safe(valen_ast::SafeExpr {
+                block,
+                span: safe_span,
+            });
+            let try_span = start.merge(inner_span);
+            Some(Expr::Try(TryExpr {
+                expr: Box::new(safe_expr),
+                span: try_span,
+            }))
+        } else {
+            // `safe expr` shorthand
+            let inner = self.parse_expr()?;
+            let inner_span = expr_span(&inner);
+            let block = Block {
+                stmts: vec![],
+                tail: Some(Box::new(inner)),
+                span: inner_span,
+            };
+            let span = start.merge(inner_span);
+            Some(Expr::Safe(valen_ast::SafeExpr { block, span }))
+        }
+    }
+
+    fn parse_unsafe_expr(&mut self) -> Option<Expr> {
+        let start = self.expect(TokenKind::Unsafe)?;
+        let body = if self.at(&TokenKind::LBrace) {
+            let block = self.parse_block()?;
+            Expr::Block(block)
+        } else {
+            self.parse_expr()?
+        };
+        let span = start.merge(expr_span(&body));
+        Some(Expr::Unsafe(UnsafeExpr {
+            body: Box::new(body),
+            span,
+        }))
+    }
+
+    fn parse_ref_mut_expr(&mut self) -> Option<Expr> {
+        let start = self.expect(TokenKind::Ref)?;
+        self.expect(TokenKind::Mut)?;
+        let inner = self.parse_expr()?;
+        let span = start.merge(expr_span(&inner));
+        Some(Expr::RefMutCreate(RefMutExpr {
+            expr: Box::new(inner),
+            span,
+        }))
     }
 
     fn parse_break_expr(&mut self) -> Option<Expr> {
