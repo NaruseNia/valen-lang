@@ -136,6 +136,7 @@ expression: "check(\"trait Display { fn display(self) -> String { self.name } }\
                         is_open: false,
                         is_override: false,
                         is_abstract: false,
+                        is_unsafe: false,
                         span: Span {
                             start: 16,
                             end: 56,

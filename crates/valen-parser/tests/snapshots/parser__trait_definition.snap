@@ -86,6 +86,7 @@ expression: "check(\"trait Area { fn area(self) -> Float; }\")"
                         is_open: false,
                         is_override: false,
                         is_abstract: true,
+                        is_unsafe: false,
                         span: Span {
                             start: 13,
                             end: 36,

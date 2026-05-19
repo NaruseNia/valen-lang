@@ -239,6 +239,8 @@ pub struct FnDef {
     pub has_body: bool,
     /// Generic type parameter bounds (e.g. `T` → `["Comparable", "Display"]`).
     pub generic_bounds: Vec<(SmolStr, Vec<SmolStr>)>,
+    /// `true` when declared as `unsafe fn`.
+    pub is_unsafe: bool,
 }
 
 /// A function parameter definition.
@@ -371,6 +373,8 @@ pub enum TyRef {
     Nullable(Box<TyRef>),
     /// A function type (`fn(A, B) -> C`).
     Fn(Vec<TyRef>, Box<TyRef>),
+    /// `ref mut T` — mutable reference type.
+    RefMut(Box<TyRef>),
     /// The `Self` type inside trait or impl contexts.
     SelfTy,
     /// A name that could not be resolved during lowering.
@@ -412,6 +416,8 @@ pub enum Ty {
     Nullable(Box<Ty>),
     /// A function type with parameter types and return type.
     Fn(Vec<Ty>, Box<Ty>),
+    /// `ref mut T` — mutable reference type.
+    RefMut(Box<Ty>),
     /// Placeholder for error recovery.
     Error,
 }
@@ -459,12 +465,16 @@ impl Ty {
         match self {
             Ty::TypeParam(_) => true,
             Ty::Generic(_, args) => args.iter().any(|a| a.has_type_params()),
-            Ty::Nullable(inner) => inner.has_type_params(),
+            Ty::Nullable(inner) | Ty::RefMut(inner) => inner.has_type_params(),
             Ty::Fn(params, ret) => {
                 params.iter().any(|p| p.has_type_params()) || ret.has_type_params()
             }
             _ => false,
         }
+    }
+    /// `true` if this is a `ref mut T` type.
+    pub fn is_ref_mut(&self) -> bool {
+        matches!(self, Ty::RefMut(_))
     }
 }
 
@@ -485,6 +495,7 @@ impl std::fmt::Display for Ty {
                 write!(f, ">")
             }
             Ty::Nullable(inner) => write!(f, "{inner}?"),
+            Ty::RefMut(inner) => write!(f, "ref mut {inner}"),
             Ty::Fn(params, ret) => {
                 write!(f, "fn(")?;
                 for (i, p) in params.iter().enumerate() {
@@ -534,6 +545,7 @@ impl std::fmt::Display for TyRef {
                 write!(f, ">")
             }
             TyRef::Nullable(inner) => write!(f, "{inner}?"),
+            TyRef::RefMut(inner) => write!(f, "ref mut {inner}"),
             TyRef::Fn(params, ret) => {
                 write!(f, "fn(")?;
                 for (i, p) in params.iter().enumerate() {
@@ -561,6 +573,7 @@ pub fn tyref_to_ty(tyref: &TyRef) -> Ty {
         TyRef::Named(n) => Ty::Named(n.clone()),
         TyRef::Generic(n, args) => Ty::Generic(n.clone(), args.iter().map(tyref_to_ty).collect()),
         TyRef::Nullable(inner) => Ty::Nullable(Box::new(tyref_to_ty(inner))),
+        TyRef::RefMut(inner) => Ty::RefMut(Box::new(tyref_to_ty(inner))),
         TyRef::Fn(params, ret) => Ty::Fn(
             params.iter().map(tyref_to_ty).collect(),
             Box::new(tyref_to_ty(ret)),
@@ -582,6 +595,7 @@ pub fn tyref_to_ty_generic(tyref: &TyRef) -> Ty {
             Ty::Generic(n.clone(), args.iter().map(tyref_to_ty_generic).collect())
         }
         TyRef::Nullable(inner) => Ty::Nullable(Box::new(tyref_to_ty_generic(inner))),
+        TyRef::RefMut(inner) => Ty::RefMut(Box::new(tyref_to_ty_generic(inner))),
         TyRef::Fn(params, ret) => Ty::Fn(
             params.iter().map(tyref_to_ty_generic).collect(),
             Box::new(tyref_to_ty_generic(ret)),
@@ -757,6 +771,26 @@ pub enum TypedExprKind {
     ListLiteral(Vec<TypedExpr>),
     /// `#{key: value, ...}` — map literal lowered to HashMap construction.
     MapLiteral(Vec<(TypedExpr, TypedExpr)>),
+    /// `unsafe { block }` or `unsafe expr` — safety checks bypassed.
+    Unsafe(TypedBody),
+    /// `expr as Type` — type cast (widening or downcast).
+    Cast {
+        expr: Box<TypedExpr>,
+        target_ty: Ty,
+    },
+    /// `*expr` — dereference a `ref mut T` to read `T`.
+    Deref {
+        expr: Box<TypedExpr>,
+    },
+    /// `ref mut expr` — create a `ref mut T` value.
+    RefMutCreate {
+        expr: Box<TypedExpr>,
+    },
+    /// `*target = value` — assign through a `ref mut T`.
+    DerefAssign {
+        target: Box<TypedExpr>,
+        value: Box<TypedExpr>,
+    },
     Error,
 }
 

@@ -206,6 +206,9 @@ impl<'hir> TypeChecker<'hir> {
                 let ret = Box::new(self.substitute_tyref(r, params, args));
                 Ty::Fn(ps, ret)
             }
+            TyRef::RefMut(inner) => {
+                Ty::RefMut(Box::new(self.substitute_tyref(inner, params, args)))
+            }
             TyRef::SelfTy | TyRef::Error => Ty::Error,
         }
     }
@@ -438,6 +441,9 @@ impl<'hir> TypeChecker<'hir> {
                 let params = ft.params.iter().map(|p| self.resolve_ast_type(p)).collect();
                 let ret = Box::new(self.resolve_ast_type(&ft.return_type));
                 Ty::Fn(params, ret)
+            }
+            valen_ast::Type::RefMut { inner, .. } => {
+                Ty::RefMut(Box::new(self.resolve_ast_type(inner)))
             }
             valen_ast::Type::Tuple(..) => Ty::Error,
         }
@@ -782,6 +788,14 @@ impl<'hir> TypeChecker<'hir> {
             valen_ast::Expr::Pipeline(p) => self.synth_pipeline(p),
             valen_ast::Expr::ListLiteral(l) => self.synth_list_literal(l, expected),
             valen_ast::Expr::MapLiteral(m) => self.synth_map_literal(m, expected),
+            valen_ast::Expr::Unsafe(_)
+            | valen_ast::Expr::Cast(_)
+            | valen_ast::Expr::Deref(_)
+            | valen_ast::Expr::RefMutCreate(_) => TypedExpr {
+                kind: TypedExprKind::Error,
+                ty: Ty::Error,
+                span: expr.span(),
+            },
         }
     }
 

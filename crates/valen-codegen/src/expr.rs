@@ -275,6 +275,7 @@ impl<'a> ExprLowering<'a> {
                     None => inner_jvm,
                 }
             }
+            Ty::RefMut(inner) => self.ty_to_jvm(inner),
             Ty::TypeParam(_) | Ty::Fn(_, _) | Ty::Error => JvmType::Object(JVM_OBJECT.to_string()),
         }
     }
@@ -530,6 +531,13 @@ impl<'a> ExprLowering<'a> {
             }
             TypedExprKind::MapLiteral(entries) => {
                 self.lower_map_literal(entries, &expr.ty);
+            }
+            TypedExprKind::Unsafe(_)
+            | TypedExprKind::Cast { .. }
+            | TypedExprKind::Deref { .. }
+            | TypedExprKind::RefMutCreate { .. }
+            | TypedExprKind::DerefAssign { .. } => {
+                // TODO: implement codegen for unsafe/cast/deref/ref-mut
             }
             TypedExprKind::Error => {}
         }

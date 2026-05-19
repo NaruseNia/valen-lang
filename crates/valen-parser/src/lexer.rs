@@ -85,6 +85,10 @@ enum RawTok {
     As,
     #[token("safe")]
     Safe,
+    #[token("unsafe")]
+    Unsafe,
+    #[token("ref")]
+    Ref,
     #[token("suspend")]
     Suspend,
     #[token("async")]
@@ -514,6 +518,8 @@ fn map_token(raw: RawTok) -> TokenKind {
         RawTok::False => TokenKind::BoolLit(false),
         RawTok::As => TokenKind::As,
         RawTok::Safe => TokenKind::Safe,
+        RawTok::Unsafe => TokenKind::Unsafe,
+        RawTok::Ref => TokenKind::Ref,
         RawTok::Suspend => TokenKind::Suspend,
         RawTok::Async => TokenKind::Async,
         RawTok::Await => TokenKind::Await,

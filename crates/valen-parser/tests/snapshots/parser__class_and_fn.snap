@@ -48,6 +48,7 @@ expression: "check(\"class Foo {}\\nfn main() {}\")"
             is_open: false,
             is_override: false,
             is_abstract: false,
+            is_unsafe: false,
             span: Span {
                 start: 13,
                 end: 25,

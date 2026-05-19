@@ -111,7 +111,13 @@ impl DiagCode {
     pub const LET_ELSE_NOT_DIVERGING: DiagCode = DiagCode(320);
     pub const OR_PATTERN_BINDING_MISMATCH: DiagCode = DiagCode(321);
     pub const MATCH_NOT_EXHAUSTIVE: DiagCode = DiagCode(500);
+    pub const UNSAFE_REQUIRED: DiagCode = DiagCode(322);
+    pub const UNSAFE_CONTEXT_REQUIRED: DiagCode = DiagCode(323);
+    pub const INVALID_CAST: DiagCode = DiagCode(324);
+    pub const DEREF_NOT_REF_MUT: DiagCode = DiagCode(325);
+    pub const REF_MUT_JAVA_INTEROP: DiagCode = DiagCode(326);
     pub const JAVA_EXCEPTION_NOT_WRAPPED: DiagCode = DiagCode(600);
+    pub const JAVA_CALL_REQUIRES_SAFE: DiagCode = DiagCode(601);
     pub const NAMING_NOT_CAMEL_CASE: DiagCode = DiagCode(700);
     pub const NAMING_NOT_PASCAL_CASE: DiagCode = DiagCode(701);
 }

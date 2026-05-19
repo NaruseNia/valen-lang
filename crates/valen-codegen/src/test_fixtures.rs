@@ -86,6 +86,7 @@ pub fn class_with_method(
                 return_ty,
                 has_body,
                 generic_bounds: vec![],
+                is_unsafe: false,
             }),
             vis: Vis::Pub,
             span: span(),

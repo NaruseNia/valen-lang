@@ -138,6 +138,7 @@ expression: "check(\"package com.example;\\nimport java.util.List;\\n\\npub fn m
             is_open: false,
             is_override: false,
             is_abstract: false,
+            is_unsafe: false,
             span: Span {
                 start: 45,
                 end: 81,

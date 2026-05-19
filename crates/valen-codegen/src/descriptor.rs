@@ -43,6 +43,7 @@ pub fn tyref_to_jvm(
             }
         }
         TyRef::Fn(_, _) => JvmType::Object("java/lang/Object".to_string()),
+        TyRef::RefMut(inner) => tyref_to_jvm(inner, package, imports),
         TyRef::SelfTy | TyRef::Unresolved(_) | TyRef::Error => {
             JvmType::Object("java/lang/Object".to_string())
         }

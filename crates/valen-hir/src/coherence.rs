@@ -322,6 +322,7 @@ fn substitute_fn_def(f: &FnDef, subst: &[(SmolStr, TyRef)]) -> FnDef {
         return_ty: f.return_ty.as_ref().map(|t| substitute_tyref(t, subst)),
         has_body: f.has_body,
         generic_bounds: f.generic_bounds.clone(),
+        is_unsafe: f.is_unsafe,
     }
 }
 

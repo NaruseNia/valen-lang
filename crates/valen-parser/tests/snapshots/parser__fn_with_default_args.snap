@@ -178,6 +178,7 @@ expression: "check(\"fn greet(msg: String = \\\"hi\\\", count: Int = 1) -> Strin
             is_open: false,
             is_override: false,
             is_abstract: false,
+            is_unsafe: false,
             span: Span {
                 start: 0,
                 end: 62,

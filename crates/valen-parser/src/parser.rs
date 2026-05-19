@@ -321,6 +321,7 @@ impl Parser {
             is_open,
             is_override,
             is_abstract,
+            is_unsafe: false,
             span,
         })
     }
@@ -814,6 +815,7 @@ impl Parser {
                 is_open: false,
                 is_override: false,
                 is_abstract,
+                is_unsafe: false,
                 span: item_start.merge(end),
             }));
         }
@@ -2382,6 +2384,10 @@ fn expr_span(expr: &Expr) -> Span {
         Expr::Pipeline(p) => p.span,
         Expr::ListLiteral(l) => l.span,
         Expr::MapLiteral(m) => m.span,
+        Expr::Unsafe(u) => u.span,
+        Expr::Cast(c) => c.span,
+        Expr::Deref(d) => d.span,
+        Expr::RefMutCreate(r) => r.span,
     }
 }
 
@@ -2392,6 +2398,7 @@ fn type_span(ty: &Type) -> Span {
         Type::Nullable { span, .. } => *span,
         Type::Fn(f) => f.span,
         Type::Tuple(_, span) => *span,
+        Type::RefMut { span, .. } => *span,
     }
 }
 

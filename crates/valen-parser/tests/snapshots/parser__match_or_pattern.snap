@@ -229,6 +229,7 @@ expression: "check(\"fn f(x: Int) -> Bool { match x { 1 | 2 | 3 => true, _ => fa
             is_open: false,
             is_override: false,
             is_abstract: false,
+            is_unsafe: false,
             span: Span {
                 start: 0,
                 end: 66,
