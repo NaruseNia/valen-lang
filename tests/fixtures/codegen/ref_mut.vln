@@ -1,0 +1,9 @@
+package com.example;
+
+pub class RefMutDemo {
+    fn createAndDeref(self) -> Int {
+        let mut n: Int = 10;
+        let r: ref mut Int = ref mut n;
+        *r
+    }
+}

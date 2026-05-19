@@ -1,0 +1,18 @@
+package com.example;
+
+pub class UnsafeDemo {
+    fn unsafeBlock(self) -> Int {
+        unsafe {
+            42
+        }
+    }
+
+    fn unsafeExpr(self) -> Int {
+        unsafe 100
+    }
+
+    fn safeCast(self) -> Long {
+        let x: Int = 42;
+        x as Long
+    }
+}

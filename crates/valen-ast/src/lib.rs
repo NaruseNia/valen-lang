@@ -91,6 +91,7 @@ pub struct FnDecl {
     pub is_open: bool,
     pub is_override: bool,
     pub is_abstract: bool,
+    pub is_unsafe: bool,
     pub span: Span,
 }
 
@@ -330,6 +331,8 @@ pub enum Type {
     Fn(FnType),
     /// Tuple type `(A, B, C)` — reserved, not used in MVP.
     Tuple(Vec<Type>, Span),
+    /// `ref mut T` — mutable reference type.
+    RefMut { inner: Box<Type>, span: Span },
 }
 
 /// A dot-separated type path (e.g. `java.util.List<String>`).
@@ -437,6 +440,14 @@ pub enum Expr {
     ListLiteral(ListLiteralExpr),
     /// `#{key: value, ...}` — map literal.
     MapLiteral(MapLiteralExpr),
+    /// `unsafe { block }` or `unsafe expr` — bypasses safety checks.
+    Unsafe(UnsafeExpr),
+    /// `expr as Type` — type cast expression.
+    Cast(CastExpr),
+    /// `*expr` — dereference a `ref mut` value.
+    Deref(DerefExpr),
+    /// `ref mut expr` — create a mutable reference.
+    RefMutCreate(RefMutExpr),
 }
 
 /// Literal value (integer, float, string, etc.).
@@ -501,6 +512,10 @@ impl Expr {
             Expr::Pipeline(p) => p.span,
             Expr::ListLiteral(l) => l.span,
             Expr::MapLiteral(m) => m.span,
+            Expr::Unsafe(u) => u.span,
+            Expr::Cast(c) => c.span,
+            Expr::Deref(d) => d.span,
+            Expr::RefMutCreate(r) => r.span,
         }
     }
 }
@@ -513,6 +528,7 @@ impl Type {
             Type::Nullable { span, .. } => Some(*span),
             Type::Fn(f) => Some(f.span),
             Type::Tuple(_, span) => Some(*span),
+            Type::RefMut { span, .. } => Some(*span),
         }
     }
 }
@@ -876,6 +892,35 @@ pub enum StringInterpPart {
 #[derive(Debug, Clone)]
 pub struct SafeExpr {
     pub block: Block,
+    pub span: Span,
+}
+
+/// `unsafe { block }` or `unsafe expr` — bypasses safety checks.
+#[derive(Debug, Clone)]
+pub struct UnsafeExpr {
+    pub body: Box<Expr>,
+    pub span: Span,
+}
+
+/// `expr as Type` — type cast expression.
+#[derive(Debug, Clone)]
+pub struct CastExpr {
+    pub expr: Box<Expr>,
+    pub target_ty: Type,
+    pub span: Span,
+}
+
+/// `*expr` — dereference a `ref mut` value.
+#[derive(Debug, Clone)]
+pub struct DerefExpr {
+    pub expr: Box<Expr>,
+    pub span: Span,
+}
+
+/// `ref mut expr` — create a mutable reference.
+#[derive(Debug, Clone)]
+pub struct RefMutExpr {
+    pub expr: Box<Expr>,
     pub span: Span,
 }
 

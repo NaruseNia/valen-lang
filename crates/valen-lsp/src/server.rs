@@ -1408,7 +1408,13 @@ fn format_fn_signature_with_owner(name: &str, f: &valen_hir::FnDef, owner: Optio
         .as_ref()
         .map(|t| format!(" -> {}", format_ty(t)))
         .unwrap_or_default();
-    format!("fn {}{generics}({}){}", name, params.join(", "), ret)
+    let prefix = if f.is_unsafe { "unsafe " } else { "" };
+    format!(
+        "{prefix}fn {}{generics}({}){}",
+        name,
+        params.join(", "),
+        ret
+    )
 }
 
 fn format_class_signature(name: &str, params: &[valen_hir::CtorParamDef]) -> String {
@@ -2004,7 +2010,8 @@ fn format_def_hover(def: &valen_hir::Def, hir: &valen_hir::Hir) -> String {
                 .as_ref()
                 .map(|t| format!(" -> {t}"))
                 .unwrap_or_default();
-            format!("fn {}({}){}", def.name, params_str.join(", "), ret)
+            let prefix = if f.is_unsafe { "unsafe " } else { "" };
+            format!("{prefix}fn {}({}){}", def.name, params_str.join(", "), ret)
         }
         DefKind::Class(c) => {
             let params_str: Vec<String> = c
@@ -2202,6 +2209,8 @@ fn classify_token(kind: &TokenKind) -> Option<u32> {
         | TokenKind::Continue
         | TokenKind::As
         | TokenKind::Safe
+        | TokenKind::Unsafe
+        | TokenKind::Ref
         | TokenKind::Suspend
         | TokenKind::Async
         | TokenKind::Await
@@ -2382,8 +2391,17 @@ fn collect_hints_from_expr(
             }
             collect_hints_from_expr(body, doc, range, hints);
         }
-        TypedExprKind::Block(body) | TypedExprKind::Safe(body) => {
+        TypedExprKind::Block(body) | TypedExprKind::Safe(body) | TypedExprKind::Unsafe(body) => {
             collect_hints_from_body(body, doc, range, hints);
+        }
+        TypedExprKind::Cast { expr: inner, .. }
+        | TypedExprKind::Deref { expr: inner }
+        | TypedExprKind::RefMutCreate { expr: inner } => {
+            collect_hints_from_expr(inner, doc, range, hints);
+        }
+        TypedExprKind::DerefAssign { target, value } => {
+            collect_hints_from_expr(target, doc, range, hints);
+            collect_hints_from_expr(value, doc, range, hints);
         }
         TypedExprKind::If {
             cond,
@@ -2608,8 +2626,17 @@ fn find_expr_in_expr<'a>(expr: &'a TypedExpr, offset: u32, best: &mut Option<&'a
     }
     // Recurse into sub-expressions
     match &expr.kind {
-        TypedExprKind::Block(body) | TypedExprKind::Safe(body) => {
+        TypedExprKind::Block(body) | TypedExprKind::Safe(body) | TypedExprKind::Unsafe(body) => {
             find_expr_in_body(body, offset, best);
+        }
+        TypedExprKind::Cast { expr: inner, .. }
+        | TypedExprKind::Deref { expr: inner }
+        | TypedExprKind::RefMutCreate { expr: inner } => {
+            find_expr_in_expr(inner, offset, best);
+        }
+        TypedExprKind::DerefAssign { target, value } => {
+            find_expr_in_expr(target, offset, best);
+            find_expr_in_expr(value, offset, best);
         }
         TypedExprKind::If {
             cond,
@@ -2871,7 +2898,7 @@ fn collect_vars_from_expr(expr: &TypedExpr, offset: u32, vars: &mut Vec<(String,
         return;
     }
     match &expr.kind {
-        TypedExprKind::Block(body) | TypedExprKind::Safe(body) => {
+        TypedExprKind::Block(body) | TypedExprKind::Safe(body) | TypedExprKind::Unsafe(body) => {
             collect_vars_from_body(body, offset, vars);
         }
         TypedExprKind::If {
@@ -2951,7 +2978,8 @@ fn format_typed_expr_hover(expr: &TypedExpr) -> Option<String> {
 /// Keywords shown in the General context (expression + statement start).
 const EXPR_KEYWORDS: &[&str] = &[
     "if", "else", "match", "for", "while", "loop", "return", "break", "continue", "true", "false",
-    "safe", "let", "mut", "fn", "pub", "class", "data", "enum", "trait", "impl", "import",
+    "safe", "unsafe", "ref mut", "let", "mut", "fn", "pub", "class", "data", "enum", "trait",
+    "impl", "import",
 ];
 
 // ---------------------------------------------------------------------------

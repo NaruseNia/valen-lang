@@ -653,6 +653,10 @@ impl<'a> Printer<'a> {
                 self.w(") -> ");
                 self.print_type(&f.return_type);
             }
+            Type::RefMut { inner, .. } => {
+                self.w("ref mut ");
+                self.print_type(inner);
+            }
             Type::Tuple(types, _) => {
                 self.w("(");
                 for (i, t) in types.iter().enumerate() {
@@ -819,6 +823,23 @@ impl<'a> Printer<'a> {
                     self.print_expr(elem);
                 }
                 self.w("]");
+            }
+            Expr::Unsafe(u) => {
+                self.w("unsafe ");
+                self.print_expr(&u.body);
+            }
+            Expr::Cast(c) => {
+                self.print_expr(&c.expr);
+                self.w(" as ");
+                self.print_type(&c.target_ty);
+            }
+            Expr::Deref(d) => {
+                self.w("*");
+                self.print_expr(&d.expr);
+            }
+            Expr::RefMutCreate(r) => {
+                self.w("ref mut ");
+                self.print_expr(&r.expr);
             }
             Expr::MapLiteral(m) => {
                 self.w("#{");

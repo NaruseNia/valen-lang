@@ -109,3 +109,46 @@ data |> process(config) |> format(style);  // format(process(data, config), styl
 ```
 
 右辺は関数呼び出しまたは関数名でなければならない。チェーン可能（左結合）。
+
+## 3.10 `unsafe` ブロック式
+
+`unsafe { expr }` は安全性保証を bypass するブロック式。最後の式の値を返す。短縮形 `unsafe expr` も使用可能。
+
+```valen
+let pos: Position = unsafe { obj as Position };
+let pos: Position = unsafe obj as Position;  // 短縮形
+```
+
+詳細は §8.5 参照。
+
+## 3.11 `as` キャスト式
+
+`expr as Type` で型キャストを行う。数値 widening（`Int` → `Long` 等）は safe、ダウンキャストは `unsafe` 必須。
+
+```valen
+let x: Long = 42 as Long;                        // safe widening
+let pos: Position = unsafe { obj as Position };   // unsafe downcast
+```
+
+詳細は §8.7 参照。
+
+## 3.12 deref 式
+
+`*expr` で `ref mut T` 型の参照を読み取る。`*expr = value` で参照先に書き込む。
+
+```valen
+let r = ref mut n;
+let v = *r;       // 読み取り
+*r = v + 1;       // 書き込み
+```
+
+## 3.13 `ref mut` 式
+
+`ref mut expr` でミュータブル参照を作成する。結果は `ref mut T` 型。
+
+```valen
+let mut n = 10;
+let r = ref mut n;  // r: ref mut Int
+```
+
+詳細は §2.8 参照。

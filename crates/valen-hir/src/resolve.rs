@@ -598,6 +598,7 @@ impl Resolver {
                 .map(|t| lower_type_ref_with_params(t, &all_params)),
             has_body: f.body.is_some(),
             generic_bounds,
+            is_unsafe: f.is_unsafe,
         }
     }
 
@@ -724,6 +725,9 @@ fn lower_type_ref_with_params(ty: &valen_ast::Type, type_params: &[SmolStr]) -> 
                 .collect();
             let ret = Box::new(lower_type_ref_with_params(&ft.return_type, type_params));
             TyRef::Fn(params, ret)
+        }
+        valen_ast::Type::RefMut { inner, .. } => {
+            TyRef::RefMut(Box::new(lower_type_ref_with_params(inner, type_params)))
         }
         valen_ast::Type::Tuple(..) => TyRef::Error,
     }

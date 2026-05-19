@@ -43,6 +43,16 @@ pub fn tyref_to_jvm(
             }
         }
         TyRef::Fn(_, _) => JvmType::Object("java/lang/Object".to_string()),
+        TyRef::RefMut(inner) => match &**inner {
+            TyRef::Prim(PrimTy::Int | PrimTy::Byte | PrimTy::Short | PrimTy::Char) => {
+                JvmType::Object("valen/core/IntRef".to_string())
+            }
+            TyRef::Prim(PrimTy::Long) => JvmType::Object("valen/core/LongRef".to_string()),
+            TyRef::Prim(PrimTy::Float) => JvmType::Object("valen/core/FloatRef".to_string()),
+            TyRef::Prim(PrimTy::Double) => JvmType::Object("valen/core/DoubleRef".to_string()),
+            TyRef::Prim(PrimTy::Bool) => JvmType::Object("valen/core/BoolRef".to_string()),
+            _ => JvmType::Object("valen/core/Ref".to_string()),
+        },
         TyRef::SelfTy | TyRef::Unresolved(_) | TyRef::Error => {
             JvmType::Object("java/lang/Object".to_string())
         }

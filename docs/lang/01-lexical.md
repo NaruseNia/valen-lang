@@ -15,7 +15,7 @@ open abstract sealed override
 package import
 for in while loop break continue
 true false
-as safe annotation typealias type
+as safe unsafe ref annotation typealias type
 ```
 
 予約語（将来用）：`suspend async await yield`
@@ -32,13 +32,23 @@ throw try catch finally extends implements
 
 ### `as` キーワードの用途
 
-MVP では `as` は **import alias 専用**:
+`as` は以下の2つの用途で使用する。
 
-```valen
-import java.util.HashMap as HMap;
-```
+1. **import alias:**
+   ```valen
+   import java.util.HashMap as HMap;
+   ```
 
-型キャスト（`expr as Type`）は **Phase 1.5** で導入予定。MVP ではダウンキャストは `match` パターンで代替する。
+2. **型キャスト式（§3, §8 参照）:**
+   ```valen
+   let x: Long = 42 as Long;                    // 安全な widening
+   let pos: Position = unsafe { obj as Position }; // ダウンキャストは unsafe 必須
+   ```
+
+### `unsafe` / `ref` キーワードの用途
+
+- `unsafe` — 安全性保証を bypass するブロック式・関数修飾子（§8.5 参照）
+- `ref` — `ref mut` でミュータブル参照を作成する（§2.8 参照）。`ref` 単体では使用しない
 
 ### 演算子
 

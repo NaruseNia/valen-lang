@@ -68,6 +68,7 @@ pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<DefId, TypedBody>) -> Vec<Jv
     }
 
     classes.push(generate_list_iterator_class());
+    classes.extend(generate_ref_wrapper_classes());
 
     classes
 }
@@ -1269,6 +1270,80 @@ fn lower_unit_variant(
     }
 }
 
+fn generate_ref_wrapper_classes() -> Vec<JvmClass> {
+    use crate::jvm_ir::*;
+    let specs: &[(&str, JvmType)] = &[
+        ("valen/core/IntRef", JvmType::Int),
+        ("valen/core/LongRef", JvmType::Long),
+        ("valen/core/FloatRef", JvmType::Float),
+        ("valen/core/DoubleRef", JvmType::Double),
+        ("valen/core/BoolRef", JvmType::Boolean),
+        ("valen/core/Ref", JvmType::Object(JVM_OBJECT.to_string())),
+    ];
+    let obj = JvmType::Object(JVM_OBJECT.to_string());
+    specs
+        .iter()
+        .map(|(name, field_ty)| {
+            let ctor = JvmMethod {
+                access: JvmMethodAccess {
+                    is_public: true,
+                    ..Default::default()
+                },
+                name: "<init>".to_string(),
+                params: vec![field_ty.clone()],
+                return_type: JvmType::Void,
+                body: Some(JvmMethodBody {
+                    max_locals: 2 + field_ty.slot_count(),
+                    ops: vec![
+                        JvmOp::LoadLocal(0, obj.clone()),
+                        JvmOp::InvokeSpecial {
+                            owner: JVM_OBJECT.to_string(),
+                            name: "<init>".to_string(),
+                            params: vec![],
+                            ret: JvmType::Void,
+                        },
+                        JvmOp::LoadLocal(0, obj.clone()),
+                        JvmOp::LoadLocal(1, field_ty.clone()),
+                        JvmOp::PutField {
+                            owner: name.to_string(),
+                            name: "value".to_string(),
+                            descriptor: field_ty.clone(),
+                        },
+                        JvmOp::Return(JvmType::Void),
+                    ],
+                    exception_handlers: vec![],
+                }),
+            };
+            JvmClass {
+                version: crate::JvmVersion::Java21,
+                name: name.to_string(),
+                super_class: JVM_OBJECT.to_string(),
+                interfaces: vec![],
+                access: JvmClassAccess {
+                    is_public: true,
+                    is_final: true,
+                    ..Default::default()
+                },
+                fields: vec![JvmField {
+                    access: JvmFieldAccess {
+                        is_public: true,
+                        ..Default::default()
+                    },
+                    name: "value".to_string(),
+                    ty: field_ty.clone(),
+                }],
+                methods: vec![ctor],
+                source_file: None,
+                permitted_subclasses: vec![],
+                is_record: false,
+                bootstrap_methods: vec![],
+                synthetic_methods: vec![],
+                annotations: vec![],
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1466,6 +1541,7 @@ mod tests {
                     return_ty: Some(TyRef::Prim(PrimTy::String)),
                     has_body: true,
                     generic_bounds: vec![],
+                    is_unsafe: false,
                 }),
                 vis: Vis::Pub,
                 span: valen_ast::Span {
@@ -1540,6 +1616,7 @@ mod tests {
                     return_ty: Some(TyRef::Prim(PrimTy::String)),
                     has_body: true,
                     generic_bounds: vec![],
+                    is_unsafe: false,
                 }),
                 vis: Vis::Pub,
                 span: valen_ast::Span {

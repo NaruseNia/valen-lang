@@ -125,6 +125,7 @@ expression: "check(\"fn find(id: Int) -> String? { id }\")"
             is_open: false,
             is_override: false,
             is_abstract: false,
+            is_unsafe: false,
             span: Span {
                 start: 0,
                 end: 34,

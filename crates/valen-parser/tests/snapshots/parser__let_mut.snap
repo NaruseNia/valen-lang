@@ -81,6 +81,7 @@ expression: "check(\"fn main() { let mut count = 0; count }\")"
             is_open: false,
             is_override: false,
             is_abstract: false,
+            is_unsafe: false,
             span: Span {
                 start: 0,
                 end: 38,

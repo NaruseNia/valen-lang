@@ -155,6 +155,7 @@ expression: "check(\"fn f() { loop { if skip { continue; } process(); } }\")"
             is_open: false,
             is_override: false,
             is_abstract: false,
+            is_unsafe: false,
             span: Span {
                 start: 0,
                 end: 52,

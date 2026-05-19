@@ -159,6 +159,42 @@ typealias Handler = fn(String) -> Result<Unit, AppError>;
 
 `typealias` は単なる別名なので、`UserId` と `Int` は完全に互換です。orphan rule の判定上、`typealias` は元の型の所有権を持ちません（`impl Trait for UserId` で foreign trait を実装することはできません）。
 
+## `ref mut T` — ミュータブル参照
+
+`ref mut T` は変数への可変参照を作る型です。関数に渡した先で呼び出し元の変数を変更したい場合や、Lambda で外側の変数を書き換えたい場合に使います。
+
+### 基本的な使い方
+
+`ref mut expr` で参照を作り、`*r` で読み取り、`*r = expr` で書き込みます。
+
+```valen
+fn increment(x: ref mut Int) -> Unit {
+    *x = *x + 1;
+}
+
+let mut n = 10;
+increment(ref mut n);
+// n は 11 になっている
+```
+
+### Lambda でのキャプチャ
+
+Lambda 内で外側の変数を変更するには、事前に `ref mut` で参照を作成します。自動キャプチャは行われないため、参照の作成は常に明示的です。
+
+```valen
+let mut count = 0;
+let r = ref mut count;
+let inc = || { *r = *r + 1; };
+inc();
+// count は 1 になっている
+```
+
+### 注意事項
+
+- `ref mut T` と `T` は別の型です。暗黙変換はありません
+- Java メソッドに `ref mut T` を渡すことはできません（コンパイルエラー）
+- GC がメモリ管理するため Rust のようなダングリング参照は発生しません。ただし aliasing と data race の責任はプログラマにあります
+
 ## 次のステップ
 
 - [ジェネリクス](03-generics.md) — 型パラメータ、bounds、variance

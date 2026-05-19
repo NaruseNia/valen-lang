@@ -16,14 +16,14 @@ fn fixture_path(name: &str) -> std::path::PathBuf {
 fn compile_fixture_outputs(name: &str) -> Vec<valen_codegen::ClassFileOutput> {
     compile_fixture_impl(name, true)
         .into_iter()
-        .filter(|o| o.internal_name != "valen/core/ListIterator")
+        .filter(|o| !o.internal_name.starts_with("valen/core/"))
         .collect()
 }
 
 fn compile_fixture_outputs_skip_typecheck(name: &str) -> Vec<valen_codegen::ClassFileOutput> {
     compile_fixture_impl(name, false)
         .into_iter()
-        .filter(|o| o.internal_name != "valen/core/ListIterator")
+        .filter(|o| !o.internal_name.starts_with("valen/core/"))
         .collect()
 }
 
@@ -951,4 +951,37 @@ fn fixture_newtype() {
     assert!(classes
         .iter()
         .any(|c| c.class_name().unwrap() == "com/example/IdTest"));
+}
+
+#[test]
+fn fixture_unsafe_block() {
+    let outputs = compile_fixture_outputs("unsafe_block.vln");
+    assert_eq!(outputs.len(), 1);
+    assert_eq!(outputs[0].internal_name, "com/example/UnsafeDemo");
+
+    let c = ClassFile::from_bytes(&outputs[0].bytes).expect("parse classfile");
+    // <init> + unsafeBlock + unsafeExpr + safeCast
+    assert_eq!(c.methods.len(), 4);
+}
+
+#[test]
+fn fixture_ref_mut() {
+    let outputs = compile_fixture_outputs("ref_mut.vln");
+    assert_eq!(outputs.len(), 1);
+    assert_eq!(outputs[0].internal_name, "com/example/RefMutDemo");
+
+    let c = ClassFile::from_bytes(&outputs[0].bytes).expect("parse classfile");
+    // <init> + createAndDeref
+    assert_eq!(c.methods.len(), 2);
+}
+
+#[test]
+fn fixture_safe_shorthand() {
+    let outputs = compile_fixture_outputs("safe_shorthand.vln");
+    assert_eq!(outputs.len(), 1);
+    assert_eq!(outputs[0].internal_name, "com/example/SafeShorthandDemo");
+
+    let c = ClassFile::from_bytes(&outputs[0].bytes).expect("parse classfile");
+    // <init> + safeExpr
+    assert_eq!(c.methods.len(), 2);
 }
