@@ -93,6 +93,7 @@ struct TypeChecker<'hir> {
     bodies: IndexMap<DefId, TypedBody>,
     return_ty: Option<Ty>,
     in_loop: bool,
+    in_unsafe: bool,
     type_params: IndexSet<SmolStr>,
     type_param_bounds: IndexMap<SmolStr, Vec<SmolStr>>,
     /// The concrete type that `Self` resolves to in the current class/impl context.
@@ -109,6 +110,7 @@ impl<'hir> TypeChecker<'hir> {
             bodies: IndexMap::new(),
             return_ty: None,
             in_loop: false,
+            in_unsafe: false,
             type_params: IndexSet::new(),
             type_param_bounds: IndexMap::new(),
         }
@@ -489,6 +491,11 @@ impl<'hir> TypeChecker<'hir> {
         let prev_return = self.return_ty.take();
         self.return_ty = Some(ret_ty.clone());
 
+        let prev_unsafe = self.in_unsafe;
+        if f.is_unsafe {
+            self.in_unsafe = true;
+        }
+
         self.env.push_scope();
 
         if let Some(sty) = self_ty {
@@ -523,6 +530,7 @@ impl<'hir> TypeChecker<'hir> {
 
         self.env.pop_scope();
         self.return_ty = prev_return;
+        self.in_unsafe = prev_unsafe;
         self.type_params = prev_type_params;
         self.type_param_bounds = prev_bounds;
 
@@ -788,14 +796,10 @@ impl<'hir> TypeChecker<'hir> {
             valen_ast::Expr::Pipeline(p) => self.synth_pipeline(p),
             valen_ast::Expr::ListLiteral(l) => self.synth_list_literal(l, expected),
             valen_ast::Expr::MapLiteral(m) => self.synth_map_literal(m, expected),
-            valen_ast::Expr::Unsafe(_)
-            | valen_ast::Expr::Cast(_)
-            | valen_ast::Expr::Deref(_)
-            | valen_ast::Expr::RefMutCreate(_) => TypedExpr {
-                kind: TypedExprKind::Error,
-                ty: Ty::Error,
-                span: expr.span(),
-            },
+            valen_ast::Expr::Unsafe(u) => self.synth_unsafe(u),
+            valen_ast::Expr::Cast(c) => self.synth_cast(c),
+            valen_ast::Expr::Deref(d) => self.synth_deref(d),
+            valen_ast::Expr::RefMutCreate(r) => self.synth_ref_mut_create(r, expected),
         }
     }
 
@@ -3184,6 +3188,35 @@ impl<'hir> TypeChecker<'hir> {
     // -- assign -------------------------------------------------------------
 
     fn synth_assign(&mut self, asgn: &valen_ast::AssignExpr) -> TypedExpr {
+        // `*ref_expr = value` — deref assign
+        if let valen_ast::Expr::Deref(d) = &*asgn.target {
+            let ref_expr = self.synth_expr(&d.expr, None);
+            let inner_ty = match &ref_expr.ty {
+                Ty::RefMut(inner) => (**inner).clone(),
+                other => {
+                    if !other.is_error() {
+                        self.diags.error(
+                            DiagCode::DEREF_NOT_REF_MUT,
+                            d.span,
+                            SmolStr::from(format!(
+                                "cannot dereference type `{other}`, expected `ref mut T`"
+                            )),
+                        );
+                    }
+                    Ty::Error
+                }
+            };
+            let value = self.check_expr(&asgn.value, Some(&inner_ty));
+            return TypedExpr {
+                kind: TypedExprKind::DerefAssign {
+                    target: Box::new(ref_expr),
+                    value: Box::new(value),
+                },
+                ty: Ty::unit(),
+                span: asgn.span,
+            };
+        }
+
         let target = self.infer_expr(&asgn.target);
 
         if let TypedExprKind::LocalVar(ref name) = target.kind {
@@ -3509,6 +3542,116 @@ impl<'hir> TypeChecker<'hir> {
             kind: TypedExprKind::Safe(body),
             ty: result_ty,
             span: s.span,
+        }
+    }
+
+    fn synth_unsafe(&mut self, u: &valen_ast::UnsafeExpr) -> TypedExpr {
+        let prev = self.in_unsafe;
+        self.in_unsafe = true;
+        let inner = self.synth_expr(&u.body, None);
+        self.in_unsafe = prev;
+        let ty = inner.ty.clone();
+        let body = TypedBody {
+            stmts: vec![],
+            tail: Some(Box::new(inner)),
+            ty: ty.clone(),
+        };
+        TypedExpr {
+            kind: TypedExprKind::Unsafe(body),
+            ty,
+            span: u.span,
+        }
+    }
+
+    fn synth_cast(&mut self, c: &valen_ast::CastExpr) -> TypedExpr {
+        let inner = self.synth_expr(&c.expr, None);
+        let target = self.resolve_ast_type(&c.target_ty);
+        let is_safe = self.is_safe_cast(&inner.ty, &target);
+        if !is_safe && !self.in_unsafe {
+            self.diags.error(
+                DiagCode::UNSAFE_REQUIRED,
+                c.span,
+                SmolStr::from("downcast requires `unsafe` context"),
+            );
+        }
+        TypedExpr {
+            kind: TypedExprKind::Cast {
+                expr: Box::new(inner),
+                target_ty: target.clone(),
+            },
+            ty: target,
+            span: c.span,
+        }
+    }
+
+    fn is_safe_cast(&self, from: &Ty, to: &Ty) -> bool {
+        if from == to || from.is_error() || to.is_error() {
+            return true;
+        }
+        #[allow(clippy::match_like_matches_macro)]
+        match (from, to) {
+            (
+                Ty::Prim(PrimTy::Byte),
+                Ty::Prim(
+                    PrimTy::Short | PrimTy::Int | PrimTy::Long | PrimTy::Float | PrimTy::Double,
+                ),
+            ) => true,
+            (
+                Ty::Prim(PrimTy::Short),
+                Ty::Prim(PrimTy::Int | PrimTy::Long | PrimTy::Float | PrimTy::Double),
+            ) => true,
+            (Ty::Prim(PrimTy::Int), Ty::Prim(PrimTy::Long | PrimTy::Float | PrimTy::Double)) => {
+                true
+            }
+            (Ty::Prim(PrimTy::Long), Ty::Prim(PrimTy::Float | PrimTy::Double)) => true,
+            (Ty::Prim(PrimTy::Float), Ty::Prim(PrimTy::Double)) => true,
+            (
+                Ty::Prim(PrimTy::Char),
+                Ty::Prim(PrimTy::Int | PrimTy::Long | PrimTy::Float | PrimTy::Double),
+            ) => true,
+            _ => false,
+        }
+    }
+
+    fn synth_deref(&mut self, d: &valen_ast::DerefExpr) -> TypedExpr {
+        let inner = self.synth_expr(&d.expr, None);
+        let ty = match &inner.ty {
+            Ty::RefMut(inner_ty) => (**inner_ty).clone(),
+            other => {
+                if !other.is_error() {
+                    self.diags.error(
+                        DiagCode::DEREF_NOT_REF_MUT,
+                        d.span,
+                        SmolStr::from(format!(
+                            "cannot dereference type `{other}`, expected `ref mut T`"
+                        )),
+                    );
+                }
+                Ty::Error
+            }
+        };
+        TypedExpr {
+            kind: TypedExprKind::Deref {
+                expr: Box::new(inner),
+            },
+            ty,
+            span: d.span,
+        }
+    }
+
+    fn synth_ref_mut_create(
+        &mut self,
+        r: &valen_ast::RefMutExpr,
+        _expected: Option<&Ty>,
+    ) -> TypedExpr {
+        let inner = self.synth_expr(&r.expr, None);
+        let ty = Ty::RefMut(Box::new(inner.ty.clone()));
+        TypedExpr {
+            kind: TypedExprKind::RefMutCreate {
+                expr: Box::new(inner),
+            },
+            ty,
+            span: r.span,
         }
     }
 }

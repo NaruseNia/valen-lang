@@ -598,7 +598,7 @@ impl Resolver {
                 .map(|t| lower_type_ref_with_params(t, &all_params)),
             has_body: f.body.is_some(),
             generic_bounds,
-            is_unsafe: false,
+            is_unsafe: f.is_unsafe,
         }
     }
 
