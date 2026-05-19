@@ -275,7 +275,10 @@ impl<'a> ExprLowering<'a> {
                     None => inner_jvm,
                 }
             }
-            Ty::RefMut(inner) => self.ty_to_jvm(inner),
+            Ty::RefMut(inner) => {
+                let class = ref_mut_wrapper_class(inner);
+                JvmType::Object(class)
+            }
             Ty::TypeParam(_) | Ty::Fn(_, _) | Ty::Error => JvmType::Object(JVM_OBJECT.to_string()),
         }
     }
@@ -532,12 +535,29 @@ impl<'a> ExprLowering<'a> {
             TypedExprKind::MapLiteral(entries) => {
                 self.lower_map_literal(entries, &expr.ty);
             }
-            TypedExprKind::Unsafe(_)
-            | TypedExprKind::Cast { .. }
-            | TypedExprKind::Deref { .. }
-            | TypedExprKind::RefMutCreate { .. }
-            | TypedExprKind::DerefAssign { .. } => {
-                // TODO: implement codegen for unsafe/cast/deref/ref-mut
+            TypedExprKind::Unsafe(body) => {
+                self.push_scope();
+                self.lower_body(body);
+                self.pop_scope();
+            }
+            TypedExprKind::Cast {
+                expr: inner,
+                target_ty,
+            } => {
+                self.lower_expr(inner);
+                self.lower_cast(&inner.ty, target_ty);
+            }
+            TypedExprKind::Deref { expr: inner } => {
+                self.lower_expr(inner);
+                self.lower_deref_read(&inner.ty);
+            }
+            TypedExprKind::RefMutCreate { expr: inner } => {
+                self.lower_ref_mut_create(inner);
+            }
+            TypedExprKind::DerefAssign { target, value } => {
+                self.lower_expr(target);
+                self.lower_expr(value);
+                self.lower_deref_write(&target.ty, &value.ty);
             }
             TypedExprKind::Error => {}
         }
@@ -2950,6 +2970,70 @@ impl<'a> ExprLowering<'a> {
         self.emit_unbox(&jvm_ty);
     }
 
+    fn lower_cast(&mut self, from: &Ty, to: &Ty) {
+        let from_jvm = self.ty_to_jvm(from);
+        let to_jvm = self.ty_to_jvm(to);
+        match (&from_jvm, &to_jvm) {
+            (JvmType::Object(_), JvmType::Object(target)) => {
+                self.ops.push(JvmOp::Checkcast(target.clone()));
+            }
+            _ if from_jvm != to_jvm => {
+                self.ops.push(JvmOp::Convert {
+                    from: from_jvm,
+                    to: to_jvm,
+                });
+            }
+            _ => {}
+        }
+    }
+
+    fn lower_deref_read(&mut self, ref_ty: &Ty) {
+        let Ty::RefMut(inner) = ref_ty else { return };
+        let wrapper = ref_mut_wrapper_class(inner);
+        let field_ty = self.inner_jvm_for_ref(inner);
+        self.ops.push(JvmOp::GetField {
+            owner: wrapper,
+            name: "value".to_string(),
+            descriptor: field_ty,
+        });
+    }
+
+    fn lower_deref_write(&mut self, ref_ty: &Ty, _value_ty: &Ty) {
+        let Ty::RefMut(inner) = ref_ty else { return };
+        let wrapper = ref_mut_wrapper_class(inner);
+        let field_ty = self.inner_jvm_for_ref(inner);
+        self.ops.push(JvmOp::PutField {
+            owner: wrapper,
+            name: "value".to_string(),
+            descriptor: field_ty,
+        });
+    }
+
+    fn lower_ref_mut_create(&mut self, inner: &TypedExpr) {
+        let wrapper = ref_mut_wrapper_class(&inner.ty);
+        let field_ty = self.inner_jvm_for_ref(&inner.ty);
+        self.ops.push(JvmOp::New(wrapper.clone()));
+        self.ops.push(JvmOp::Dup);
+        self.lower_expr(inner);
+        self.ops.push(JvmOp::InvokeSpecial {
+            owner: wrapper,
+            name: "<init>".to_string(),
+            params: vec![field_ty],
+            ret: JvmType::Void,
+        });
+    }
+
+    fn inner_jvm_for_ref(&self, inner: &Ty) -> JvmType {
+        match inner {
+            Ty::Prim(PrimTy::Int) => JvmType::Int,
+            Ty::Prim(PrimTy::Long) => JvmType::Long,
+            Ty::Prim(PrimTy::Float) => JvmType::Float,
+            Ty::Prim(PrimTy::Double) => JvmType::Double,
+            Ty::Prim(PrimTy::Bool) => JvmType::Boolean,
+            _ => JvmType::Object(JVM_OBJECT.to_string()),
+        }
+    }
+
     /// Lowers a `safe {}` block into a JVM try-catch that produces
     /// `Result<T, JavaException>`. Success wraps in `Result$Ok`,
     /// exception wraps in `Result$Err(JavaException(message, className))`.
@@ -3153,5 +3237,16 @@ impl<'a> ExprLowering<'a> {
             Ty::Prim(PrimTy::Bool) => JvmType::Boolean,
             _ => JvmType::Object(JVM_OBJECT.to_string()),
         }
+    }
+}
+
+fn ref_mut_wrapper_class(inner: &Ty) -> String {
+    match inner {
+        Ty::Prim(PrimTy::Int) => "valen/core/IntRef".to_string(),
+        Ty::Prim(PrimTy::Long) => "valen/core/LongRef".to_string(),
+        Ty::Prim(PrimTy::Float) => "valen/core/FloatRef".to_string(),
+        Ty::Prim(PrimTy::Double) => "valen/core/DoubleRef".to_string(),
+        Ty::Prim(PrimTy::Bool) => "valen/core/BoolRef".to_string(),
+        _ => "valen/core/Ref".to_string(),
     }
 }

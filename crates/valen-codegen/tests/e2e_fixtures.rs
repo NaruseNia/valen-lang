@@ -16,14 +16,14 @@ fn fixture_path(name: &str) -> std::path::PathBuf {
 fn compile_fixture_outputs(name: &str) -> Vec<valen_codegen::ClassFileOutput> {
     compile_fixture_impl(name, true)
         .into_iter()
-        .filter(|o| o.internal_name != "valen/core/ListIterator")
+        .filter(|o| !o.internal_name.starts_with("valen/core/"))
         .collect()
 }
 
 fn compile_fixture_outputs_skip_typecheck(name: &str) -> Vec<valen_codegen::ClassFileOutput> {
     compile_fixture_impl(name, false)
         .into_iter()
-        .filter(|o| o.internal_name != "valen/core/ListIterator")
+        .filter(|o| !o.internal_name.starts_with("valen/core/"))
         .collect()
 }
 
