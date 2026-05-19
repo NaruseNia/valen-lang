@@ -1,0 +1,7 @@
+package com.example;
+
+pub class SafeShorthandDemo {
+    fn safeExpr(self) -> Result<Int, JavaException> {
+        safe 42
+    }
+}

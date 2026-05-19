@@ -952,3 +952,36 @@ fn fixture_newtype() {
         .iter()
         .any(|c| c.class_name().unwrap() == "com/example/IdTest"));
 }
+
+#[test]
+fn fixture_unsafe_block() {
+    let outputs = compile_fixture_outputs("unsafe_block.vln");
+    assert_eq!(outputs.len(), 1);
+    assert_eq!(outputs[0].internal_name, "com/example/UnsafeDemo");
+
+    let c = ClassFile::from_bytes(&outputs[0].bytes).expect("parse classfile");
+    // <init> + unsafeBlock + unsafeExpr + safeCast
+    assert_eq!(c.methods.len(), 4);
+}
+
+#[test]
+fn fixture_ref_mut() {
+    let outputs = compile_fixture_outputs("ref_mut.vln");
+    assert_eq!(outputs.len(), 1);
+    assert_eq!(outputs[0].internal_name, "com/example/RefMutDemo");
+
+    let c = ClassFile::from_bytes(&outputs[0].bytes).expect("parse classfile");
+    // <init> + createAndDeref
+    assert_eq!(c.methods.len(), 2);
+}
+
+#[test]
+fn fixture_safe_shorthand() {
+    let outputs = compile_fixture_outputs("safe_shorthand.vln");
+    assert_eq!(outputs.len(), 1);
+    assert_eq!(outputs[0].internal_name, "com/example/SafeShorthandDemo");
+
+    let c = ClassFile::from_bytes(&outputs[0].bytes).expect("parse classfile");
+    // <init> + safeExpr
+    assert_eq!(c.methods.len(), 2);
+}
