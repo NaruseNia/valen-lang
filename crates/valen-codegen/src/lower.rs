@@ -14,7 +14,11 @@ use crate::jvm_ir::{
 use crate::JvmVersion;
 
 /// Lowers an entire HIR module into a list of JVM class IR nodes.
-pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<DefId, TypedBody>) -> Vec<JvmClass> {
+pub fn lower_hir(
+    hir: &Hir,
+    typed_bodies: &IndexMap<DefId, TypedBody>,
+    version: JvmVersion,
+) -> Vec<JvmClass> {
     let mut classes = Vec::new();
 
     for (id, def) in &hir.defs {
@@ -32,6 +36,7 @@ pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<DefId, TypedBody>) -> Vec<Jv
                     typed_bodies,
                     pkg,
                     source_file,
+                    version,
                 ));
             }
             DefKind::DataClass(data_def) => {
@@ -42,6 +47,7 @@ pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<DefId, TypedBody>) -> Vec<Jv
                     typed_bodies,
                     pkg,
                     source_file,
+                    version,
                 ));
             }
             DefKind::Enum(enum_def) => {
@@ -52,23 +58,37 @@ pub fn lower_hir(hir: &Hir, typed_bodies: &IndexMap<DefId, TypedBody>) -> Vec<Jv
                     typed_bodies,
                     pkg,
                     source_file,
+                    version,
                 ));
             }
             DefKind::Trait(trait_def) if trait_def.is_sealed => {
-                classes.push(lower_sealed_trait(hir, def, pkg, source_file));
+                classes.push(lower_sealed_trait(hir, def, pkg, source_file, version));
             }
             DefKind::NewType(nt_def) => {
-                classes.push(lower_newtype(def, nt_def, pkg, source_file, &hir.imports));
+                classes.push(lower_newtype(
+                    def,
+                    nt_def,
+                    pkg,
+                    source_file,
+                    &hir.imports,
+                    version,
+                ));
             }
             DefKind::AnnotationClass(ann_def) => {
-                classes.push(lower_annotation_class(def, ann_def, pkg, source_file));
+                classes.push(lower_annotation_class(
+                    def,
+                    ann_def,
+                    pkg,
+                    source_file,
+                    version,
+                ));
             }
             _ => {}
         }
     }
 
-    classes.push(generate_list_iterator_class());
-    classes.extend(generate_ref_wrapper_classes());
+    classes.push(generate_list_iterator_class(version));
+    classes.extend(generate_ref_wrapper_classes(version));
 
     classes
 }
@@ -80,6 +100,7 @@ fn lower_newtype(
     pkg: Option<&[SmolStr]>,
     source_file: Option<String>,
     imports: &IndexMap<SmolStr, Vec<SmolStr>>,
+    version: JvmVersion,
 ) -> JvmClass {
     let internal = class_internal_name(&def.name, pkg);
     let inner_jvm = tyref_to_jvm(&nt_def.inner_ty, pkg, imports);
@@ -142,7 +163,7 @@ fn lower_newtype(
     };
 
     JvmClass {
-        version: crate::JvmVersion::Java21,
+        version,
         access: JvmClassAccess {
             is_public: def.vis == Vis::Pub,
             is_final: true,
@@ -172,7 +193,7 @@ fn lower_newtype(
 
 /// Generates a synthetic `valen/core/ListIterator` class that wraps a `java.util.List`
 /// and implements `valen/core/Iterator` by sequentially returning elements via `next()`.
-fn generate_list_iterator_class() -> JvmClass {
+fn generate_list_iterator_class(version: JvmVersion) -> JvmClass {
     use crate::jvm_ir::*;
     let class_name = "valen/core/ListIterator";
     let obj = JvmType::Object(JVM_OBJECT.to_string());
@@ -320,7 +341,7 @@ fn generate_list_iterator_class() -> JvmClass {
     };
 
     JvmClass {
-        version: crate::JvmVersion::Java21,
+        version,
         access: JvmClassAccess {
             is_public: true,
             is_final: true,
@@ -365,6 +386,7 @@ fn lower_class(
     typed_bodies: &IndexMap<DefId, TypedBody>,
     pkg: Option<&[SmolStr]>,
     source_file: Option<String>,
+    version: JvmVersion,
 ) -> JvmClass {
     let internal = class_internal_name(&def.name, pkg);
 
@@ -463,7 +485,7 @@ fn lower_class(
     let synthetic_methods = synthetic_lambdas_to_methods(all_synthetic_lambdas);
 
     JvmClass {
-        version: JvmVersion::Java21,
+        version,
         access: class_access(&def.vis, &class_def.kind),
         name: internal,
         super_class,
@@ -484,6 +506,7 @@ fn lower_sealed_trait(
     def: &Def,
     pkg: Option<&[SmolStr]>,
     source_file: Option<String>,
+    version: JvmVersion,
 ) -> JvmClass {
     let internal = class_internal_name(&def.name, pkg);
 
@@ -495,7 +518,7 @@ fn lower_sealed_trait(
         .collect();
 
     JvmClass {
-        version: JvmVersion::Java21,
+        version,
         access: JvmClassAccess {
             is_public: matches!(def.vis, Vis::Pub),
             is_abstract: true,
@@ -521,6 +544,7 @@ fn lower_annotation_class(
     ann_def: &valen_hir::AnnotationClassDef,
     pkg: Option<&[SmolStr]>,
     source_file: Option<String>,
+    version: JvmVersion,
 ) -> JvmClass {
     let internal = class_internal_name(&def.name, pkg);
 
@@ -607,7 +631,7 @@ fn lower_annotation_class(
     }
 
     JvmClass {
-        version: JvmVersion::Java21,
+        version,
         access: JvmClassAccess {
             is_public: matches!(def.vis, Vis::Pub),
             is_interface: true,
@@ -636,6 +660,7 @@ fn lower_data_class(
     typed_bodies: &IndexMap<DefId, TypedBody>,
     pkg: Option<&[SmolStr]>,
     source_file: Option<String>,
+    version: JvmVersion,
 ) -> JvmClass {
     let internal = class_internal_name(&def.name, pkg);
     let super_class = JVM_OBJECT.to_string();
@@ -714,7 +739,7 @@ fn lower_data_class(
     let synthetic_methods = synthetic_lambdas_to_methods(all_synthetic_lambdas);
 
     JvmClass {
-        version: JvmVersion::Java21,
+        version,
         access: JvmClassAccess {
             is_public: matches!(def.vis, Vis::Pub),
             is_final: true,
@@ -982,6 +1007,7 @@ fn lower_enum(
     typed_bodies: &IndexMap<DefId, TypedBody>,
     pkg: Option<&[SmolStr]>,
     source_file: Option<String>,
+    version: JvmVersion,
 ) -> Vec<JvmClass> {
     let enum_internal = class_internal_name(&def.name, pkg);
     let mut classes = Vec::new();
@@ -1051,7 +1077,7 @@ fn lower_enum(
     let synthetic_methods = synthetic_lambdas_to_methods(all_synthetic_lambdas);
 
     classes.push(JvmClass {
-        version: JvmVersion::Java21,
+        version,
         access: JvmClassAccess {
             is_public: matches!(def.vis, Vis::Pub),
             is_abstract: true,
@@ -1077,6 +1103,7 @@ fn lower_enum(
                 variant_internal,
                 &enum_internal,
                 source_file.clone(),
+                version,
             ));
         } else {
             classes.push(lower_record_variant(
@@ -1087,6 +1114,7 @@ fn lower_enum(
                 pkg,
                 source_file.clone(),
                 &hir.imports,
+                version,
             ));
         }
     }
@@ -1094,6 +1122,7 @@ fn lower_enum(
     classes
 }
 
+#[allow(clippy::too_many_arguments)]
 fn lower_record_variant(
     variant_internal: &str,
     enum_internal: &str,
@@ -1102,6 +1131,7 @@ fn lower_record_variant(
     pkg: Option<&[SmolStr]>,
     source_file: Option<String>,
     imports: &IndexMap<SmolStr, Vec<SmolStr>>,
+    version: JvmVersion,
 ) -> JvmClass {
     let jvm_fields: Vec<JvmField> = fields
         .iter()
@@ -1155,7 +1185,7 @@ fn lower_record_variant(
     }
 
     JvmClass {
-        version: JvmVersion::Java21,
+        version,
         access: JvmClassAccess {
             is_public: true,
             is_final: true,
@@ -1180,6 +1210,7 @@ fn lower_unit_variant(
     variant_internal: &str,
     enum_internal: &str,
     source_file: Option<String>,
+    version: JvmVersion,
 ) -> JvmClass {
     let self_ty = JvmType::Object(variant_internal.to_string());
 
@@ -1249,7 +1280,7 @@ fn lower_unit_variant(
     };
 
     JvmClass {
-        version: JvmVersion::Java21,
+        version,
         access: JvmClassAccess {
             is_public: true,
             is_final: true,
@@ -1270,7 +1301,7 @@ fn lower_unit_variant(
     }
 }
 
-fn generate_ref_wrapper_classes() -> Vec<JvmClass> {
+fn generate_ref_wrapper_classes(version: JvmVersion) -> Vec<JvmClass> {
     use crate::jvm_ir::*;
     let specs: &[(&str, JvmType)] = &[
         ("valen/core/IntRef", JvmType::Int),
@@ -1315,7 +1346,7 @@ fn generate_ref_wrapper_classes() -> Vec<JvmClass> {
                 }),
             };
             JvmClass {
-                version: crate::JvmVersion::Java21,
+                version,
                 name: name.to_string(),
                 super_class: JVM_OBJECT.to_string(),
                 interfaces: vec![],
@@ -1385,7 +1416,7 @@ mod tests {
     #[test]
     fn lower_empty_class() {
         let hir = make_hir_with_class("Foo", ClassDefKind::Final, vec![], Vis::Pub);
-        let classes = lower_hir(&hir, &IndexMap::new());
+        let classes = lower_hir(&hir, &IndexMap::new(), JvmVersion::Java21);
         // User class + synthetic ListIterator
         let c = classes.iter().find(|c| c.name == "Foo").unwrap();
         assert_eq!(c.super_class, "java/lang/Object");
@@ -1415,7 +1446,7 @@ mod tests {
             },
         ];
         let hir = make_hir_with_class("User", ClassDefKind::Final, params, Vis::Pub);
-        let classes = lower_hir(&hir, &IndexMap::new());
+        let classes = lower_hir(&hir, &IndexMap::new(), JvmVersion::Java21);
         let c = classes
             .iter()
             .find(|c| c.name != "valen/core/ListIterator")
@@ -1437,7 +1468,7 @@ mod tests {
     #[test]
     fn lower_abstract_class() {
         let hir = make_hir_with_class("Shape", ClassDefKind::Abstract, vec![], Vis::Pub);
-        let classes = lower_hir(&hir, &IndexMap::new());
+        let classes = lower_hir(&hir, &IndexMap::new(), JvmVersion::Java21);
         let c = classes
             .iter()
             .find(|c| c.name != "valen/core/ListIterator")
@@ -1449,7 +1480,7 @@ mod tests {
     #[test]
     fn lower_open_class() {
         let hir = make_hir_with_class("Animal", ClassDefKind::Open, vec![], Vis::Pub);
-        let classes = lower_hir(&hir, &IndexMap::new());
+        let classes = lower_hir(&hir, &IndexMap::new(), JvmVersion::Java21);
         let c = classes
             .iter()
             .find(|c| c.name != "valen/core/ListIterator")
@@ -1496,7 +1527,7 @@ mod tests {
             },
         );
 
-        let classes = lower_hir(&hir, &IndexMap::new());
+        let classes = lower_hir(&hir, &IndexMap::new(), JvmVersion::Java21);
         let c = classes.iter().find(|c| c.name == "Point").unwrap();
         assert!(c.access.is_final);
         assert_eq!(c.fields.len(), 2);
@@ -1515,7 +1546,7 @@ mod tests {
     fn lower_class_with_package() {
         let mut hir = make_hir_with_class("Foo", ClassDefKind::Final, vec![], Vis::Pub);
         hir.package = Some(vec!["com".into(), "example".into()]);
-        let classes = lower_hir(&hir, &IndexMap::new());
+        let classes = lower_hir(&hir, &IndexMap::new(), JvmVersion::Java21);
         assert!(classes.iter().any(|c| c.name == "com/example/Foo"));
     }
 
@@ -1575,7 +1606,7 @@ mod tests {
             },
         );
 
-        let classes = lower_hir(&hir, &IndexMap::new());
+        let classes = lower_hir(&hir, &IndexMap::new(), JvmVersion::Java21);
         let c = classes
             .iter()
             .find(|c| c.name != "valen/core/ListIterator")
@@ -1656,7 +1687,7 @@ mod tests {
             methods: vec![method_id],
         });
 
-        let classes = lower_hir(&hir, &IndexMap::new());
+        let classes = lower_hir(&hir, &IndexMap::new(), JvmVersion::Java21);
         let c = classes
             .iter()
             .find(|c| c.name != "valen/core/ListIterator")
@@ -1701,7 +1732,7 @@ mod tests {
             },
         );
 
-        let classes = lower_hir(&hir, &IndexMap::new());
+        let classes = lower_hir(&hir, &IndexMap::new(), JvmVersion::Java21);
 
         // sealed interface
         let iface = classes.iter().find(|c| c.name == "Shape").unwrap();
@@ -1769,7 +1800,7 @@ mod tests {
             },
         );
 
-        let classes = lower_hir(&hir, &IndexMap::new());
+        let classes = lower_hir(&hir, &IndexMap::new(), JvmVersion::Java21);
         assert!(classes.iter().any(|c| c.name == "com/app/Color"));
         assert!(classes.iter().any(|c| c.name == "com/app/Color$Red"));
     }

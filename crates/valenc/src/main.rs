@@ -246,16 +246,14 @@ fn main() {
 fn compile(
     inputs: &[PathBuf],
     out_dir: &PathBuf,
-    _target: JvmVersion,
+    target: JvmVersion,
     classpath: &[PathBuf],
 ) -> anyhow::Result<()> {
     std::fs::create_dir_all(out_dir)?;
 
     let frontend = run_pipeline_with_classpath(inputs, classpath)?;
 
-    // TODO: Forward `_target` to compile_hir once the lowering pipeline
-    // accepts a JvmVersion parameter to emit the correct classfile version.
-    let outputs = valen_codegen::compile_hir(&frontend.hir, &frontend.bodies)?;
+    let outputs = valen_codegen::compile_hir(&frontend.hir, &frontend.bodies, target)?;
     for output in &outputs {
         let parts: Vec<&str> = output.internal_name.split('/').collect();
         if parts.len() > 1 {

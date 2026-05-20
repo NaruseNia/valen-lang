@@ -1453,6 +1453,7 @@ fn expr_ends_with_block(expr: &Expr) -> bool {
             | Expr::Loop(_)
             | Expr::Block(_)
             | Expr::Safe(_)
+            | Expr::Unsafe(_)
             | Expr::IfLet(_)
             | Expr::WhileLet(_)
     )

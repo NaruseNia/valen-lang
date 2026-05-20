@@ -176,7 +176,8 @@ pub fn unit_variant(name: &str) -> EnumVariantDef {
 }
 
 pub fn compile_and_verify(hir: &Hir) -> Vec<ristretto_classfile::ClassFile<'static>> {
-    let outputs = crate::compile_hir(hir, &indexmap::IndexMap::new()).expect("compile_hir failed");
+    let outputs = crate::compile_hir(hir, &indexmap::IndexMap::new(), crate::JvmVersion::Java21)
+        .expect("compile_hir failed");
     outputs
         .iter()
         .filter(|o| !o.internal_name.starts_with("valen/core/"))
