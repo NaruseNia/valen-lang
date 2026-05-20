@@ -1817,13 +1817,11 @@ impl<'a> ExprLowering<'a> {
             .push(JvmOp::StoreLocal(iter_slot, iter_jvm.clone()));
 
         let loop_label = self.alloc_label();
-        let continue_label = self.alloc_label();
         let break_label = self.alloc_label();
 
-        // Loop head (also continue target)
+        // Loop head — also the continue target so a single frame covers both
         self.ops.push(JvmOp::Label(loop_label));
         self.emit_frame(vec![]);
-        self.ops.push(JvmOp::Label(continue_label));
 
         // Call next() → Option<T>
         self.ops.push(JvmOp::LoadLocal(iter_slot, iter_jvm.clone()));
@@ -1877,7 +1875,7 @@ impl<'a> ExprLowering<'a> {
         // Body
         self.loop_stack.push(LoopContext {
             break_label,
-            continue_label,
+            continue_label: loop_label,
         });
         self.lower_body(body);
         self.loop_stack.pop();
