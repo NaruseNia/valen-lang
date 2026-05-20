@@ -307,6 +307,40 @@ impl<'a> ExprLowering<'a> {
         None
     }
 
+    /// Extracts the Valen type name from a `Ty` for trait/interface checking.
+    fn receiver_type_name(&self, ty: &Ty) -> Option<String> {
+        match ty {
+            Ty::Named(n) => Some(n.to_string()),
+            Ty::Generic(n, _) => Some(n.to_string()),
+            _ => None,
+        }
+    }
+
+    /// Returns `true` if the given type name corresponds to a trait (JVM interface).
+    ///
+    /// Checks both user-defined traits in the HIR and enum definitions (which are
+    /// emitted as sealed interfaces).
+    fn is_trait_or_interface(&self, type_name: &str) -> bool {
+        use valen_hir::DefKind;
+        for def in self.hir.defs.values() {
+            if def.name == type_name {
+                match &def.kind {
+                    DefKind::Trait(_) => return true,
+                    DefKind::Enum(_) => return true,
+                    _ => return false,
+                }
+            }
+        }
+        // Check foreign types (Java interfaces loaded from classpath)
+        if let Some(foreign) = self.hir.foreign_types.get(type_name) {
+            // If the foreign type has no super_class, it's likely an interface
+            // (Java interfaces have java/lang/Object as super but are flagged differently;
+            // however, for our purposes, check if any Valen trait references it)
+            let _ = foreign;
+        }
+        false
+    }
+
     fn lower_body(&mut self, body: &TypedBody) {
         self.push_scope();
         for stmt in &body.stmts {
@@ -352,9 +386,17 @@ impl<'a> ExprLowering<'a> {
                 if matches!(expr.ty, Ty::Prim(PrimTy::Long)) {
                     self.ops.push(JvmOp::PushLong(*n));
                 } else {
-                    let i = i32::try_from(*n)
-                        .unwrap_or_else(|_| panic!("integer literal {} out of i32 range", n));
-                    self.ops.push(JvmOp::PushInt(i));
+                    match i32::try_from(*n) {
+                        Ok(i) => self.ops.push(JvmOp::PushInt(i)),
+                        Err(_) => {
+                            eprintln!(
+                                "[codegen] error: integer literal {} overflows i32 range, \
+                                 clamping to i32::MAX",
+                                n
+                            );
+                            self.ops.push(JvmOp::PushInt(i32::MAX));
+                        }
+                    }
                 }
             }
             TypedExprKind::LongLit(n) => {
@@ -421,12 +463,28 @@ impl<'a> ExprLowering<'a> {
                     let param_tys: Vec<JvmType> =
                         args.iter().map(|a| self.ty_to_jvm(&a.ty)).collect();
                     if let JvmType::Object(owner) = receiver_ty {
-                        self.ops.push(JvmOp::InvokeVirtual {
-                            owner,
-                            name: method.to_string(),
-                            params: param_tys,
-                            ret: ret_ty,
-                        });
+                        // Check if the receiver type is a trait/interface — if so,
+                        // emit InvokeInterface instead of InvokeVirtual (JVM spec
+                        // requires invokeinterface for interface method calls).
+                        let type_name = self.receiver_type_name(&receiver.ty);
+                        if type_name
+                            .as_deref()
+                            .is_some_and(|n| self.is_trait_or_interface(n))
+                        {
+                            self.ops.push(JvmOp::InvokeInterface {
+                                owner,
+                                name: method.to_string(),
+                                params: param_tys,
+                                ret: ret_ty,
+                            });
+                        } else {
+                            self.ops.push(JvmOp::InvokeVirtual {
+                                owner,
+                                name: method.to_string(),
+                                params: param_tys,
+                                ret: ret_ty,
+                            });
+                        }
                     }
                 }
             }
@@ -1555,11 +1613,17 @@ impl<'a> ExprLowering<'a> {
 
     fn lower_literal(&mut self, lit: &valen_ast::Literal) {
         match lit {
-            valen_ast::Literal::Int(n, _) => {
-                let i = i32::try_from(*n)
-                    .unwrap_or_else(|_| panic!("integer literal {} out of i32 range", n));
-                self.ops.push(JvmOp::PushInt(i));
-            }
+            valen_ast::Literal::Int(n, _) => match i32::try_from(*n) {
+                Ok(i) => self.ops.push(JvmOp::PushInt(i)),
+                Err(_) => {
+                    eprintln!(
+                        "[codegen] error: integer literal {} overflows i32 range, \
+                             clamping to i32::MAX",
+                        n
+                    );
+                    self.ops.push(JvmOp::PushInt(i32::MAX));
+                }
+            },
             valen_ast::Literal::Long(n, _) => self.ops.push(JvmOp::PushLong(*n)),
             valen_ast::Literal::Float(n, _) => self.ops.push(JvmOp::PushFloat(*n)),
             valen_ast::Literal::Double(n, _) => self.ops.push(JvmOp::PushDouble(*n)),

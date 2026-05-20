@@ -20,6 +20,7 @@ pub fn lower_hir(
     version: JvmVersion,
 ) -> Vec<JvmClass> {
     let mut classes = Vec::new();
+    let mut top_level_fns: Vec<(&Def, &FnDef, Option<&TypedBody>)> = Vec::new();
 
     for (id, def) in &hir.defs {
         if hir.prelude_ids.contains(id) {
@@ -83,14 +84,181 @@ pub fn lower_hir(
                     version,
                 ));
             }
+            DefKind::Fn(fn_def) => {
+                // Collect top-level functions (not methods attached to classes,
+                // trait impls, or trait method declarations).
+                let is_method = hir.type_methods.values().any(|ids| ids.contains(id))
+                    || hir
+                        .trait_impls
+                        .iter()
+                        .any(|entry| entry.methods.contains(id))
+                    || hir.defs.values().any(|d| match &d.kind {
+                        DefKind::Trait(t) => t.methods.contains(id),
+                        DefKind::Class(c) => c.methods.contains(id),
+                        _ => false,
+                    });
+                if !is_method {
+                    let body = typed_bodies.get(id);
+                    top_level_fns.push((def, fn_def, body));
+                }
+            }
             _ => {}
         }
+    }
+
+    // Generate synthetic class for top-level functions (#020)
+    if !top_level_fns.is_empty() {
+        let pkg = hir.package.as_deref();
+        classes.push(lower_top_level_functions(hir, &top_level_fns, pkg));
     }
 
     classes.push(generate_list_iterator_class(version));
     classes.extend(generate_ref_wrapper_classes(version));
 
     classes
+}
+
+/// Generates a synthetic class hosting top-level functions as `public static` methods.
+///
+/// The class name is derived from the package name (e.g. `com/example/MainKt`) or
+/// defaults to `MainKt` if no package is declared. If one of the functions is named
+/// `main` with no parameters, a JVM-compatible entry point wrapper
+/// `main([Ljava/lang/String;)V` is also generated.
+fn lower_top_level_functions(
+    hir: &Hir,
+    fns: &[(&Def, &FnDef, Option<&TypedBody>)],
+    pkg: Option<&[SmolStr]>,
+) -> JvmClass {
+    let class_name = {
+        let base = "MainKt";
+        class_internal_name(base, pkg)
+    };
+
+    let mut methods = Vec::new();
+    let mut all_synthetic_lambdas = Vec::new();
+    let mut all_bootstrap_methods = Vec::new();
+    let mut has_user_main = false;
+
+    for &(def, fn_def, typed_body) in fns {
+        let params: Vec<JvmType> = fn_def
+            .params
+            .iter()
+            .filter(|p| !p.is_self)
+            .map(|p| tyref_to_jvm(&p.ty, pkg, &hir.imports))
+            .collect();
+
+        let return_type = fn_def
+            .return_ty
+            .as_ref()
+            .map(|t| tyref_to_jvm(t, pkg, &hir.imports))
+            .unwrap_or(JvmType::Void);
+
+        // Detect user's `fn main()` (no params, void return)
+        if def.name == "main" && params.is_empty() && matches!(return_type, JvmType::Void) {
+            has_user_main = true;
+        }
+
+        let mut synthetic_lambdas = Vec::new();
+        let mut bootstrap_methods = Vec::new();
+
+        let body = if !fn_def.has_body {
+            None
+        } else if let Some(tb) = typed_body {
+            let param_pairs: Vec<(SmolStr, JvmType)> = fn_def
+                .params
+                .iter()
+                .filter(|p| !p.is_self)
+                .map(|p| (p.name.clone(), tyref_to_jvm(&p.ty, pkg, &hir.imports)))
+                .collect();
+            let result = crate::expr::lower_body(
+                tb,
+                &class_name,
+                &param_pairs,
+                &return_type,
+                false,
+                pkg,
+                hir,
+            );
+            synthetic_lambdas = result.synthetic_lambdas;
+            bootstrap_methods = result.bootstrap_methods;
+            Some(result.body)
+        } else {
+            Some(JvmMethodBody {
+                max_locals: params.iter().map(|t| t.slot_count()).sum::<u16>(),
+                ops: crate::jvm_ir::throw_unsupported_ops("not yet implemented"),
+                exception_handlers: vec![],
+            })
+        };
+
+        methods.push(JvmMethod {
+            access: JvmMethodAccess {
+                is_public: true,
+                is_static: true,
+                ..Default::default()
+            },
+            name: def.name.to_string(),
+            params,
+            return_type,
+            body,
+        });
+        all_synthetic_lambdas.extend(synthetic_lambdas);
+        all_bootstrap_methods.extend(bootstrap_methods);
+    }
+
+    // Generate JVM entry point wrapper: public static void main(String[] args)
+    // that calls the user's main()V method (#015)
+    if has_user_main {
+        let jvm_main = JvmMethod {
+            access: JvmMethodAccess {
+                is_public: true,
+                is_static: true,
+                ..Default::default()
+            },
+            name: "main".to_string(),
+            params: vec![JvmType::Array(Box::new(JvmType::Object(
+                JVM_STRING.to_string(),
+            )))],
+            return_type: JvmType::Void,
+            body: Some(JvmMethodBody {
+                max_locals: 1,
+                ops: vec![
+                    // Call the user's main()V
+                    JvmOp::InvokeStatic {
+                        owner: class_name.clone(),
+                        name: "main".to_string(),
+                        params: vec![],
+                        ret: JvmType::Void,
+                    },
+                    JvmOp::Return(JvmType::Void),
+                ],
+                exception_handlers: vec![],
+            }),
+        };
+        methods.push(jvm_main);
+    }
+
+    let synthetic_methods = synthetic_lambdas_to_methods(all_synthetic_lambdas);
+
+    JvmClass {
+        version: JvmVersion::Java21,
+        access: JvmClassAccess {
+            is_public: true,
+            is_final: true,
+            is_super: true,
+            ..Default::default()
+        },
+        name: class_name,
+        super_class: JVM_OBJECT.to_string(),
+        interfaces: vec![],
+        fields: vec![],
+        methods,
+        source_file: Some("MainKt.vln".to_string()),
+        permitted_subclasses: vec![],
+        is_record: false,
+        bootstrap_methods: all_bootstrap_methods,
+        synthetic_methods,
+        annotations: vec![],
+    }
 }
 
 /// Generates a JVM class for a `newtype` wrapper with a single `value` field and constructor.
@@ -167,6 +335,7 @@ fn lower_newtype(
         access: JvmClassAccess {
             is_public: def.vis == Vis::Pub,
             is_final: true,
+            is_super: true,
             ..Default::default()
         },
         name: internal,
@@ -345,6 +514,7 @@ fn generate_list_iterator_class(version: JvmVersion) -> JvmClass {
         access: JvmClassAccess {
             is_public: true,
             is_final: true,
+            is_super: true,
             ..Default::default()
         },
         name: class_name.to_string(),
@@ -1353,6 +1523,7 @@ fn generate_ref_wrapper_classes(version: JvmVersion) -> Vec<JvmClass> {
                 access: JvmClassAccess {
                     is_public: true,
                     is_final: true,
+                    is_super: true,
                     ..Default::default()
                 },
                 fields: vec![JvmField {
