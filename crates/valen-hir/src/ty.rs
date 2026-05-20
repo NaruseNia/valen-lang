@@ -805,13 +805,28 @@ impl<'hir> TypeChecker<'hir> {
 
     // -- literals -----------------------------------------------------------
 
-    fn synth_literal(&self, lit: &valen_ast::Literal) -> TypedExpr {
+    fn synth_literal(&mut self, lit: &valen_ast::Literal) -> TypedExpr {
         match lit {
-            valen_ast::Literal::Int(v, span) => TypedExpr {
-                kind: TypedExprKind::IntLit(*v),
-                ty: Ty::Prim(PrimTy::Int),
-                span: *span,
-            },
+            valen_ast::Literal::Int(v, span) => {
+                if *v < i32::MIN as i64 || *v > i32::MAX as i64 {
+                    self.diags.error(
+                        DiagCode::INT_LITERAL_OVERFLOW,
+                        *span,
+                        SmolStr::from(format!(
+                            "integer literal `{}` overflows Int (must fit i32 range {}..={}); use `{}L` for Long",
+                            v,
+                            i32::MIN,
+                            i32::MAX,
+                            v,
+                        )),
+                    );
+                }
+                TypedExpr {
+                    kind: TypedExprKind::IntLit(*v),
+                    ty: Ty::Prim(PrimTy::Int),
+                    span: *span,
+                }
+            }
             valen_ast::Literal::Long(v, span) => TypedExpr {
                 kind: TypedExprKind::LongLit(*v),
                 ty: Ty::Prim(PrimTy::Long),

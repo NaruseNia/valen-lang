@@ -116,6 +116,7 @@ impl DiagCode {
     pub const INVALID_CAST: DiagCode = DiagCode(324);
     pub const DEREF_NOT_REF_MUT: DiagCode = DiagCode(325);
     pub const REF_MUT_JAVA_INTEROP: DiagCode = DiagCode(326);
+    pub const INT_LITERAL_OVERFLOW: DiagCode = DiagCode(327);
     pub const JAVA_EXCEPTION_NOT_WRAPPED: DiagCode = DiagCode(600);
     pub const JAVA_CALL_REQUIRES_SAFE: DiagCode = DiagCode(601);
     pub const NAMING_NOT_CAMEL_CASE: DiagCode = DiagCode(700);

@@ -453,6 +453,9 @@ pub enum Expr {
 /// Literal value (integer, float, string, etc.).
 #[derive(Debug, Clone)]
 pub enum Literal {
+    /// Integer literal. Stored as `i64` so the AST can represent both `Int` and
+    /// `Long` ranges without loss, but the language type is 32-bit (`Int`).
+    /// Range validation (must fit `i32`) is enforced during type checking in HIR.
     Int(i64, Span),
     Long(i64, Span),
     Float(f32, Span),
