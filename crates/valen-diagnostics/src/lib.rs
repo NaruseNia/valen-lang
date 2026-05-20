@@ -80,6 +80,10 @@ impl DiagCode {
     pub const PARSE_UNEXPECTED_TOKEN: DiagCode = DiagCode(105);
     pub const NAME_NOT_FOUND: DiagCode = DiagCode(200);
     pub const DUPLICATE_DEFINITION: DiagCode = DiagCode(201);
+    pub const INHERIT_FROM_FINAL: DiagCode = DiagCode(202);
+    pub const OVERRIDE_WITHOUT_KEYWORD: DiagCode = DiagCode(203);
+    pub const OVERRIDE_PARENT_NOT_OPEN: DiagCode = DiagCode(204);
+    pub const MISSING_OVERRIDE_KEYWORD: DiagCode = DiagCode(205);
     pub const TYPE_MISMATCH: DiagCode = DiagCode(300);
     pub const UNDECLARED_VAR: DiagCode = DiagCode(301);
     pub const ARG_COUNT_MISMATCH: DiagCode = DiagCode(302);

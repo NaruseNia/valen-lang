@@ -323,6 +323,9 @@ fn substitute_fn_def(f: &FnDef, subst: &[(SmolStr, TyRef)]) -> FnDef {
         has_body: f.has_body,
         generic_bounds: f.generic_bounds.clone(),
         is_unsafe: f.is_unsafe,
+        is_open: f.is_open,
+        is_override: f.is_override,
+        is_abstract: f.is_abstract,
     }
 }
 
