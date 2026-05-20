@@ -1,4 +1,11 @@
 //! LSP backend state and LanguageServer omnitrait implementation.
+//!
+//! TODO(#063): This file is a monolith (~3 000 lines). Split into focused modules:
+//!   - `completion.rs`   — completion provider (~700 lines)
+//!   - `hover.rs`        — hover provider
+//!   - `semantic_tokens.rs` — semantic token encoding
+//!   - `inlay_hints.rs`  — inlay hints (~230 lines)
+//!   - `helpers.rs`      — shared utilities (~600 lines)
 
 use std::collections::HashMap;
 use std::ops::ControlFlow;
@@ -96,6 +103,14 @@ impl ServerState {
         }
     }
 
+    // TODO(#035): Full reparse on every keystroke — known performance limitation.
+    // Every didChange triggers full re-analysis of the changed document PLUS all other
+    // open documents, which is O(N) full re-analyses per keystroke. Planned improvements:
+    // 1. Add debounce (50-100ms) to batch rapid keystrokes into a single analysis pass.
+    // 2. Implement incremental parsing (e.g. tree-sitter or incremental re-lex) so only
+    //    changed regions are re-parsed.
+    // 3. Build a dependency graph between files so only dependents are re-analyzed,
+    //    not all open documents.
     fn analyze_and_publish(&mut self, uri: Url, text: String, version: i32) {
         let file_id = self.file_id_for(&uri);
         let (doc_state, diags) = analyze_document(&text, file_id);
@@ -221,6 +236,8 @@ impl ServerState {
         match detect_context(before) {
             CompletionContext::TypePosition => self.build_type_completions(doc),
             CompletionContext::ImplTarget => self.build_impl_target_completions(doc),
+            CompletionContext::ImplTraitPosition => self.build_impl_trait_completions(doc),
+            CompletionContext::ImportPath => self.build_import_path_completions(doc, before),
             CompletionContext::NamingPosition => Vec::new(),
             CompletionContext::General => self.build_general_completions(doc, offset as u32),
         }
@@ -699,6 +716,120 @@ impl ServerState {
         items
     }
 
+    /// Issue #038: Show only trait definitions after `impl `.
+    fn build_impl_trait_completions(&self, doc: &DocumentState) -> Vec<CompletionItem> {
+        let mut items = Vec::new();
+
+        if let Some(hir) = doc.hir.as_ref() {
+            for def in hir.defs.values() {
+                if hir.prelude_ids.contains(&def.id) || def.name.is_empty() {
+                    continue;
+                }
+                if let DefKind::Trait(t) = &def.kind {
+                    let documentation =
+                        build_trait_documentation(&def.name, t, hir, &doc.text, def.span.start);
+                    items.push(CompletionItem {
+                        label: def.name.to_string(),
+                        kind: Some(CompletionItemKind::INTERFACE),
+                        detail: Some(format!("trait {}", def.name)),
+                        documentation,
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+
+        items
+    }
+
+    /// Issue #039: Provide completions inside `import` statements.
+    ///
+    /// TODO(#039): Currently only suggests known package segments from the
+    /// current file's HIR imports and foreign types. A full implementation
+    /// would scan the workspace for all available packages, walk the classpath
+    /// for Java packages, and support wildcard imports.
+    ///
+    /// TODO(#040): Java stdlib completion should integrate here, providing
+    /// `java.lang.*`, `java.util.*`, `java.io.*` etc. as import candidates.
+    /// This requires building a Java stdlib index (class names, methods,
+    /// fields) from JDK class files or a pre-computed database.
+    fn build_import_path_completions(
+        &self,
+        doc: &DocumentState,
+        _before: &str,
+    ) -> Vec<CompletionItem> {
+        let mut items = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+
+        // Suggest known import paths from the HIR
+        if let Some(hir) = doc.hir.as_ref() {
+            for (short_name, segments) in &hir.imports {
+                let full_path = segments
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(".");
+                if seen.insert(full_path.clone()) {
+                    items.push(CompletionItem {
+                        label: short_name.to_string(),
+                        kind: Some(CompletionItemKind::MODULE),
+                        detail: Some(full_path),
+                        ..Default::default()
+                    });
+                }
+            }
+
+            // Suggest foreign types as potential imports
+            for (name, _info) in &hir.foreign_types {
+                if seen.insert(name.to_string()) {
+                    items.push(CompletionItem {
+                        label: name.to_string(),
+                        kind: Some(CompletionItemKind::CLASS),
+                        detail: Some(format!("(Java) {name}")),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+
+        // Also suggest imports from other open documents
+        for (other_uri, other_doc) in &self.documents {
+            let _ = other_uri;
+            if let Some(hir) = other_doc.hir.as_ref() {
+                if let Some(pkg) = &hir.package {
+                    let pkg_path = pkg.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(".");
+                    if seen.insert(pkg_path.clone()) {
+                        items.push(CompletionItem {
+                            label: pkg_path,
+                            kind: Some(CompletionItemKind::MODULE),
+                            detail: Some("(package)".to_string()),
+                            ..Default::default()
+                        });
+                    }
+                }
+            }
+        }
+
+        items
+    }
+
+    // TODO(#040): Add Java stdlib completion. Needs a pre-built index of
+    // common Java types and methods (java.lang.*, java.util.*, java.io.*)
+    // that can be offered as completions alongside Valen definitions.
+    // The index could be generated from JDK class files at build time
+    // or loaded from a bundled JSON/binary database.
+    //
+    // TODO(#041): Include package information in completion items. The HIR
+    // already stores `package: Option<Vec<SmolStr>>` per document. For
+    // cross-file completions, the detail field should include the source
+    // package (e.g., `com.example.MyClass`) so users can distinguish
+    // identically-named types from different packages.
+    //
+    // TODO(#043): Generate trait method stubs inside `impl Trait for Type {}`
+    // blocks. Needs: (1) detect that cursor is inside an impl block body,
+    // (2) look up the trait being implemented, (3) find which methods are
+    // already implemented, (4) offer snippet completions for the remaining
+    // unimplemented methods with full signatures.
     fn build_general_completions(&self, doc: &DocumentState, offset: u32) -> Vec<CompletionItem> {
         let mut items = Vec::new();
         let mut seen = std::collections::HashSet::new();
@@ -752,9 +883,11 @@ impl ServerState {
                 if def.name.is_empty() {
                     continue;
                 }
-                if hir.prelude_ids.contains(&def.id) && matches!(&def.kind, DefKind::Fn(_)) {
-                    continue;
-                }
+                // Issue #033: Include prelude functions (println, print, etc.)
+                // in completions with a lower sort priority so users can
+                // discover built-in functions.
+                let is_prelude =
+                    hir.prelude_ids.contains(&def.id) && matches!(&def.kind, DefKind::Fn(_));
                 let (label, kind, detail, documentation, sort_prefix) = match &def.kind {
                     DefKind::Fn(f) => {
                         let sig = format_fn_signature(&def.name, f);
@@ -835,24 +968,26 @@ impl ServerState {
                     DefKind::Impl(_) => continue,
                 };
                 if seen.insert(label.clone()) {
+                    // Issue #033: Prelude functions get sort prefix "9" so
+                    // they appear after user-defined items but before nothing.
+                    let effective_prefix = if is_prelude { "9" } else { sort_prefix };
                     items.push(CompletionItem {
                         label,
                         kind: Some(kind),
                         detail,
                         documentation,
-                        sort_text: Some(format!("{sort_prefix}_{}", def.name)),
+                        sort_text: Some(format!("{effective_prefix}_{}", def.name)),
                         ..Default::default()
                     });
                 }
             }
 
-            // self keyword (if any fn has a self param)
+            // Issue #045: Only offer `self` when the cursor is inside a
+            // method that actually has a self parameter.
             let has_self = hir.defs.values().any(|d| {
-                if let DefKind::Fn(f) = &d.kind {
-                    f.params.first().is_some_and(|p| p.is_self)
-                } else {
-                    false
-                }
+                d.span.start <= offset
+                    && offset < d.span.end
+                    && matches!(&d.kind, DefKind::Fn(f) if f.params.first().is_some_and(|p| p.is_self))
             });
             if has_self && seen.insert("self".to_string()) {
                 items.push(CompletionItem {
@@ -862,8 +997,12 @@ impl ServerState {
                 });
             }
 
-            // Function parameters (from all fn defs in this file)
+            // Issue #045: Only show function parameters from the enclosing
+            // function (whose span contains the cursor), not from all fns.
             for def in hir.defs.values() {
+                if !(def.span.start <= offset && offset < def.span.end) {
+                    continue;
+                }
                 if let DefKind::Fn(f) = &def.kind {
                     for param in &f.params {
                         if param.is_self || param.name.is_empty() {
@@ -954,6 +1093,21 @@ impl ServerState {
         // Search typed bodies for expression type info at cursor
         if let Some(bodies) = doc.bodies.as_ref() {
             if let Some(expr) = find_expr_at_offset(bodies, offset) {
+                // Issue #036: Provide rich hover info for variables including
+                // declaration context and enclosing function.
+                if let TypedExprKind::LocalVar(var_name) = &expr.kind {
+                    if !expr.ty.is_error() {
+                        let value =
+                            build_rich_variable_hover(var_name, &expr.ty, &doc.text, hir, offset);
+                        return Some(Hover {
+                            contents: HoverContents::Markup(MarkupContent {
+                                kind: MarkupKind::Markdown,
+                                value,
+                            }),
+                            range: Some(doc.line_index.span_to_range(expr.span)),
+                        });
+                    }
+                }
                 if let Some(hover_text) = format_typed_expr_hover(expr) {
                     return Some(Hover {
                         contents: HoverContents::Markup(MarkupContent {
@@ -1096,6 +1250,11 @@ pub fn analyze_document(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// TODO(#034): Completion and hover documentation are built by separate code
+// paths (~300 lines duplicated). Unify into a single `build_def_documentation()`
+// function that produces consistent Markdown for both contexts, parameterized
+// by whether it needs a code-block header (hover) or compact detail (completion).
 
 /// Extract `///` doc comments from lines immediately before `span_start` in the source.
 ///
@@ -1336,6 +1495,53 @@ fn build_trait_documentation(
         kind: MarkupKind::Markdown,
         value: md,
     }))
+}
+
+/// Issue #036: Build rich Markdown hover content for a local variable.
+///
+/// Shows the variable type in a code block, the enclosing function name,
+/// and any doc comment attached to the let binding.
+fn build_rich_variable_hover(
+    name: &str,
+    ty: &valen_hir::Ty,
+    _source: &str,
+    hir: &valen_hir::Hir,
+    cursor_offset: u32,
+) -> String {
+    let mut md = String::new();
+    md.push_str(&format!("```valen\nlet {name}: {ty}\n```\n"));
+
+    // Find the enclosing function for context
+    for def in hir.defs.values() {
+        if def.span.start <= cursor_offset
+            && cursor_offset < def.span.end
+            && matches!(&def.kind, DefKind::Fn(_))
+        {
+            md.push_str(&format!("\n*in* `fn {}`\n", def.name));
+            break;
+        }
+    }
+
+    // Check if this is a function parameter and show parameter info
+    for def in hir.defs.values() {
+        if def.span.start <= cursor_offset && cursor_offset < def.span.end {
+            if let DefKind::Fn(f) = &def.kind {
+                for param in &f.params {
+                    if param.name.as_str() == name {
+                        md.clear();
+                        md.push_str(&format!(
+                            "```valen\n(parameter) {name}: {}\n```\n",
+                            param.ty
+                        ));
+                        md.push_str(&format!("\n*in* `fn {}`\n", def.name));
+                        return md;
+                    }
+                }
+            }
+        }
+    }
+
+    md
 }
 
 /// Build Markdown documentation for a variable completion item.
@@ -1629,6 +1835,10 @@ fn find_let_type_annotation(source: &str, var_name: &str) -> Option<String> {
 enum CompletionContext {
     TypePosition,
     ImplTarget,
+    /// Issue #038: After `impl `, show only traits (not all definitions).
+    ImplTraitPosition,
+    /// Issue #039: Inside `import` statements, show package paths.
+    ImportPath,
     NamingPosition,
     General,
 }
@@ -1646,6 +1856,21 @@ fn detect_context(before: &str) -> CompletionContext {
             // Looks like `impl Something for`
             return CompletionContext::ImplTarget;
         }
+    }
+
+    // Issue #038: After `impl ` (without a following trait name + ` for`),
+    // show only traits since `impl` expects a trait name next.
+    if base.ends_with("impl") {
+        return CompletionContext::ImplTraitPosition;
+    }
+
+    // Issue #039: Inside `import` statement, show package paths.
+    if base.ends_with("import") {
+        return CompletionContext::ImportPath;
+    }
+    // Also detect import with partial dotted path (e.g., `import java.`)
+    if is_import_path_context(before) {
+        return CompletionContext::ImportPath;
     }
 
     if base.ends_with(':') && !base.ends_with("::") {
@@ -1684,6 +1909,23 @@ fn detect_context(before: &str) -> CompletionContext {
     }
 
     CompletionContext::General
+}
+
+/// Issue #039: Check if the cursor is in an `import path.to.module` context.
+fn is_import_path_context(before: &str) -> bool {
+    let trimmed = before.trim_end();
+    if let Some(import_pos) = trimmed.rfind("import ") {
+        let after_import = &trimmed[import_pos + 7..];
+        // If the content after `import ` contains a dot and only identifier
+        // chars/dots, we are in an import path context.
+        !after_import.is_empty()
+            && after_import.contains('.')
+            && after_import
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == ' ')
+    } else {
+        false
+    }
 }
 
 fn is_double_colon_context(before: &str) -> bool {
@@ -2452,12 +2694,30 @@ fn collect_hints_from_expr(
         }
         TypedExprKind::Call { callee, args } => {
             collect_hints_from_expr(callee, doc, range, hints);
+            // Issue #037: Emit parameter name hints for call arguments.
+            if let Some(hir) = doc.hir.as_ref() {
+                let fn_name = match &callee.kind {
+                    TypedExprKind::LocalVar(n) => Some(n.as_str()),
+                    _ => None,
+                };
+                if let Some(name) = fn_name {
+                    emit_param_name_hints(name, args, hir, doc, range, hints);
+                }
+            }
             for a in args {
                 collect_hints_from_expr(a, doc, range, hints);
             }
         }
-        TypedExprKind::MethodCall { receiver, args, .. } => {
+        TypedExprKind::MethodCall {
+            receiver,
+            method,
+            args,
+        } => {
             collect_hints_from_expr(receiver, doc, range, hints);
+            // Issue #037: Emit parameter name hints for method call arguments.
+            if let Some(hir) = doc.hir.as_ref() {
+                emit_param_name_hints(method.as_str(), args, hir, doc, range, hints);
+            }
             for a in args {
                 collect_hints_from_expr(a, doc, range, hints);
             }
@@ -2498,6 +2758,64 @@ fn collect_hints_from_expr(
             }
         }
         _ => {}
+    }
+}
+
+/// Issue #037: Emit parameter name inlay hints before each call argument.
+///
+/// Looks up the function/method by name in the HIR and pairs each argument
+/// with its parameter name. Skips the hint if the argument already uses a
+/// named argument syntax or if the argument text matches the parameter name.
+fn emit_param_name_hints(
+    fn_name: &str,
+    args: &[TypedExpr],
+    hir: &valen_hir::Hir,
+    doc: &DocumentState,
+    range: Range,
+    hints: &mut Vec<InlayHint>,
+) {
+    // Find the function definition to get parameter names
+    let params = hir.defs.values().find_map(|def| {
+        if def.name.as_str() == fn_name {
+            if let DefKind::Fn(f) = &def.kind {
+                let non_self: Vec<&valen_hir::ParamDef> =
+                    f.params.iter().filter(|p| !p.is_self).collect();
+                return Some(non_self);
+            }
+        }
+        None
+    });
+
+    if let Some(params) = params {
+        for (arg, param) in args.iter().zip(params.iter()) {
+            let param_name = param.name.as_str();
+            // Skip if param name is empty or a single char (not informative)
+            if param_name.is_empty() || param_name.len() <= 1 {
+                continue;
+            }
+            // Skip if the argument source text matches the param name (redundant)
+            let arg_start = arg.span.start as usize;
+            let arg_end = (arg.span.end as usize).min(doc.text.len());
+            if arg_start < arg_end {
+                let arg_text = doc.text[arg_start..arg_end].trim();
+                if arg_text == param_name {
+                    continue;
+                }
+            }
+            let pos = doc.line_index.offset_to_position(arg.span.start);
+            if position_in_range(pos, range) {
+                hints.push(InlayHint {
+                    position: pos,
+                    label: InlayHintLabel::String(format!("{param_name}: ")),
+                    kind: Some(InlayHintKind::PARAMETER),
+                    text_edits: None,
+                    tooltip: None,
+                    padding_left: None,
+                    padding_right: Some(false),
+                    data: None,
+                });
+            }
+        }
     }
 }
 
@@ -2976,10 +3294,42 @@ fn format_typed_expr_hover(expr: &TypedExpr) -> Option<String> {
 
 /// Valen language keywords offered for completion.
 /// Keywords shown in the General context (expression + statement start).
+///
+/// Issue #044: `override`, `open`, `abstract`, `sealed`, `internal`, `private`,
+/// `typealias`, and `annotation` are included so they appear in completions.
 const EXPR_KEYWORDS: &[&str] = &[
-    "if", "else", "match", "for", "while", "loop", "return", "break", "continue", "true", "false",
-    "safe", "unsafe", "ref mut", "let", "mut", "fn", "pub", "class", "data", "enum", "trait",
-    "impl", "import",
+    "if",
+    "else",
+    "match",
+    "for",
+    "while",
+    "loop",
+    "return",
+    "break",
+    "continue",
+    "true",
+    "false",
+    "safe",
+    "unsafe",
+    "ref mut",
+    "let",
+    "mut",
+    "fn",
+    "pub",
+    "class",
+    "data",
+    "enum",
+    "trait",
+    "impl",
+    "import",
+    "override",
+    "open",
+    "abstract",
+    "sealed",
+    "internal",
+    "private",
+    "typealias",
+    "annotation",
 ];
 
 // ---------------------------------------------------------------------------
