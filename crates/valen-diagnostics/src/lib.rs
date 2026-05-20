@@ -191,6 +191,11 @@ impl Diagnostics {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+
+    /// Discard all diagnostics after `len`, restoring a previous checkpoint.
+    pub fn truncate(&mut self, len: usize) {
+        self.entries.truncate(len);
+    }
 }
 
 impl<'a> IntoIterator for &'a Diagnostics {
