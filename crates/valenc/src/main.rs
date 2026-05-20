@@ -270,6 +270,26 @@ fn compile(
 
     let frontend = run_pipeline_with_classpath(inputs, classpath)?;
 
+    // Validate entry point: `fn main()` must exist for compiled executables.
+    let entry_diags = valen_hir::ty::validate_entry_point(&frontend.hir);
+    if entry_diags.has_errors() {
+        // Build line indexes for error reporting
+        let line_indexes: Vec<_> = inputs
+            .iter()
+            .map(|p| {
+                let src = std::fs::read_to_string(p).unwrap_or_default();
+                LineIndex::new(&src)
+            })
+            .collect();
+        let file_map: Vec<(&std::path::Path, &LineIndex)> = inputs
+            .iter()
+            .map(|p| p.as_path())
+            .zip(line_indexes.iter())
+            .collect();
+        emit_diagnostics(&entry_diags, &file_map);
+        anyhow::bail!("entry point errors");
+    }
+
     let outputs = valen_codegen::compile_hir(&frontend.hir, &frontend.bodies, target)?;
     for output in &outputs {
         let parts: Vec<&str> = output.internal_name.split('/').collect();

@@ -13,6 +13,13 @@ pub struct ExhaustivenessResult {
 }
 
 /// Walk all match expressions in `items` and report non-exhaustive patterns.
+///
+/// **Design note (#025):** This pass currently operates on raw AST and re-infers
+/// scrutinee types from local variable annotations. Ideally it should consume
+/// `TypedBody` / `TypedExpr` from the type checker, which already carries resolved
+/// types. The current approach silently skips match expressions whose scrutinee type
+/// cannot be inferred from AST alone (e.g. function return values, chained calls).
+/// Refactoring to use typed HIR would eliminate these false negatives.
 pub fn check_exhaustiveness(hir: &Hir, items: &[valen_ast::Item]) -> ExhaustivenessResult {
     let mut checker = ExhaustivenessChecker {
         hir,

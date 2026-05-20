@@ -159,23 +159,62 @@ impl Resolver {
             }
         }
 
-        // Second pass: register impl blocks whose target was injected.
-        // For trait impls, both trait and target must be injected.
-        // For inherent impls (no trait_ref), only the target is needed.
+        // Register `Any` (top type, java.lang.Object equivalent) if not already defined.
+        if self.scope.lookup("Any").is_none() {
+            let any_id = self.hir.alloc_id();
+            let any_def = Def {
+                id: any_id,
+                name: SmolStr::from("Any"),
+                kind: DefKind::Class(ClassDef {
+                    kind: ClassDefKind::Open,
+                    ctor_params: vec![],
+                    superclass: None,
+                    trait_impls: vec![],
+                    methods: vec![],
+                }),
+                vis: Vis::Pub,
+                span: valen_ast::Span::DUMMY,
+                package: prelude_pkg.clone(),
+            };
+            self.hir.defs.insert(any_id, any_def);
+            self.hir.prelude_ids.push(any_id);
+            self.scope.define(SmolStr::from("Any"), any_id);
+            injected_names.insert(SmolStr::from("Any"));
+            self.hir.imports.insert(
+                SmolStr::from("Any"),
+                vec![
+                    SmolStr::from("valen"),
+                    SmolStr::from("core"),
+                    SmolStr::from("Any"),
+                ],
+            );
+        }
+
+        // Second pass: register impl blocks.
+        // - Trait impls: only if both trait and target were injected.
+        // - Inherent impls (no trait): register if the target is a primitive type or
+        //   an injected name, so that stdlib methods like `Int.toLong()` are available.
         for item in stdlib_items {
             if let Item::Impl(imp) = item {
                 let trait_name = imp.trait_ref.as_ref().and_then(type_head_name);
                 let target_name = type_head_name(&imp.target);
-                let target_injected = target_name
+                let is_prim_target = target_name
                     .as_ref()
-                    .is_some_and(|n| injected_names.contains(n.as_str()));
+                    .is_some_and(|n| crate::resolve_prim(n).is_some());
                 let should_register = if trait_name.is_some() {
-                    target_injected
-                        && trait_name
+                    // Trait impl: both must be injected
+                    trait_name
+                        .as_ref()
+                        .is_some_and(|n| injected_names.contains(n.as_str()))
+                        && target_name
                             .as_ref()
                             .is_some_and(|n| injected_names.contains(n.as_str()))
                 } else {
-                    target_injected
+                    // Inherent impl: register if target is primitive or was injected
+                    is_prim_target
+                        || target_name
+                            .as_ref()
+                            .is_some_and(|n| injected_names.contains(n.as_str()))
                 };
                 if !should_register {
                     continue;

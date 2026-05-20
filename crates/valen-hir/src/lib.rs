@@ -209,7 +209,8 @@ pub struct Def {
 pub enum Vis {
     /// Visible everywhere.
     Pub,
-    /// Visible within the same module (currently treated as `Pub`).
+    /// Visible within the same module/package. Enforced via package comparison
+    /// in `check_visibility_from_package`. Will be refined with full module system.
     Internal,
     /// Visible only within the defining type.
     Private,

@@ -27,6 +27,60 @@ pub fn type_check(hir: &Hir, items: &[valen_ast::Item]) -> TypeCheckResult {
     }
 }
 
+/// Validate that a `fn main()` entry point exists with the correct signature.
+///
+/// Should be called after name resolution for executable compilation targets.
+/// Library crates or check-only mode may skip this validation.
+pub fn validate_entry_point(hir: &Hir) -> Diagnostics {
+    let mut diags = Diagnostics::new();
+
+    let main_def = hir
+        .defs
+        .values()
+        .find(|d| d.name == "main" && !hir.prelude_ids.contains(&d.id));
+
+    match main_def {
+        Some(def) => {
+            if let crate::DefKind::Fn(fdef) = &def.kind {
+                let non_self_params: Vec<_> = fdef.params.iter().filter(|p| !p.is_self).collect();
+                if !non_self_params.is_empty() {
+                    diags.error(
+                        DiagCode::MISSING_ENTRY_POINT,
+                        def.span,
+                        SmolStr::from("entry point `fn main()` must take no parameters"),
+                    );
+                }
+                if let Some(ret_ty) = &fdef.return_ty {
+                    if *ret_ty != crate::TyRef::Prim(crate::PrimTy::Unit) {
+                        diags.error(
+                            DiagCode::MISSING_ENTRY_POINT,
+                            def.span,
+                            SmolStr::from(
+                                "entry point `fn main()` must return Unit (or omit the return type)",
+                            ),
+                        );
+                    }
+                }
+            } else {
+                diags.error(
+                    DiagCode::MISSING_ENTRY_POINT,
+                    def.span,
+                    SmolStr::from("`main` must be a function, not a type or trait"),
+                );
+            }
+        }
+        None => {
+            diags.error(
+                DiagCode::MISSING_ENTRY_POINT,
+                valen_ast::Span::DUMMY,
+                SmolStr::from("no `fn main()` entry point found"),
+            );
+        }
+    }
+
+    diags
+}
+
 // ---------------------------------------------------------------------------
 // Type environment (scoped)
 // ---------------------------------------------------------------------------
@@ -1836,6 +1890,22 @@ impl<'hir> TypeChecker<'hir> {
             match resolution {
                 crate::MethodResolution::Found(def_id) => {
                     if let Some(def) = self.hir.defs.get(&def_id) {
+                        // Enforce visibility (internal/private) on method access (#032).
+                        let accessor = self.env.lookup("self").and_then(|t| match t {
+                            Ty::Named(n) => Some(n.as_str().to_owned()),
+                            _ => None,
+                        });
+                        if !self.hir.check_visibility(def_id, accessor.as_deref()) {
+                            self.diags.error(
+                                DiagCode::NO_SUCH_METHOD,
+                                mc.span,
+                                SmolStr::from(format!(
+                                    "method `{}` on type `{}` is not accessible from this context",
+                                    mc.method, tn
+                                )),
+                            );
+                        }
+
                         if let DefKind::Fn(fdef) = &def.kind {
                             if fdef.is_unsafe && !self.in_unsafe {
                                 self.diags.error(
@@ -2335,8 +2405,11 @@ impl<'hir> TypeChecker<'hir> {
     }
 
     fn resolve_field_type(&mut self, receiver_ty: &Ty, field: &str, span: Span) -> Ty {
-        let type_name = match receiver_ty {
-            Ty::Named(n) => n,
+        // Extract type name and generic args from the receiver type.
+        // Handles both `Ty::Named("Foo")` and `Ty::Generic("Foo", [Int])`.
+        let (type_name, generic_args) = match receiver_ty {
+            Ty::Named(n) => (n.clone(), vec![]),
+            Ty::Generic(n, args) => (n.clone(), args.clone()),
             _ => {
                 self.diags.error(
                     DiagCode::NO_SUCH_FIELD,
@@ -2362,11 +2435,9 @@ impl<'hir> TypeChecker<'hir> {
                 DefKind::Class(c) => {
                     for p in &c.ctor_params {
                         if p.name == field {
-                            // Check visibility: Private fields are only accessible
-                            // from within the defining class
                             if matches!(p.vis, crate::Vis::Private) {
                                 let same_class =
-                                    accessor_type.as_ref().is_some_and(|a| a == type_name);
+                                    accessor_type.as_ref().is_some_and(|a| *a == type_name);
                                 if !same_class {
                                     self.diags.error(
                                         DiagCode::PRIVATE_FIELD,
@@ -2378,7 +2449,13 @@ impl<'hir> TypeChecker<'hir> {
                                     return Ty::Error;
                                 }
                             }
-                            return tyref_to_ty_generic(&p.ty);
+                            let raw_ty = tyref_to_ty_generic(&p.ty);
+                            if !generic_args.is_empty() {
+                                let bindings =
+                                    self.build_class_type_bindings(&type_name, &generic_args);
+                                return substitute_ty(&raw_ty, &bindings);
+                            }
+                            return raw_ty;
                         }
                     }
                 }
@@ -2387,7 +2464,7 @@ impl<'hir> TypeChecker<'hir> {
                         if p.name == field {
                             if matches!(p.vis, crate::Vis::Private) {
                                 let same_class =
-                                    accessor_type.as_ref().is_some_and(|a| a == type_name);
+                                    accessor_type.as_ref().is_some_and(|a| *a == type_name);
                                 if !same_class {
                                     self.diags.error(
                                         DiagCode::PRIVATE_FIELD,
@@ -2399,7 +2476,13 @@ impl<'hir> TypeChecker<'hir> {
                                     return Ty::Error;
                                 }
                             }
-                            return tyref_to_ty_generic(&p.ty);
+                            let raw_ty = tyref_to_ty_generic(&p.ty);
+                            if !generic_args.is_empty() {
+                                let bindings =
+                                    self.build_class_type_bindings(&type_name, &generic_args);
+                                return substitute_ty(&raw_ty, &bindings);
+                            }
+                            return raw_ty;
                         }
                     }
                 }
