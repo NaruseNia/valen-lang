@@ -277,7 +277,7 @@ impl Resolver {
                     span: f.span,
                     package: self.current_package.clone(),
                 };
-                self.hir.defs.insert(id, def);
+                self.hir.insert_def(id, def);
                 self.define_name(f.name.clone(), id, f.span);
             }
             Item::Class(c) => {
@@ -295,7 +295,7 @@ impl Resolver {
                             span: m.span,
                             package: self.current_package.clone(),
                         };
-                        self.hir.defs.insert(mid, mdef);
+                        self.hir.insert_def(mid, mdef);
                         method_ids.push(mid);
                     }
                 }
@@ -325,7 +325,7 @@ impl Resolver {
                     span: c.span,
                     package: self.current_package.clone(),
                 };
-                self.hir.defs.insert(id, def);
+                self.hir.insert_def(id, def);
                 self.define_name(c.name.clone(), id, c.span);
             }
             Item::DataClass(dc) => {
@@ -346,7 +346,7 @@ impl Resolver {
                     span: dc.span,
                     package: self.current_package.clone(),
                 };
-                self.hir.defs.insert(id, def);
+                self.hir.insert_def(id, def);
                 self.define_name(dc.name.clone(), id, dc.span);
             }
             Item::Enum(e) => {
@@ -385,7 +385,7 @@ impl Resolver {
                     span: e.span,
                     package: self.current_package.clone(),
                 };
-                self.hir.defs.insert(id, def);
+                self.hir.insert_def(id, def);
                 self.define_name(e.name.clone(), id, e.span);
             }
             Item::Trait(t) => {
@@ -406,7 +406,7 @@ impl Resolver {
                                 span: m.span,
                                 package: self.current_package.clone(),
                             };
-                            self.hir.defs.insert(mid, mdef);
+                            self.hir.insert_def(mid, mdef);
                             method_ids.push(mid);
                         }
                         valen_ast::TraitItem::AssociatedType(decl) => {
@@ -433,7 +433,7 @@ impl Resolver {
                     span: t.span,
                     package: self.current_package.clone(),
                 };
-                self.hir.defs.insert(id, def);
+                self.hir.insert_def(id, def);
                 self.define_name(t.name.clone(), id, t.span);
             }
             Item::Impl(imp) => {
@@ -454,7 +454,7 @@ impl Resolver {
                                 span: m.span,
                                 package: self.current_package.clone(),
                             };
-                            self.hir.defs.insert(mid, mdef);
+                            self.hir.insert_def(mid, mdef);
                             method_ids.push(mid);
                         }
                         valen_ast::ImplItem::AssociatedType(def) => {
@@ -485,7 +485,7 @@ impl Resolver {
                     span: imp.span,
                     package: self.current_package.clone(),
                 };
-                self.hir.defs.insert(id, def);
+                self.hir.insert_def(id, def);
             }
             Item::TypeAlias(ta) => {
                 let id = self.hir.alloc_id();
@@ -501,7 +501,7 @@ impl Resolver {
                     span: ta.span,
                     package: self.current_package.clone(),
                 };
-                self.hir.defs.insert(id, def);
+                self.hir.insert_def(id, def);
                 self.define_name(ta.name.clone(), id, ta.span);
             }
             Item::NewType(nt) => {
@@ -516,7 +516,7 @@ impl Resolver {
                     span: nt.span,
                     package: self.current_package.clone(),
                 };
-                self.hir.defs.insert(id, def);
+                self.hir.insert_def(id, def);
                 self.define_name(nt.name.clone(), id, nt.span);
             }
             Item::AnnotationClass(ac) => {
@@ -551,7 +551,7 @@ impl Resolver {
                     span: ac.span,
                     package: self.current_package.clone(),
                 };
-                self.hir.defs.insert(id, def);
+                self.hir.insert_def(id, def);
                 self.define_name(ac.name.clone(), id, ac.span);
             }
         }

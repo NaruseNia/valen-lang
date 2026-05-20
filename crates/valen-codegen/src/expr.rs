@@ -2099,6 +2099,12 @@ impl<'a> ExprLowering<'a> {
         self.pop_scope();
     }
 
+    // TODO(#014): Iterator intrinsics (map, filter, etc.) currently use eager evaluation,
+    // collecting results into ArrayList immediately. This is a deliberate MVP simplification.
+    // Future improvement: implement lazy iterator wrapper classes to avoid O(n) extra memory
+    // per transformation and to enable infinite iterators. This will require generating
+    // anonymous inner classes or leveraging java.util.stream on JVM 8+.
+
     /// `iter.map(f) -> List<U>`: apply f to each element and collect results.
     fn emit_iter_map(
         &mut self,

@@ -96,6 +96,14 @@ impl ServerState {
         }
     }
 
+    // TODO(#035): Full reparse on every keystroke — known performance limitation.
+    // Every didChange triggers full re-analysis of the changed document PLUS all other
+    // open documents, which is O(N) full re-analyses per keystroke. Planned improvements:
+    // 1. Add debounce (50-100ms) to batch rapid keystrokes into a single analysis pass.
+    // 2. Implement incremental parsing (e.g. tree-sitter or incremental re-lex) so only
+    //    changed regions are re-parsed.
+    // 3. Build a dependency graph between files so only dependents are re-analyzed,
+    //    not all open documents.
     fn analyze_and_publish(&mut self, uri: Url, text: String, version: i32) {
         let file_id = self.file_id_for(&uri);
         let (doc_state, diags) = analyze_document(&text, file_id);
