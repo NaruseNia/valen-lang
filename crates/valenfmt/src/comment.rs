@@ -30,7 +30,28 @@ pub fn extract_comments(source: &str) -> Vec<Comment> {
 
     while i < len {
         match bytes[i] {
-            // Skip string literals to avoid false positives
+            // Skip f-string literals with brace-depth tracking
+            b'f' if i + 1 < len && bytes[i + 1] == b'"' => {
+                i += 2; // skip f"
+                let mut brace_depth: u32 = 0;
+                while i < len {
+                    match bytes[i] {
+                        b'\\' => {
+                            i += 2;
+                            continue;
+                        }
+                        b'{' => brace_depth += 1,
+                        b'}' => brace_depth = brace_depth.saturating_sub(1),
+                        b'"' if brace_depth == 0 => {
+                            i += 1;
+                            break;
+                        }
+                        _ => {}
+                    }
+                    i += 1;
+                }
+            }
+            // Skip regular string literals
             b'"' => {
                 i += 1;
                 while i < len && bytes[i] != b'"' {
@@ -140,6 +161,21 @@ mod tests {
         let src = r#"let x = "// not a comment";"#;
         let comments = extract_comments(src);
         assert!(comments.is_empty());
+    }
+
+    #[test]
+    fn comment_inside_fstring_ignored() {
+        let src = r#"let x = f"value is {a + b // nope}";"#;
+        let comments = extract_comments(src);
+        assert!(comments.is_empty());
+    }
+
+    #[test]
+    fn comment_after_fstring() {
+        let src = r#"let x = f"hi {name}"; // real comment"#;
+        let comments = extract_comments(src);
+        assert_eq!(comments.len(), 1);
+        assert_eq!(comments[0].text, "// real comment");
     }
 
     #[test]
