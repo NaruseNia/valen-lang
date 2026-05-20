@@ -406,18 +406,22 @@ pub struct LetElseStmt {
 }
 
 /// Expression node — every expression variant in the Valen language.
+///
+/// Large variants containing `Vec` fields are boxed to reduce the overall enum
+/// size (#066). This keeps the inline size closer to the smallest variants
+/// (pointer-sized) and reduces memory pressure when many `Expr` nodes exist.
 #[derive(Debug, Clone)]
 pub enum Expr {
     Literal(Literal),
     Path(Path),
-    Call(CallExpr),
+    Call(Box<CallExpr>),
     MethodCall(Box<MethodCallExpr>),
     Field(FieldAccess),
     Binary(BinaryExpr),
     Unary(UnaryExpr),
     Assign(AssignExpr),
     If(Box<IfExpr>),
-    Match(MatchExpr),
+    Match(Box<MatchExpr>),
     Block(Block),
     Return(ReturnExpr),
     Break(BreakExpr),
@@ -428,7 +432,7 @@ pub enum Expr {
     Lambda(Box<LambdaExpr>),
     Range(RangeExpr),
     Try(TryExpr),
-    StringInterp(StringInterpExpr),
+    StringInterp(Box<StringInterpExpr>),
     Safe(SafeExpr),
     IfLet(Box<IfLetExpr>),
     WhileLet(Box<WhileLetExpr>),
@@ -437,9 +441,9 @@ pub enum Expr {
     /// `lhs |> rhs` — pipeline operator, desugar to first-arg insertion.
     Pipeline(Box<PipelineExpr>),
     /// `[expr, expr, ...]` — list literal.
-    ListLiteral(ListLiteralExpr),
+    ListLiteral(Box<ListLiteralExpr>),
     /// `#{key: value, ...}` — map literal.
-    MapLiteral(MapLiteralExpr),
+    MapLiteral(Box<MapLiteralExpr>),
     /// `unsafe { block }` or `unsafe expr` — bypasses safety checks.
     Unsafe(UnsafeExpr),
     /// `expr as Type` — type cast expression.
@@ -944,4 +948,118 @@ pub struct WhileLetExpr {
     pub expr: Box<Expr>,
     pub body: Block,
     pub span: Span,
+}
+
+// ---------------------------------------------------------------------------
+// Display implementations for key AST types (#067)
+// ---------------------------------------------------------------------------
+
+impl std::fmt::Display for Literal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Literal::Int(v, _) => write!(f, "{v}"),
+            Literal::Long(v, _) => write!(f, "{v}L"),
+            Literal::Float(v, _) => write!(f, "{v}f"),
+            Literal::Double(v, _) => write!(f, "{v}"),
+            Literal::Char(c, _) => write!(f, "'{c}'"),
+            Literal::String(s, _) => write!(f, "\"{s}\""),
+            Literal::Bool(b, _) => write!(f, "{b}"),
+            Literal::Unit(_) => write!(f, "()"),
+        }
+    }
+}
+
+impl std::fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            BinaryOp::Add => "+",
+            BinaryOp::Sub => "-",
+            BinaryOp::Mul => "*",
+            BinaryOp::Div => "/",
+            BinaryOp::Rem => "%",
+            BinaryOp::Eq => "==",
+            BinaryOp::Ne => "!=",
+            BinaryOp::Lt => "<",
+            BinaryOp::Le => "<=",
+            BinaryOp::Gt => ">",
+            BinaryOp::Ge => ">=",
+            BinaryOp::And => "&&",
+            BinaryOp::Or => "||",
+            BinaryOp::BitAnd => "&",
+            BinaryOp::BitOr => "|",
+            BinaryOp::BitXor => "^",
+            BinaryOp::Shl => "<<",
+            BinaryOp::Shr => ">>",
+            BinaryOp::RefEq => "===",
+            BinaryOp::RefNe => "!==",
+        };
+        write!(f, "{s}")
+    }
+}
+
+impl std::fmt::Display for UnaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnaryOp::Neg => write!(f, "-"),
+            UnaryOp::Not => write!(f, "!"),
+        }
+    }
+}
+
+impl std::fmt::Display for Visibility {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Visibility::Pub => write!(f, "pub"),
+            Visibility::Internal => write!(f, "internal"),
+            Visibility::Private => write!(f, "private"),
+        }
+    }
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Path(tp) => {
+                for (i, seg) in tp.segments.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ".")?;
+                    }
+                    write!(f, "{}", seg.name)?;
+                    if !seg.generics.is_empty() {
+                        write!(f, "<")?;
+                        for (j, g) in seg.generics.iter().enumerate() {
+                            if j > 0 {
+                                write!(f, ", ")?;
+                            }
+                            write!(f, "{g}")?;
+                        }
+                        write!(f, ">")?;
+                    }
+                }
+                Ok(())
+            }
+            Type::Nullable { inner, .. } => write!(f, "{inner}?"),
+            Type::Fn(ft) => {
+                write!(f, "fn(")?;
+                for (i, p) in ft.params.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{p}")?;
+                }
+                write!(f, ") -> {}", ft.return_type)
+            }
+            Type::Tuple(tys, _) => {
+                write!(f, "(")?;
+                for (i, t) in tys.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{t}")?;
+                }
+                write!(f, ")")
+            }
+            Type::RefMut { inner, .. } => write!(f, "ref mut {inner}"),
+        }
+    }
 }

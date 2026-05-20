@@ -1359,11 +1359,11 @@ impl Parser {
             if self.at(&TokenKind::LParen) {
                 let args = self.parse_call_args()?;
                 let span = expr_span(&expr).merge(self.prev_span());
-                expr = Expr::Call(CallExpr {
+                expr = Expr::Call(Box::new(CallExpr {
                     callee: Box::new(expr),
                     args,
                     span,
-                });
+                }));
             } else if self.eat(&TokenKind::Dot).is_some() {
                 let method_name = self.expect_ident()?;
                 if self.at(&TokenKind::LParen) {
@@ -1464,7 +1464,9 @@ impl Parser {
             }
             TokenKind::FStringLit(raw) => {
                 self.bump();
-                Some(Expr::StringInterp(self.parse_fstring_parts(&raw, span)))
+                Some(Expr::StringInterp(Box::new(
+                    self.parse_fstring_parts(&raw, span),
+                )))
             }
             TokenKind::BoolLit(b) => {
                 self.bump();
@@ -1535,10 +1537,10 @@ impl Parser {
             elements.push(self.parse_expr()?);
         }
         let end = self.expect(TokenKind::RBracket)?;
-        Some(Expr::ListLiteral(valen_ast::ListLiteralExpr {
+        Some(Expr::ListLiteral(Box::new(valen_ast::ListLiteralExpr {
             elements,
             span: start.merge(end),
-        }))
+        })))
     }
 
     /// `#{key: value, ...}` — empty `#{}` allowed with type annotation.
@@ -1559,10 +1561,10 @@ impl Parser {
             entries.push((key, value));
         }
         let end = self.expect(TokenKind::RBrace)?;
-        Some(Expr::MapLiteral(valen_ast::MapLiteralExpr {
+        Some(Expr::MapLiteral(Box::new(valen_ast::MapLiteralExpr {
             entries,
             span: start.merge(end),
-        }))
+        })))
     }
 
     fn is_variant_shorthand_start(&self) -> bool {
@@ -1771,11 +1773,11 @@ impl Parser {
             arms.push(self.parse_match_arm()?);
         }
         let end = self.expect(TokenKind::RBrace)?;
-        Some(Expr::Match(MatchExpr {
+        Some(Expr::Match(Box::new(MatchExpr {
             scrutinee: Box::new(scrutinee),
             arms,
             span: start.merge(end),
-        }))
+        })))
     }
 
     fn parse_match_arm(&mut self) -> Option<MatchArm> {
