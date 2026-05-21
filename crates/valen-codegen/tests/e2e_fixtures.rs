@@ -539,16 +539,32 @@ fn fixture_annotation() {
 #[test]
 fn fixture_default_args() {
     let classes = compile_fixture("default_args.vln");
-    // Greeter class
-    assert_eq!(classes.len(), 1);
-    let c = &classes[0];
-    assert_eq!(c.class_name().unwrap(), "com/example/Greeter");
-    // <init> + greet + repeat (top-level fn goes into Greeter since it's the only class)
+    // Greeter class + MainKt (hosts top-level fn `repeat`)
+    assert_eq!(classes.len(), 2);
+    let c = classes
+        .iter()
+        .find(|c| c.class_name().unwrap() == "com/example/Greeter")
+        .expect("Greeter class should be generated");
+    // <init> + greet
     assert!(
         c.methods.len() >= 2,
         "Greeter should have at least <init> and greet, got {}",
         c.methods.len()
     );
+    let mainkt = classes
+        .iter()
+        .find(|c| c.class_name().unwrap() == "com/example/MainKt")
+        .expect("MainKt class should host top-level fn repeat");
+    let has_repeat = mainkt.methods.iter().any(|m| {
+        mainkt
+            .constant_pool
+            .try_get_utf8(m.name_index)
+            .ok()
+            .and_then(|n| n.as_str())
+            .map(|s| s == "repeat")
+            .unwrap_or(false)
+    });
+    assert!(has_repeat, "MainKt should contain repeat method");
 }
 
 #[test]
