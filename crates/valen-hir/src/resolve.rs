@@ -159,18 +159,25 @@ impl Resolver {
             }
         }
 
-        // Second pass: register impl blocks only if both trait and target were injected
+        // Second pass: register impl blocks whose target was injected.
+        // For trait impls, both trait and target must be injected.
+        // For inherent impls (no trait_ref), only the target is needed.
         for item in stdlib_items {
             if let Item::Impl(imp) = item {
                 let trait_name = imp.trait_ref.as_ref().and_then(type_head_name);
                 let target_name = type_head_name(&imp.target);
-                let both_injected = trait_name
+                let target_injected = target_name
                     .as_ref()
-                    .is_some_and(|n| injected_names.contains(n.as_str()))
-                    && target_name
-                        .as_ref()
-                        .is_some_and(|n| injected_names.contains(n.as_str()));
-                if !both_injected {
+                    .is_some_and(|n| injected_names.contains(n.as_str()));
+                let should_register = if trait_name.is_some() {
+                    target_injected
+                        && trait_name
+                            .as_ref()
+                            .is_some_and(|n| injected_names.contains(n.as_str()))
+                } else {
+                    target_injected
+                };
+                if !should_register {
                     continue;
                 }
                 let id_before = self.hir.next_id;
