@@ -17,8 +17,8 @@ use valen_diagnostics::{DiagCode, Diagnostics};
 
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \t\r\n\f]+")]
-#[logos(skip r"//[^\n]*")]
-#[logos(skip r"/\*([^*]|\*[^/])*\*/")]
+#[logos(skip(r"//[^\n]*", allow_greedy = true))]
+#[logos(skip(r"/\*([^*]|\*[^/])*\*/", allow_greedy = true))]
 enum RawTok {
     // Keywords
     #[token("fn")]
