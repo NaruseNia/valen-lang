@@ -1,0 +1,23 @@
+package ecs;
+
+/// Trait for all ECS systems.
+/// Each system processes entities with specific component requirements.
+pub trait System {
+    /// Process one simulation step.
+    fn update(self, world: World, dt: Float) -> Unit;
+}
+
+/// Determines when a system runs relative to others.
+pub enum SystemPhase {
+    PreUpdate,
+    Update,
+    PostUpdate,
+    Render,
+}
+
+/// Wraps a System with its scheduling metadata.
+pub data class SystemEntry(
+    pub name: String,
+    pub phase: SystemPhase,
+    pub enabled: Bool,
+);

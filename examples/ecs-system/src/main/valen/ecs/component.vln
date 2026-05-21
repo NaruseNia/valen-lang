@@ -1,0 +1,39 @@
+package ecs;
+
+/// Marker trait for all ECS components.
+pub trait Component {}
+
+/// 2D position in world space.
+pub data class Position(pub x: Float, pub y: Float);
+
+impl Component for Position {}
+
+/// 2D velocity vector.
+pub data class Velocity(pub dx: Float, pub dy: Float);
+
+impl Component for Velocity {}
+
+/// Health with current and maximum values.
+pub data class Health(pub current: Int, pub max: Int);
+
+impl Component for Health {}
+
+/// Axis-aligned bounding box for collision detection.
+pub data class BoundingBox(pub width: Float, pub height: Float);
+
+impl Component for BoundingBox {}
+
+/// Sprite rendering information.
+pub data class Sprite(pub name: String, pub layer: Int);
+
+impl Component for Sprite {}
+
+/// Tag component: entity is active and should be processed.
+pub class Active {}
+
+impl Component for Active {}
+
+/// Tag component: entity is marked for removal at end of frame.
+pub class PendingRemoval {}
+
+impl Component for PendingRemoval {}

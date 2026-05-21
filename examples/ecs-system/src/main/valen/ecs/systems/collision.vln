@@ -1,0 +1,68 @@
+package ecs.systems;
+
+import java.util.ArrayList;
+
+/// Simple AABB collision detection system.
+/// Checks all entity pairs with Position + BoundingBox for overlaps.
+pub class CollisionSystem {
+    /// AABB overlap test between two entities.
+    fn checkOverlap(world: World, a: Entity, b: Entity) -> Bool {
+        match world.getComponent(a, "Position") {
+            Option::Some(posA) => {
+                match world.getComponent(b, "Position") {
+                    Option::Some(posB) => {
+                        match world.getComponent(a, "BoundingBox") {
+                            Option::Some(boxA) => {
+                                match world.getComponent(b, "BoundingBox") {
+                                    Option::Some(boxB) => {
+                                        let halfWA = boxA.width / 2.0f;
+                                        let halfHA = boxA.height / 2.0f;
+                                        let halfWB = boxB.width / 2.0f;
+                                        let halfHB = boxB.height / 2.0f;
+
+                                        let overlapX = posA.x - halfWA < posB.x + halfWB
+                                            && posA.x + halfWA > posB.x - halfWB;
+                                        let overlapY = posA.y - halfHA < posB.y + halfHB
+                                            && posA.y + halfHA > posB.y - halfHB;
+
+                                        overlapX && overlapY
+                                    },
+                                    _ => false,
+                                }
+                            },
+                            _ => false,
+                        }
+                    },
+                    _ => false,
+                }
+            },
+            _ => false,
+        }
+    }
+}
+
+impl System for CollisionSystem {
+    fn update(self, world: World, dt: Float) -> Unit {
+        let required = ArrayList();
+        required.add("Position");
+        required.add("BoundingBox");
+        let filter = QueryFilter::All(components = required);
+        let results = world.query(filter);
+
+        let mut i = 0;
+        while i < results.size() {
+            let a = results.get(i);
+            let mut j = i + 1;
+            while j < results.size() {
+                let b = results.get(j);
+                if CollisionSystem::checkOverlap(world, a.entity, b.entity) {
+                    world.events.push(
+                        Event::Collision(a = a.entity, b = b.entity)
+                    );
+                }
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+    }
+}

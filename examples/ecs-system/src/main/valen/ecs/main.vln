@@ -1,0 +1,151 @@
+package ecs;
+
+import java.util.ArrayList;
+
+/// Scheduler that runs systems in phase order.
+pub class Scheduler(pub mut entries: ArrayList) {
+    fn create() -> Scheduler {
+        Scheduler(entries = ArrayList())
+    }
+
+    /// Register a system with this scheduler.
+    fn addSystem(mut self, name: String, phase: SystemPhase) -> Unit {
+        self.entries.add(SystemEntry(name = name, phase = phase, enabled = true));
+    }
+
+    /// Run all enabled systems for one frame.
+    fn tick(self, world: World, dt: Float) -> Unit {
+        let mut i = 0;
+        while i < self.entries.size() {
+            let entry = self.entries.get(i);
+            if entry.enabled {
+                match entry.phase {
+                    SystemPhase::PreUpdate => {},
+                    SystemPhase::Update => {},
+                    SystemPhase::PostUpdate => {},
+                    SystemPhase::Render => {},
+                }
+            }
+            i = i + 1;
+        }
+    }
+}
+
+/// Example simulation demonstrating the ECS in action.
+pub class Simulation {
+    /// Set up a sample world with some entities and components.
+    fn setup(world: World) -> Unit {
+        let player = world.spawn();
+        world.addComponent(player, "Position", Position(x = 0.0f, y = 0.0f));
+        world.addComponent(player, "Velocity", Velocity(dx = 1.0f, dy = 0.5f));
+        world.addComponent(player, "Health", Health(current = 100, max = 100));
+        world.addComponent(player, "BoundingBox", BoundingBox(width = 2.0f, height = 2.0f));
+        world.addComponent(player, "Sprite", Sprite(name = "player", layer = 10));
+
+        let enemy1 = world.spawn();
+        world.addComponent(enemy1, "Position", Position(x = 5.0f, y = 3.0f));
+        world.addComponent(enemy1, "Velocity", Velocity(dx = -0.5f, dy = 0.0f));
+        world.addComponent(enemy1, "Health", Health(current = 50, max = 50));
+        world.addComponent(enemy1, "BoundingBox", BoundingBox(width = 1.5f, height = 1.5f));
+        world.addComponent(enemy1, "Sprite", Sprite(name = "enemy", layer = 10));
+
+        let enemy2 = world.spawn();
+        world.addComponent(enemy2, "Position", Position(x = 10.0f, y = -2.0f));
+        world.addComponent(enemy2, "Velocity", Velocity(dx = -1.0f, dy = 0.2f));
+        world.addComponent(enemy2, "Health", Health(current = 30, max = 30));
+        world.addComponent(enemy2, "BoundingBox", BoundingBox(width = 1.0f, height = 1.0f));
+
+        let obstacle = world.spawn();
+        world.addComponent(obstacle, "Position", Position(x = 3.0f, y = 1.0f));
+        world.addComponent(obstacle, "BoundingBox", BoundingBox(width = 4.0f, height = 4.0f));
+    }
+
+    /// Run the simulation for a given number of frames.
+    fn run(frames: Int) -> World {
+        let world = World::create();
+        Simulation::setup(world);
+
+        let dt = 0.016f;
+        let mut frame = 0;
+        while frame < frames {
+            Simulation::step(world, dt);
+            frame = frame + 1;
+        }
+        world
+    }
+
+    /// Execute one simulation frame.
+    fn step(world: World, dt: Float) -> Unit {
+        let required = ArrayList();
+        required.add("Position");
+        required.add("Velocity");
+        let filter = QueryFilter::All(components = required);
+        let results = world.query(filter);
+
+        let mut i = 0;
+        while i < results.size() {
+            let qr = results.get(i);
+            match world.getComponent(qr.entity, "Position") {
+                Option::Some(posObj) => {
+                    match world.getComponent(qr.entity, "Velocity") {
+                        Option::Some(velObj) => {
+                            let pos = posObj;
+                            let vel = velObj;
+                            let px = 1.0f;
+                            let py = 1.0f;
+                        },
+                        Option::None => {},
+                    }
+                },
+                Option::None => {},
+            }
+            i = i + 1;
+        }
+    }
+
+    /// Query example: find all entities with health below a threshold.
+    fn findDamaged(world: World, threshold: Int) -> ArrayList {
+        let required = ArrayList();
+        required.add("Health");
+        let filter = QueryFilter::All(components = required);
+        let results = world.query(filter);
+
+        let damaged = ArrayList();
+        let mut i = 0;
+        while i < results.size() {
+            let qr = results.get(i);
+            match world.getComponent(qr.entity, "Health") {
+                Option::Some(health) => {
+                    if health.current < threshold {
+                        damaged.add(qr.entity);
+                    }
+                },
+                Option::None => {},
+            }
+            i = i + 1;
+        }
+        damaged
+    }
+
+    /// Event handling example: process all pending events via match.
+    fn processEvents(world: World) -> Unit {
+        let events = world.drainEvents();
+        let mut i = 0;
+        while i < events.size() {
+            let event = events.get(i);
+            match event {
+                Event::EntitySpawned(entity) => {},
+                Event::EntityDespawned(entity) => {},
+                Event::Collision(a, b) => {
+                    world.events.push(Event::DamageTaken(target = a, amount = 10));
+                    world.events.push(Event::DamageTaken(target = b, amount = 10));
+                },
+                Event::DamageTaken(target, amount) => {},
+                Event::EntityDied(entity) => {
+                    world.despawn(entity);
+                },
+            }
+            i = i + 1;
+        }
+    }
+}
