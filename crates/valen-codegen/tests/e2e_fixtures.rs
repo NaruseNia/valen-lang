@@ -62,8 +62,12 @@ fn compile_fixture_impl(name: &str, assert_typecheck: bool) -> Vec<valen_codegen
         );
     }
 
-    let outputs =
-        valen_codegen::compile_hir(&resolve_result.hir, &tc.bodies).expect("codegen failed");
+    let outputs = valen_codegen::compile_hir(
+        &resolve_result.hir,
+        &tc.bodies,
+        valen_codegen::JvmVersion::Java21,
+    )
+    .expect("codegen failed");
     assert!(!outputs.is_empty(), "no class files generated for {name}");
 
     for o in &outputs {

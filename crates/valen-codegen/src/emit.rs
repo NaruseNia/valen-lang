@@ -8,7 +8,7 @@ use ristretto_classfile::attributes::{
 };
 use ristretto_classfile::{
     BaseType, ClassAccessFlags, ClassFile, ConstantPool, Field, FieldAccessFlags, FieldType,
-    JavaString, Method, MethodAccessFlags, ReferenceKind, JAVA_21,
+    JavaString, Method, MethodAccessFlags, ReferenceKind, JAVA_21, JAVA_25,
 };
 
 use crate::descriptor::{jvm_method_descriptor, jvm_type_descriptor};
@@ -174,8 +174,12 @@ pub fn emit_class(jvm_class: &JvmClass) -> Result<ClassFileOutput, CodegenError>
         access_flags |= ClassAccessFlags::SUPER;
     }
 
+    let cf_version = match jvm_class.version {
+        crate::JvmVersion::Java21 => JAVA_21,
+        crate::JvmVersion::Java25 => JAVA_25,
+    };
     let class_file = ClassFile {
-        version: JAVA_21,
+        version: cf_version,
         constant_pool: cp,
         access_flags,
         this_class,
@@ -1504,7 +1508,8 @@ mod tests {
             },
         );
 
-        let jvm_classes = crate::lower::lower_hir(&hir, &indexmap::IndexMap::new());
+        let jvm_classes =
+            crate::lower::lower_hir(&hir, &indexmap::IndexMap::new(), crate::JvmVersion::Java21);
         let point_class = jvm_classes.iter().find(|c| c.name == "Point").unwrap();
 
         let output = emit_class(point_class).unwrap();

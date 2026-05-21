@@ -59,8 +59,9 @@ pub fn generate_closed_annotation() -> Result<ClassFileOutput, emit::CodegenErro
 pub fn compile_hir(
     hir: &valen_hir::Hir,
     typed_bodies: &indexmap::IndexMap<valen_hir::DefId, valen_hir::TypedBody>,
+    version: JvmVersion,
 ) -> Result<Vec<ClassFileOutput>, emit::CodegenError> {
-    let jvm_classes = lower::lower_hir(hir, typed_bodies);
+    let jvm_classes = lower::lower_hir(hir, typed_bodies, version);
     jvm_classes.iter().map(emit::emit_class).collect()
 }
 
