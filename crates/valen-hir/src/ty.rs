@@ -3737,23 +3737,14 @@ impl<'hir> TypeChecker<'hir> {
         if from == to || from.is_error() || to.is_error() {
             return true;
         }
+        // All numeric-to-numeric casts (widening and narrowing) are safe,
+        // matching Kotlin/Java semantics where explicit numeric conversion is
+        // a normal operation, not an unsafe one.
+        if from.is_numeric() && to.is_numeric() {
+            return true;
+        }
         #[allow(clippy::match_like_matches_macro)]
         match (from, to) {
-            (
-                Ty::Prim(PrimTy::Byte),
-                Ty::Prim(
-                    PrimTy::Short | PrimTy::Int | PrimTy::Long | PrimTy::Float | PrimTy::Double,
-                ),
-            ) => true,
-            (
-                Ty::Prim(PrimTy::Short),
-                Ty::Prim(PrimTy::Int | PrimTy::Long | PrimTy::Float | PrimTy::Double),
-            ) => true,
-            (Ty::Prim(PrimTy::Int), Ty::Prim(PrimTy::Long | PrimTy::Float | PrimTy::Double)) => {
-                true
-            }
-            (Ty::Prim(PrimTy::Long), Ty::Prim(PrimTy::Float | PrimTy::Double)) => true,
-            (Ty::Prim(PrimTy::Float), Ty::Prim(PrimTy::Double)) => true,
             (
                 Ty::Prim(PrimTy::Char),
                 Ty::Prim(PrimTy::Int | PrimTy::Long | PrimTy::Float | PrimTy::Double),

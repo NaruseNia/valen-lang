@@ -184,7 +184,7 @@ impl Byte {
     fn toLong(self) -> Long { 0L }
     fn toFloat(self) -> Float { 0.0f }
     fn toDouble(self) -> Double { 0.0 }
-    fn toShort(self) -> Short { 0 }
+    fn toShort(self) -> Short { 0 as Short }
 }
 
 impl Short {
@@ -192,7 +192,7 @@ impl Short {
     fn toLong(self) -> Long { 0L }
     fn toFloat(self) -> Float { 0.0f }
     fn toDouble(self) -> Double { 0.0 }
-    fn toByte(self) -> Byte { 0 }
+    fn toByte(self) -> Byte { 0 as Byte }
 }
 
 impl Char {
