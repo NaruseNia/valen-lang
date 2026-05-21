@@ -112,6 +112,10 @@ pub fn lower_hir(
         classes.push(lower_top_level_functions(hir, &top_level_fns, pkg));
     }
 
+    // TODO(#070): Synthetic helper classes (ListIterator and 6 ref wrapper classes) are
+    // unconditionally emitted for every compilation unit. This produces 7 extra .class
+    // files even when the program doesn't use iterators or ref-mut. Track usage during
+    // HIR lowering and only emit the classes that are actually referenced.
     classes.push(generate_list_iterator_class(version));
     classes.extend(generate_ref_wrapper_classes(version));
 
@@ -1170,6 +1174,10 @@ fn superclass_matches(tyref: &valen_hir::TyRef, name: &str) -> bool {
     }
 }
 
+// TODO(#071): Unit-only enums (all variants have zero fields) currently emit a sealed
+// interface + singleton inner class per variant, producing N+1 class files. These could
+// instead be compiled to a single Java `enum` class with int-constant ordinals, reducing
+// class file count and improving pattern match codegen (tableswitch on ordinal).
 fn lower_enum(
     hir: &Hir,
     def: &Def,

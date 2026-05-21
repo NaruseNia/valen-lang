@@ -127,6 +127,10 @@ impl<'a> ExprLowering<'a> {
         self.scope_stack.push(Vec::new());
     }
 
+    // TODO(#068): Scope slots are never reclaimed — `pop_scope` restores name bindings
+    // but does not reset `next_slot` to the value at scope entry. This means deeply
+    // nested scopes inflate `max_locals` even though the inner slots are no longer live.
+    // Fix: save `self.next_slot` in `push_scope` and restore it here.
     fn pop_scope(&mut self) {
         if let Some(undo_log) = self.scope_stack.pop() {
             for (name, prev) in undo_log.into_iter().rev() {
@@ -3339,6 +3343,11 @@ impl<'a> ExprLowering<'a> {
         });
     }
 
+    // TODO(#069): String interpolation uses StringBuilder instead of JDK 9+
+    // invokedynamic with StringConcatFactory bootstrap. The invokedynamic approach
+    // produces less bytecode and allows the JVM to optimize small concatenations.
+    // To implement: emit `invokedynamic` with `java/lang/invoke/StringConcatFactory`
+    // as the bootstrap method, with a recipe string matching the interpolation pattern.
     fn lower_string_interp(&mut self, parts: &[TypedStringPart]) {
         self.ops.push(JvmOp::New(JVM_STRING_BUILDER.to_string()));
         self.ops.push(JvmOp::Dup);
