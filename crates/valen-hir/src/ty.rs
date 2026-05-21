@@ -215,18 +215,19 @@ impl<'hir> TypeChecker<'hir> {
         }
     }
 
+    /// Look up a def by name using the O(1) name index (#027).
     fn lookup_def_id(&self, name: &str) -> Option<DefId> {
-        self.hir
-            .defs
-            .values()
-            .find(|d| d.name == name)
-            .map(|d| d.id)
+        self.hir.lookup_by_name(name).first().copied()
     }
 
+    /// Look up a method on a class, impl, or trait by name using the name index (#027).
     fn lookup_method_def_id(&self, class_name: &str, method_name: &str) -> Option<DefId> {
-        for def in self.hir.defs.values() {
+        for &def_id in self.hir.lookup_by_name(class_name) {
+            let Some(def) = self.hir.defs.get(&def_id) else {
+                continue;
+            };
             match &def.kind {
-                DefKind::Class(c) if def.name == class_name => {
+                DefKind::Class(c) => {
                     for &mid in &c.methods {
                         if let Some(mdef) = self.hir.defs.get(&mid) {
                             if mdef.name == method_name {
@@ -235,16 +236,7 @@ impl<'hir> TypeChecker<'hir> {
                         }
                     }
                 }
-                DefKind::Impl(imp) => {
-                    for &mid in &imp.methods {
-                        if let Some(mdef) = self.hir.defs.get(&mid) {
-                            if mdef.name == method_name {
-                                return Some(mid);
-                            }
-                        }
-                    }
-                }
-                DefKind::Trait(t) if def.name == class_name => {
+                DefKind::Trait(t) => {
                     for &mid in &t.methods {
                         if let Some(mdef) = self.hir.defs.get(&mid) {
                             if mdef.name == method_name {
@@ -254,6 +246,18 @@ impl<'hir> TypeChecker<'hir> {
                     }
                 }
                 _ => {}
+            }
+        }
+        // Also check all impl blocks for matching methods (impls have empty names)
+        for def in self.hir.defs.values() {
+            if let DefKind::Impl(imp) = &def.kind {
+                for &mid in &imp.methods {
+                    if let Some(mdef) = self.hir.defs.get(&mid) {
+                        if mdef.name == method_name {
+                            return Some(mid);
+                        }
+                    }
+                }
             }
         }
         None

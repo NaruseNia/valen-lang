@@ -34,6 +34,8 @@ pub struct Hir {
     pub foreign_types: IndexMap<SmolStr, ForeignClassInfo>,
     /// DefIds of synthetic prelude types (should not be emitted by codegen).
     pub prelude_ids: Vec<DefId>,
+    /// Name-to-DefId index for O(1) lookups by definition name (#027).
+    pub name_index: IndexMap<SmolStr, Vec<DefId>>,
     next_id: DefId,
 }
 
@@ -54,6 +56,25 @@ impl Hir {
         let id = self.next_id;
         self.next_id += 1;
         id
+    }
+
+    /// Insert a definition and maintain the name index for O(1) lookups (#027).
+    pub fn insert_def(&mut self, id: DefId, def: Def) {
+        if !def.name.is_empty() {
+            self.name_index
+                .entry(def.name.clone())
+                .or_default()
+                .push(id);
+        }
+        self.defs.insert(id, def);
+    }
+
+    /// Look up all `DefId`s with the given name via the name index (O(1) amortized).
+    pub fn lookup_by_name(&self, name: &str) -> &[DefId] {
+        self.name_index
+            .get(name)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
     /// Resolve a method on `type_name`, checking class body methods first, then trait impls,
@@ -89,9 +110,10 @@ impl Hir {
             };
         }
 
-        // Check trait method definitions when type_name is a trait
-        for def in self.defs.values() {
-            if def.name == type_name {
+        // Check trait method definitions when type_name is itself a trait.
+        // Uses name_index for O(1) lookup instead of scanning all defs (#027).
+        for &def_id in self.lookup_by_name(type_name) {
+            if let Some(def) = self.defs.get(&def_id) {
                 if let DefKind::Trait(tdef) = &def.kind {
                     for &mid in &tdef.methods {
                         if let Some(mdef) = self.defs.get(&mid) {
