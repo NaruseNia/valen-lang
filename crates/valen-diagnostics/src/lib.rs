@@ -62,6 +62,23 @@ impl fmt::Display for DiagCode {
     }
 }
 
+impl Diagnostic {
+    /// Add a secondary labeled span to this diagnostic.
+    pub fn with_label(mut self, span: Span, message: impl Into<SmolStr>) -> Self {
+        self.labels.push(Label {
+            span,
+            message: message.into(),
+        });
+        self
+    }
+
+    /// Add a note to this diagnostic.
+    pub fn with_note(mut self, note: impl Into<SmolStr>) -> Self {
+        self.notes.push(note.into());
+        self
+    }
+}
+
 impl fmt::Display for Diagnostic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}[{}]: {}", self.severity, self.code, self.message)
@@ -91,6 +108,7 @@ impl DiagCode {
     pub const NO_SUCH_FIELD: DiagCode = DiagCode(304);
     pub const NO_SUCH_METHOD: DiagCode = DiagCode(305);
     pub const AMBIGUOUS_METHOD: DiagCode = DiagCode(306);
+    /// Planned: emit when function return type cannot be inferred.
     pub const MISSING_RETURN_TYPE: DiagCode = DiagCode(307);
     pub const BRANCH_TYPE_MISMATCH: DiagCode = DiagCode(308);
     pub const NO_IMPLICIT_CONVERSION: DiagCode = DiagCode(309);
@@ -121,7 +139,9 @@ impl DiagCode {
     pub const DEREF_NOT_REF_MUT: DiagCode = DiagCode(325);
     pub const REF_MUT_JAVA_INTEROP: DiagCode = DiagCode(326);
     pub const INT_LITERAL_OVERFLOW: DiagCode = DiagCode(327);
+    /// Planned: emit when Java checked exception escapes without Result wrapping.
     pub const JAVA_EXCEPTION_NOT_WRAPPED: DiagCode = DiagCode(600);
+    /// Planned: emit when calling a Java method that may throw outside a `safe` block.
     pub const JAVA_CALL_REQUIRES_SAFE: DiagCode = DiagCode(601);
     pub const NAMING_NOT_CAMEL_CASE: DiagCode = DiagCode(700);
     pub const NAMING_NOT_PASCAL_CASE: DiagCode = DiagCode(701);
