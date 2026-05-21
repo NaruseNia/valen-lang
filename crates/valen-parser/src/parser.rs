@@ -345,7 +345,7 @@ impl Parser {
             let param_start = self.peek_span();
 
             if self.at(&TokenKind::SelfKw)
-                || self.at(&TokenKind::Mut) && self.lookahead(1) == &TokenKind::SelfKw
+                || (self.at(&TokenKind::Mut) && self.lookahead(1) == &TokenKind::SelfKw)
             {
                 let mutable = self.eat(&TokenKind::Mut).is_some();
                 let self_kw_span = self.peek_span();
@@ -1047,14 +1047,16 @@ impl Parser {
     fn parse_let_or_let_else(&mut self) -> Option<Stmt> {
         let start = self.peek_span();
         let saved_pos = self.pos;
+        let saved_diag_len = self.diagnostics.len();
 
         // Try to parse as let-else first: `let pattern = expr else { block };`
         // If `else` is present after the expression, commit to let-else.
-        // Otherwise, restore position and fall back to regular let.
+        // Otherwise, restore position and diagnostics, then fall back to regular let.
         if let Some(stmt) = self.try_parse_let_else(start) {
             return Some(stmt);
         }
         self.pos = saved_pos;
+        self.diagnostics.truncate(saved_diag_len);
 
         let ls = self.parse_let()?;
         Some(Stmt::Let(ls))
@@ -1647,6 +1649,17 @@ impl Parser {
         }];
 
         while self.eat(&TokenKind::DoubleColon).is_some() {
+            // Turbofish: `Foo::<Int, String>` -- after `::`, `<` starts generic args.
+            if self.at(&TokenKind::Lt) || self.at(&TokenKind::Shr) {
+                let generics = self.parse_turbofish_args()?;
+                // Attach generics to the last segment.
+                if let Some(last) = segments.last_mut() {
+                    let gen_end = self.prev_span();
+                    last.generics = generics;
+                    last.span = last.span.merge(gen_end);
+                }
+                continue;
+            }
             let seg_span = self.peek_span();
             let seg_name = self.expect_ident()?;
             segments.push(PathSegment {
@@ -1662,6 +1675,25 @@ impl Parser {
             segments,
             span: start.merge(end),
         }))
+    }
+
+    /// Parse turbofish generic arguments: `<Type, Type, ...>`.
+    ///
+    /// Called after `::` has been consumed when the next token is `<`.
+    fn parse_turbofish_args(&mut self) -> Option<Vec<Type>> {
+        self.expect(TokenKind::Lt)?;
+        let mut args = Vec::new();
+        while !self.at_gt() && !self.at_eof() {
+            if !args.is_empty() {
+                self.expect(TokenKind::Comma)?;
+                if self.at_gt() {
+                    break;
+                }
+            }
+            args.push(self.parse_type()?);
+        }
+        self.expect_gt()?;
+        Some(args)
     }
 
     fn parse_if_expr(&mut self) -> Option<Expr> {
@@ -2319,9 +2351,15 @@ impl Parser {
         use valen_ast::StringInterpPart;
         let mut parts = Vec::new();
         let mut text = String::new();
+        // `raw` is the content between the quotes of `f"..."`.
+        // `span.start` points to `f`, so the content starts at offset +2 (after `f"`).
+        let content_base = span.start + 2;
+        let mut byte_offset: u32 = 0;
         let mut chars = raw.chars().peekable();
         while let Some(c) = chars.next() {
             if c == '{' {
+                let brace_start = content_base + byte_offset;
+                byte_offset += c.len_utf8() as u32;
                 if !text.is_empty() {
                     parts.push(StringInterpPart::Text(SmolStr::from(text.as_str())));
                     text.clear();
@@ -2329,6 +2367,7 @@ impl Parser {
                 let mut expr_str = String::new();
                 let mut depth = 1u32;
                 for c2 in chars.by_ref() {
+                    byte_offset += c2.len_utf8() as u32;
                     match c2 {
                         '{' => {
                             depth += 1;
@@ -2344,13 +2383,15 @@ impl Parser {
                         _ => expr_str.push(c2),
                     }
                 }
+                // Sub-span covering `{expr_str}` within the original source.
+                let interp_span = Span::new(brace_start, content_base + byte_offset, span.file_id);
                 let file_id = span.file_id;
                 let expr_source = format!("fn __fstring__() -> String {{ {expr_str} }}");
                 let reparsed = crate::parse(&expr_source, file_id);
                 if reparsed.diagnostics.has_errors() {
                     self.diagnostics.error(
                         DiagCode::PARSE_EXPECTED_EXPR,
-                        span,
+                        interp_span,
                         SmolStr::from(format!(
                             "invalid expression in f-string interpolation: `{expr_str}`"
                         )),
@@ -2365,9 +2406,20 @@ impl Parser {
                         }
                     }
                 }
+                // Fallback: reparsed successfully but no tail expression found.
+                // Emit a diagnostic instead of silently dropping the interpolation.
+                self.diagnostics.error(
+                    DiagCode::PARSE_EXPECTED_EXPR,
+                    interp_span,
+                    SmolStr::from(format!(
+                        "f-string interpolation `{expr_str}` did not produce an expression"
+                    )),
+                );
             } else if c == '\\' {
+                byte_offset += c.len_utf8() as u32;
                 if let Some(&next) = chars.peek() {
                     chars.next();
+                    byte_offset += next.len_utf8() as u32;
                     match next {
                         'n' => text.push('\n'),
                         't' => text.push('\t'),
@@ -2383,6 +2435,7 @@ impl Parser {
                     }
                 }
             } else {
+                byte_offset += c.len_utf8() as u32;
                 text.push(c);
             }
         }
