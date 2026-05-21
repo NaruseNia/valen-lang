@@ -232,6 +232,15 @@ enum RawTok {
 
     // Literals — longer/suffixed patterns must appear before shorter ones
     // so logos prefers the more specific match.
+
+    // Hex/binary/octal with Long suffix
+    #[regex(r"0[xX][0-9a-fA-F][0-9a-fA-F_]*[lL]", parse_hex_long)]
+    HexLongLit(i64),
+    #[regex(r"0[bB][01][01_]*[lL]", parse_bin_long)]
+    BinLongLit(i64),
+    #[regex(r"0[oO][0-7][0-7_]*[lL]", parse_oct_long)]
+    OctLongLit(i64),
+
     #[regex(r"[0-9][0-9_]*[lL]", parse_long)]
     LongLit(i64),
 
@@ -240,6 +249,14 @@ enum RawTok {
 
     #[regex(r"[0-9][0-9_]*\.[0-9][0-9_]*([eE][+-]?[0-9]+)?", parse_float)]
     FloatLit(f64),
+
+    // Hex/binary/octal integer literals (must appear before decimal IntLit)
+    #[regex(r"0[xX][0-9a-fA-F][0-9a-fA-F_]*", parse_hex_int)]
+    HexIntLit(i64),
+    #[regex(r"0[bB][01][01_]*", parse_bin_int)]
+    BinIntLit(i64),
+    #[regex(r"0[oO][0-7][0-7_]*", parse_oct_int)]
+    OctIntLit(i64),
 
     #[regex(r"[0-9][0-9_]*", parse_int)]
     IntLit(i64),
@@ -258,10 +275,46 @@ fn parse_int(lex: &mut logos::Lexer<'_, RawTok>) -> Option<i64> {
     lex.slice().replace('_', "").parse::<i64>().ok()
 }
 
+fn parse_hex_int(lex: &mut logos::Lexer<'_, RawTok>) -> Option<i64> {
+    let s = lex.slice();
+    // Strip "0x"/"0X" prefix
+    i64::from_str_radix(&s[2..].replace('_', ""), 16).ok()
+}
+
+fn parse_bin_int(lex: &mut logos::Lexer<'_, RawTok>) -> Option<i64> {
+    let s = lex.slice();
+    // Strip "0b"/"0B" prefix
+    i64::from_str_radix(&s[2..].replace('_', ""), 2).ok()
+}
+
+fn parse_oct_int(lex: &mut logos::Lexer<'_, RawTok>) -> Option<i64> {
+    let s = lex.slice();
+    // Strip "0o"/"0O" prefix
+    i64::from_str_radix(&s[2..].replace('_', ""), 8).ok()
+}
+
 fn parse_long(lex: &mut logos::Lexer<'_, RawTok>) -> Option<i64> {
     let s = lex.slice();
     // Strip trailing L/l suffix before parsing
     s[..s.len() - 1].replace('_', "").parse::<i64>().ok()
+}
+
+fn parse_hex_long(lex: &mut logos::Lexer<'_, RawTok>) -> Option<i64> {
+    let s = lex.slice();
+    // Strip "0x"/"0X" prefix and trailing L/l suffix
+    i64::from_str_radix(&s[2..s.len() - 1].replace('_', ""), 16).ok()
+}
+
+fn parse_bin_long(lex: &mut logos::Lexer<'_, RawTok>) -> Option<i64> {
+    let s = lex.slice();
+    // Strip "0b"/"0B" prefix and trailing L/l suffix
+    i64::from_str_radix(&s[2..s.len() - 1].replace('_', ""), 2).ok()
+}
+
+fn parse_oct_long(lex: &mut logos::Lexer<'_, RawTok>) -> Option<i64> {
+    let s = lex.slice();
+    // Strip "0o"/"0O" prefix and trailing L/l suffix
+    i64::from_str_radix(&s[2..s.len() - 1].replace('_', ""), 8).ok()
 }
 
 fn parse_float(lex: &mut logos::Lexer<'_, RawTok>) -> Option<f64> {
@@ -590,9 +643,13 @@ fn map_token(raw: RawTok) -> TokenKind {
         RawTok::Slash => TokenKind::Slash,
         RawTok::Percent => TokenKind::Percent,
         // Literals
+        RawTok::HexLongLit(n) | RawTok::BinLongLit(n) | RawTok::OctLongLit(n) => {
+            TokenKind::LongLit(n)
+        }
         RawTok::LongLit(n) => TokenKind::LongLit(n),
         RawTok::Float32Lit(n) => TokenKind::FloatLit(n),
         RawTok::FloatLit(n) => TokenKind::DoubleLit(n),
+        RawTok::HexIntLit(n) | RawTok::BinIntLit(n) | RawTok::OctIntLit(n) => TokenKind::IntLit(n),
         RawTok::IntLit(n) => TokenKind::IntLit(n),
         RawTok::CharLit(c) => TokenKind::CharLit(c),
         RawTok::StringLit(s) => TokenKind::StringLit(s),

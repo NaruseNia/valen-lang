@@ -36,12 +36,19 @@ impl Span {
         self.start == self.end
     }
 
-    /// Returns the smallest span covering both `self` and `other`. Panics if they belong to different files.
+    /// Returns the smallest span covering both `self` and `other`.
+    ///
+    /// If the two spans belong to different files, a debug assertion fires
+    /// (panics in debug builds) and `self` is returned as a graceful fallback
+    /// in release builds.
     pub fn merge(self, other: Span) -> Span {
-        assert_eq!(
+        debug_assert_eq!(
             self.file_id, other.file_id,
             "cannot merge spans across files"
         );
+        if self.file_id != other.file_id {
+            return self;
+        }
         Span {
             start: self.start.min(other.start),
             end: self.end.max(other.end),

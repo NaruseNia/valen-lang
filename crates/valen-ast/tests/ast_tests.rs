@@ -31,11 +31,22 @@ fn span_merge_same_file() {
 }
 
 #[test]
-#[should_panic(expected = "cannot merge spans across files")]
-fn span_merge_different_files_panics() {
+#[cfg_attr(
+    debug_assertions,
+    should_panic(expected = "cannot merge spans across files")
+)]
+fn span_merge_different_files() {
     let a = Span::new(0, 10, FileId(0));
     let b = Span::new(0, 10, FileId(1));
-    a.merge(b);
+    let merged = a.merge(b);
+    // In release builds, merge returns `self` as a graceful fallback
+    #[cfg(not(debug_assertions))]
+    {
+        assert_eq!(merged.start, a.start);
+        assert_eq!(merged.end, a.end);
+        assert_eq!(merged.file_id, a.file_id);
+    }
+    let _ = merged;
 }
 
 #[test]

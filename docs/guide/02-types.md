@@ -35,6 +35,18 @@ let f = "hello";  // String
 
 Java や Kotlin と異なり、サフィックスなしの整数は常に `Int`、サフィックスなしの小数は常に `Double` です。`Long` や `Float` が必要な場合はサフィックスを付けてください。
 
+### 16 進・2 進・8 進リテラル
+
+整数リテラルは 10 進のほか、プレフィクスで基数を指定できます。アンダースコア (`_`) で桁区切りも可能です。
+
+```valen
+let hex = 0xFF;          // Int: 255
+let bin = 0b1010;        // Int: 10
+let oct = 0o77;          // Int: 63
+let hex_long = 0xFFL;    // Long: 255
+let grouped = 0xFF_FF;   // Int: 65535
+```
+
 ## 数値変換 — 暗黙変換は一切なし
 
 Valen では **暗黙の数値変換を一切行いません**。Java/Kotlin では `int` から `long` への代入が暗黙に行われますが、Valen ではコンパイルエラーになります。
