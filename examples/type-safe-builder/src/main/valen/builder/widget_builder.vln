@@ -1,0 +1,82 @@
+package builder;
+
+/// Fluent builder for Widget.
+/// Demonstrates ref-mut for accumulating state through method chains.
+pub class WidgetBuilder(
+    pub mut name: String,
+    pub mut posX: Meters,
+    pub mut posY: Meters,
+    pub mut width: Meters,
+    pub mut height: Meters,
+    pub mut bgColor: Color,
+    pub mut border: BorderStyle,
+    pub mut alignment: Align,
+    pub mut visible: Bool,
+    pub mut opacity: Double,
+) {
+    fn create(name: String) -> WidgetBuilder {
+        WidgetBuilder(
+            name = name,
+            posX = Meters(0.0),
+            posY = Meters(0.0),
+            width = Meters(1.0),
+            height = Meters(1.0),
+            bgColor = Color(r = 255, g = 255, b = 255),
+            border = BorderStyle::None,
+            alignment = Align::TopLeft,
+            visible = true,
+            opacity = 1.0,
+        )
+    }
+
+    fn at(mut self, x: Meters, y: Meters) -> WidgetBuilder {
+        self.posX = x;
+        self.posY = y;
+        self
+    }
+
+    fn withSize(mut self, w: Meters, h: Meters) -> WidgetBuilder {
+        self.width = w;
+        self.height = h;
+        self
+    }
+
+    fn withBackground(mut self, color: Color) -> WidgetBuilder {
+        self.bgColor = color;
+        self
+    }
+
+    fn withBorder(mut self, style: BorderStyle) -> WidgetBuilder {
+        self.border = style;
+        self
+    }
+
+    fn withAlignment(mut self, align: Align) -> WidgetBuilder {
+        self.alignment = align;
+        self
+    }
+
+    fn hidden(mut self) -> WidgetBuilder {
+        self.visible = false;
+        self
+    }
+
+    fn withOpacity(mut self, opacity: Double) -> WidgetBuilder {
+        self.opacity = opacity;
+        self
+    }
+
+    /// Finalize and build the Widget.
+    fn build(self) -> Widget {
+        Widget(
+            name = self.name,
+            position = Point(x = self.posX, y = self.posY),
+            size = Size(width = self.width, height = self.height),
+            backgroundColor = self.bgColor,
+            border = self.border,
+            alignment = self.alignment,
+            visible = self.visible,
+            opacity = self.opacity,
+        )
+    }
+}

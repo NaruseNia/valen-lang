@@ -1,0 +1,42 @@
+package todo;
+
+/// Demonstrates the TODO app: newtype, derives, if-let, let-else,
+/// f-string, println, variant shorthand, and pattern matching.
+fn main() -> Unit {
+    let store = TaskStore::create();
+
+    println("=== Adding tasks ===");
+    let t1 = store.add("Write Valen tutorial", Priority::High);
+    let t2 = store.add("Fix parser edge cases", Priority::Urgent);
+    let t3 = store.add("Update README", Priority::Low);
+    let t4 = store.add("Add derive support", Priority::Medium);
+
+    println("");
+    println("=== Updating tasks ===");
+    store.transition(t1, Status::InProgress);
+    store.complete(t3);
+    store.transition(t2, Status::InProgress);
+
+    println("");
+    println("=== Querying ===");
+    store.printSummary();
+
+    let urgent = store.filterByPriority(Priority::Urgent);
+    println(f"  urgent tasks: {urgent.size()}");
+
+    println("");
+    println("=== Task details ===");
+    if let Some(task) = store.get(t1) {
+        println(f"  task #{task.id}: {task.title} [{task.priority}] - {task.status}");
+    }
+    if let Some(task) = store.get(t2) {
+        println(f"  task #{task.id}: {task.title} [{task.priority}] - {task.status}");
+    }
+
+    println("");
+    println("=== Completing remaining ===");
+    store.complete(t1);
+    store.complete(t2);
+    store.complete(t4);
+    store.printSummary();
+}

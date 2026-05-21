@@ -4,27 +4,27 @@ package ecs;
 pub trait Component {}
 
 /// 2D position in world space.
-pub data class Position(pub x: Float, pub y: Float);
+pub data class Position(pub x: Float, pub y: Float) derives(Eq, Display, Clone);
 
 impl Component for Position {}
 
 /// 2D velocity vector.
-pub data class Velocity(pub dx: Float, pub dy: Float);
+pub data class Velocity(pub dx: Float, pub dy: Float) derives(Eq, Display, Clone);
 
 impl Component for Velocity {}
 
 /// Health with current and maximum values.
-pub data class Health(pub current: Int, pub max: Int);
+pub data class Health(pub current: Int, pub max: Int) derives(Eq, Display, Clone);
 
 impl Component for Health {}
 
 /// Axis-aligned bounding box for collision detection.
-pub data class BoundingBox(pub width: Float, pub height: Float);
+pub data class BoundingBox(pub width: Float, pub height: Float) derives(Eq, Display, Clone);
 
 impl Component for BoundingBox {}
 
 /// Sprite rendering information.
-pub data class Sprite(pub name: String, pub layer: Int);
+pub data class Sprite(pub name: String, pub layer: Int) derives(Eq, Display, Clone);
 
 impl Component for Sprite {}
 

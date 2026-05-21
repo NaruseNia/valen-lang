@@ -1,0 +1,95 @@
+package todo;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+
+/// Manages a collection of TODO tasks.
+pub class TaskStore(
+    pub mut tasks: HashMap,
+    pub mut nextId: Int,
+) {
+    fn create() -> TaskStore {
+        TaskStore(tasks = HashMap(), nextId = 1)
+    }
+
+    /// Add a new task, returning its assigned ID.
+    fn add(mut self, title: String, priority: Priority) -> TaskId {
+        let id = TaskId(self.nextId);
+        self.nextId = self.nextId + 1;
+        let task = Task(
+            id = id,
+            title = title,
+            priority = priority,
+            status = Status::Pending,
+            tags = ArrayList(),
+        );
+        self.tasks.put(self.nextId - 1, task);
+        println(f"  added task #{self.nextId - 1}: {title}");
+        id
+    }
+
+    /// Look up a task by ID.
+    fn get(self, id: TaskId) -> Option<Task> {
+        let rawId = id;
+        if self.tasks.containsKey(rawId) {
+            Some(self.tasks.get(rawId))
+        } else {
+            None
+        }
+    }
+
+    /// Transition a task to a new status. Returns the updated task or None.
+    fn transition(mut self, id: TaskId, newStatus: Status) -> Option<Task> {
+        let Option::Some(task) = self.get(id) else { return None; };
+        let updated = Task(
+            id = task.id,
+            title = task.title,
+            priority = task.priority,
+            status = newStatus,
+            tags = task.tags,
+        );
+        self.tasks.put(id, updated);
+        println(f"  task #{id}: {task.status} -> {newStatus}");
+        Some(updated)
+    }
+
+    /// Mark a task as done.
+    fn complete(mut self, id: TaskId) -> Option<Task> {
+        self.transition(id, Status::Done)
+    }
+
+    /// Get all tasks matching a given status.
+    fn filterByStatus(self, status: Status) -> ArrayList {
+        let result = ArrayList();
+        let iter = self.tasks.values().iterator();
+        while iter.hasNext() {
+            let task = iter.next();
+            if task.status == status {
+                result.add(task);
+            }
+        }
+        result
+    }
+
+    /// Get all tasks with a specific priority.
+    fn filterByPriority(self, priority: Priority) -> ArrayList {
+        let result = ArrayList();
+        let iter = self.tasks.values().iterator();
+        while iter.hasNext() {
+            let task = iter.next();
+            if task.priority == priority {
+                result.add(task);
+            }
+        }
+        result
+    }
+
+    /// Print a summary of all tasks.
+    fn printSummary(self) -> Unit {
+        let pending = self.filterByStatus(Status::Pending).size();
+        let inProgress = self.filterByStatus(Status::InProgress).size();
+        let done = self.filterByStatus(Status::Done).size();
+        let cancelled = self.filterByStatus(Status::Cancelled).size();
+        println(f"  summary: {pending} pending, {inProgress} in-progress, {done} done, {cancelled} cancelled");
+    }
+}

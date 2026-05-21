@@ -2,8 +2,7 @@ package ecs.systems;
 
 import java.util.ArrayList;
 
-/// System that applies velocity to position for all entities
-/// that have both Position and Velocity components.
+/// Applies velocity to position using if-let for clean Option handling.
 pub class MovementSystem {}
 
 impl System for MovementSystem {
@@ -11,23 +10,20 @@ impl System for MovementSystem {
         let required = ArrayList();
         required.add("Position");
         required.add("Velocity");
-        let filter = QueryFilter::All(components = required);
-        let results = world.query(filter);
+        let results = world.query(QueryFilter::All(components = required));
 
         let mut i = 0;
         while i < results.size() {
             let qr = results.get(i);
-            match world.getComponent(qr.entity, "Position") {
-                Option::Some(posObj) => {
-                    match world.getComponent(qr.entity, "Velocity") {
-                        Option::Some(velObj) => {
-                            let px = 1.0f;
-                            let py = 1.0f;
-                        },
-                        Option::None => {},
-                    }
-                },
-                Option::None => {},
+            if let Some(pos) = world.getComponent(qr.entity, "Position") {
+                if let Some(vel) = world.getComponent(qr.entity, "Velocity") {
+                    let newPos = Position(
+                        x = pos.x + vel.dx * dt,
+                        y = pos.y + vel.dy * dt,
+                    );
+                    world.addComponent(qr.entity, "Position", newPos);
+                    println(f"  moved {qr.entity.id} to ({newPos.x}, {newPos.y})");
+                }
             }
             i = i + 1;
         }

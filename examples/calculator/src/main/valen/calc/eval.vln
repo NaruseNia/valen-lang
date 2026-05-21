@@ -1,0 +1,90 @@
+package calc;
+
+import java.util.HashMap;
+
+/// Evaluator for arithmetic expression trees.
+/// Uses pattern matching with variant shorthand for concise dispatch.
+pub class Evaluator(pub mut env: HashMap) {
+    fn create() -> Evaluator {
+        Evaluator(env = HashMap())
+    }
+
+    /// Evaluate an expression, returning Ok(result) or Err(message).
+    fn eval(mut self, expr: Expr) -> Result<Double, String> {
+        match expr {
+            .Num(value) => Ok(value),
+            .Var(name) => {
+                if self.env.containsKey(name) {
+                    Ok(self.env.get(name))
+                } else {
+                    Err(f"undefined variable: {name}")
+                }
+            },
+            .Unary(op, operand) => {
+                let v = self.eval(operand)?;
+                match op {
+                    .Neg => Ok(0.0 - v),
+                    .Abs => {
+                        if v < 0.0 {
+                            Ok(0.0 - v)
+                        } else {
+                            Ok(v)
+                        }
+                    },
+                }
+            },
+            .Binary(op, left, right) => {
+                let l = self.eval(left)?;
+                let r = self.eval(right)?;
+                match op {
+                    .Add => Ok(l + r),
+                    .Sub => Ok(l - r),
+                    .Mul => Ok(l * r),
+                    .Div => {
+                        if r == 0.0 {
+                            Err("division by zero")
+                        } else {
+                            Ok(l / r)
+                        }
+                    },
+                }
+            },
+            .Let(name, value, body) => {
+                let v = self.eval(value)?;
+                self.env.put(name, v);
+                self.eval(body)
+            },
+        }
+    }
+
+    /// Pretty-print an expression.
+    fn format(expr: Expr) -> String {
+        match expr {
+            .Num(value) => f"{value}",
+            .Var(name) => name,
+            .Unary(op, operand) => {
+                let inner = Evaluator::format(operand);
+                match op {
+                    .Neg => f"-({inner})",
+                    .Abs => f"|{inner}|",
+                }
+            },
+            .Binary(op, left, right) => {
+                let l = Evaluator::format(left);
+                let r = Evaluator::format(right);
+                let sym = match op {
+                    .Add => "+",
+                    .Sub => "-",
+                    .Mul => "*",
+                    .Div => "/",
+                };
+                f"({l} {sym} {r})"
+            },
+            .Let(name, value, body) => {
+                let v = Evaluator::format(value);
+                let b = Evaluator::format(body);
+                f"let {name} = {v} in {b}"
+            },
+        }
+    }
+}

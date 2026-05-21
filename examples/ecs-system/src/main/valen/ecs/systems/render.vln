@@ -2,17 +2,13 @@ package ecs.systems;
 
 import java.util.ArrayList;
 
-/// Rendering system that collects visible entities and sorts by layer.
-/// In a real engine this would draw to screen; here it demonstrates
-/// the query + sort pattern.
+/// Rendering system that collects visible entities and prints them.
 pub class RenderSystem {
-    /// Collect all renderable entities sorted by sprite layer.
     fn collectRenderables(world: World) -> ArrayList {
         let required = ArrayList();
         required.add("Position");
         required.add("Sprite");
-        let filter = QueryFilter::All(components = required);
-        world.query(filter)
+        world.query(QueryFilter::All(components = required))
     }
 }
 
@@ -22,6 +18,11 @@ impl System for RenderSystem {
         let mut i = 0;
         while i < renderables.size() {
             let qr = renderables.get(i);
+            if let Some(pos) = world.getComponent(qr.entity, "Position") {
+                if let Some(sprite) = world.getComponent(qr.entity, "Sprite") {
+                    println(f"  render [{sprite.name}] at ({pos.x}, {pos.y}) layer={sprite.layer}");
+                }
+            }
             i = i + 1;
         }
     }

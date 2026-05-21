@@ -3,41 +3,26 @@ package ecs.systems;
 import java.util.ArrayList;
 
 /// Simple AABB collision detection system.
-/// Checks all entity pairs with Position + BoundingBox for overlaps.
+/// Demonstrates let-else to flatten deeply nested Option matching.
 pub class CollisionSystem {
-    /// AABB overlap test between two entities.
+    /// AABB overlap test — flattened from 4-deep match nest using let-else.
     fn checkOverlap(world: World, a: Entity, b: Entity) -> Bool {
-        match world.getComponent(a, "Position") {
-            Option::Some(posA) => {
-                match world.getComponent(b, "Position") {
-                    Option::Some(posB) => {
-                        match world.getComponent(a, "BoundingBox") {
-                            Option::Some(boxA) => {
-                                match world.getComponent(b, "BoundingBox") {
-                                    Option::Some(boxB) => {
-                                        let halfWA = boxA.width / 2.0f;
-                                        let halfHA = boxA.height / 2.0f;
-                                        let halfWB = boxB.width / 2.0f;
-                                        let halfHB = boxB.height / 2.0f;
+        let Option::Some(posA) = world.getComponent(a, "Position") else { return false; };
+        let Option::Some(posB) = world.getComponent(b, "Position") else { return false; };
+        let Option::Some(boxA) = world.getComponent(a, "BoundingBox") else { return false; };
+        let Option::Some(boxB) = world.getComponent(b, "BoundingBox") else { return false; };
 
-                                        let overlapX = posA.x - halfWA < posB.x + halfWB
-                                            && posA.x + halfWA > posB.x - halfWB;
-                                        let overlapY = posA.y - halfHA < posB.y + halfHB
-                                            && posA.y + halfHA > posB.y - halfHB;
+        let halfWA = boxA.width / 2.0f;
+        let halfHA = boxA.height / 2.0f;
+        let halfWB = boxB.width / 2.0f;
+        let halfHB = boxB.height / 2.0f;
 
-                                        overlapX && overlapY
-                                    },
-                                    _ => false,
-                                }
-                            },
-                            _ => false,
-                        }
-                    },
-                    _ => false,
-                }
-            },
-            _ => false,
-        }
+        let overlapX = posA.x - halfWA < posB.x + halfWB
+            && posA.x + halfWA > posB.x - halfWB;
+        let overlapY = posA.y - halfHA < posB.y + halfHB
+            && posA.y + halfHA > posB.y - halfHB;
+
+        overlapX && overlapY
     }
 }
 
@@ -46,8 +31,7 @@ impl System for CollisionSystem {
         let required = ArrayList();
         required.add("Position");
         required.add("BoundingBox");
-        let filter = QueryFilter::All(components = required);
-        let results = world.query(filter);
+        let results = world.query(QueryFilter::All(components = required));
 
         let mut i = 0;
         while i < results.size() {
@@ -56,9 +40,8 @@ impl System for CollisionSystem {
             while j < results.size() {
                 let b = results.get(j);
                 if CollisionSystem::checkOverlap(world, a.entity, b.entity) {
-                    world.events.push(
-                        Event::Collision(a = a.entity, b = b.entity)
-                    );
+                    println(f"  collision: {a.entity.id} <-> {b.entity.id}");
+                    world.events.push(Event::Collision(a = a.entity, b = b.entity));
                 }
                 j = j + 1;
             }

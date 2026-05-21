@@ -1,0 +1,22 @@
+package builder;
+
+/// Demonstrates ref-mut for shared mutable state.
+pub class Counter(pub mut value: Int) {
+    fn create() -> Counter {
+        Counter(value = 0)
+    }
+
+    /// Increment via ref-mut — the caller sees the update.
+    fn increment(r: ref mut Int) -> Unit {
+        *r = *r + 1;
+    }
+
+    /// Increment N times using ref-mut.
+    fn incrementBy(r: ref mut Int, n: Int) -> Unit {
+        let mut i = 0;
+        while i < n {
+            *r = *r + 1;
+            i = i + 1;
+        }
+    }
+}
