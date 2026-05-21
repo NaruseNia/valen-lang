@@ -1573,6 +1573,9 @@ mod tests {
                     has_body: true,
                     generic_bounds: vec![],
                     is_unsafe: false,
+                    is_open: false,
+                    is_override: false,
+                    is_abstract: false,
                 }),
                 vis: Vis::Pub,
                 span: valen_ast::Span {
@@ -1648,6 +1651,9 @@ mod tests {
                     has_body: true,
                     generic_bounds: vec![],
                     is_unsafe: false,
+                    is_open: false,
+                    is_override: false,
+                    is_abstract: false,
                 }),
                 vis: Vis::Pub,
                 span: valen_ast::Span {

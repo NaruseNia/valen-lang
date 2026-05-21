@@ -241,6 +241,12 @@ pub struct FnDef {
     pub generic_bounds: Vec<(SmolStr, Vec<SmolStr>)>,
     /// `true` when declared as `unsafe fn`.
     pub is_unsafe: bool,
+    /// `true` when declared as `open fn` (overridable by subclasses).
+    pub is_open: bool,
+    /// `true` when declared as `override fn`.
+    pub is_override: bool,
+    /// `true` when declared as `abstract fn`.
+    pub is_abstract: bool,
 }
 
 /// A function parameter definition.

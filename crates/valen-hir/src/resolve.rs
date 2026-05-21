@@ -57,6 +57,7 @@ pub fn resolve_with_classpath(items: &[Item], classpath: &[std::path::PathBuf]) 
         current_package: None,
     };
     resolver.resolve_items(items);
+    resolver.validate_class_hierarchy();
     resolver.check_naming_conventions();
 
     if !classpath.is_empty() {
@@ -599,6 +600,9 @@ impl Resolver {
             has_body: f.body.is_some(),
             generic_bounds,
             is_unsafe: f.is_unsafe,
+            is_open: f.is_open,
+            is_override: f.is_override,
+            is_abstract: f.is_abstract,
         }
     }
 
@@ -608,6 +612,117 @@ impl Resolver {
 
     pub fn diagnostics(&self) -> &Diagnostics {
         &self.diagnostics
+    }
+
+    /// Validates class inheritance rules after all definitions are registered.
+    fn validate_class_hierarchy(&mut self) {
+        let class_entries: Vec<_> = self
+            .hir
+            .defs
+            .iter()
+            .filter_map(|(id, def)| {
+                if let DefKind::Class(ref cd) = def.kind {
+                    Some((*id, def.name.clone(), def.span, cd.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for (_id, name, span, class_def) in &class_entries {
+            if let Some(ref super_ty) = class_def.superclass {
+                let super_name = match super_ty {
+                    TyRef::Named(n) => Some(n.as_str()),
+                    TyRef::Generic(n, _) => Some(n.as_str()),
+                    _ => None,
+                };
+                if let Some(sname) = super_name {
+                    // #003: Validate superclass is open/abstract/sealed
+                    let super_class_def = self
+                        .hir
+                        .defs
+                        .values()
+                        .find(|d| d.name == sname)
+                        .and_then(|d| {
+                            if let DefKind::Class(ref cd) = d.kind {
+                                Some(cd.clone())
+                            } else {
+                                None
+                            }
+                        });
+
+                    if let Some(ref super_cd) = super_class_def {
+                        if super_cd.kind == ClassDefKind::Final {
+                            self.diagnostics.error(
+                                DiagCode::INHERIT_FROM_FINAL,
+                                *span,
+                                format!(
+                                    "cannot inherit from final class `{sname}`; mark it as `open`, `abstract`, or `sealed`"
+                                ),
+                            );
+                        }
+                    }
+
+                    // #004: Validate override/open requirements for methods
+                    let parent_methods: Vec<_> = super_class_def
+                        .iter()
+                        .flat_map(|cd| &cd.methods)
+                        .filter_map(|mid| self.hir.defs.get(mid))
+                        .filter_map(|d| {
+                            if let DefKind::Fn(ref fd) = d.kind {
+                                Some((d.name.clone(), fd.clone()))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+
+                    for mid in &class_def.methods {
+                        if let Some(mdef) = self.hir.defs.get(mid) {
+                            if let DefKind::Fn(ref fd) = mdef.kind {
+                                let matching_parent =
+                                    parent_methods.iter().find(|(pname, _)| *pname == mdef.name);
+
+                                if let Some((_pname, parent_fd)) = matching_parent {
+                                    if fd.is_override
+                                        && !parent_fd.is_open
+                                        && !parent_fd.is_abstract
+                                    {
+                                        self.diagnostics.error(
+                                            DiagCode::OVERRIDE_PARENT_NOT_OPEN,
+                                            mdef.span,
+                                            format!(
+                                                "cannot override `{}` in `{sname}`: method is not `open` or `abstract`",
+                                                mdef.name
+                                            ),
+                                        );
+                                    }
+                                    if !fd.is_override {
+                                        self.diagnostics.error(
+                                            DiagCode::MISSING_OVERRIDE_KEYWORD,
+                                            mdef.span,
+                                            format!(
+                                                "method `{}` in `{name}` shadows `{sname}::{}` but is not declared `override`",
+                                                mdef.name, mdef.name
+                                            ),
+                                        );
+                                    }
+                                } else if fd.is_override {
+                                    self.diagnostics.error(
+                                        DiagCode::OVERRIDE_WITHOUT_KEYWORD,
+                                        mdef.span,
+                                        format!(
+                                            "`override fn {}` does not override any method in `{sname}`",
+                                            mdef.name
+                                        ),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
