@@ -409,7 +409,9 @@ impl<'a> ExprLowering<'a> {
                 method,
                 args,
             } => {
-                if !self.try_lower_iterator_intrinsic(receiver, method, args, &expr.ty) {
+                let handled = self.try_lower_iterator_intrinsic(receiver, method, args, &expr.ty)
+                    || self.try_lower_numeric_conversion(receiver, method);
+                if !handled {
                     self.lower_expr(receiver);
                     for arg in args {
                         self.lower_expr(arg);
@@ -465,7 +467,10 @@ impl<'a> ExprLowering<'a> {
                     self.ops.push(JvmOp::Return(JvmType::Void));
                 }
             }
-            TypedExprKind::Break(_val) => {
+            TypedExprKind::Break(val) => {
+                if let Some(v) = val {
+                    self.lower_expr(v);
+                }
                 if let Some(ctx) = self.loop_stack.last() {
                     self.ops.push(JvmOp::Goto(ctx.break_label));
                 }
@@ -1889,6 +1894,52 @@ impl<'a> ExprLowering<'a> {
         self.pop_scope();
     }
 
+    /// Handles numeric conversion methods (`toInt`, `toLong`, `toFloat`, `toDouble`,
+    /// `toByte`, `toShort`, `toChar`) on primitive receivers by emitting `JvmOp::Convert`.
+    ///
+    /// Returns `true` if the method was handled as an intrinsic conversion.
+    fn try_lower_numeric_conversion(&mut self, receiver: &TypedExpr, method: &str) -> bool {
+        let target_ty = match method {
+            "toInt" => JvmType::Int,
+            "toLong" => JvmType::Long,
+            "toFloat" => JvmType::Float,
+            "toDouble" => JvmType::Double,
+            "toByte" => JvmType::Byte,
+            "toShort" => JvmType::Short,
+            "toChar" => JvmType::Char,
+            _ => return false,
+        };
+
+        let from_ty = self.ty_to_jvm(&receiver.ty);
+
+        // Only handle conversions between primitive numeric types.
+        let is_numeric_prim = matches!(
+            from_ty,
+            JvmType::Int
+                | JvmType::Long
+                | JvmType::Float
+                | JvmType::Double
+                | JvmType::Byte
+                | JvmType::Short
+                | JvmType::Char
+        );
+        if !is_numeric_prim {
+            return false;
+        }
+
+        self.lower_expr(receiver);
+
+        // Skip no-op conversions (e.g. Int.toInt()).
+        if from_ty != target_ty {
+            self.ops.push(JvmOp::Convert {
+                from: from_ty,
+                to: target_ty,
+            });
+        }
+
+        true
+    }
+
     /// Returns `true` if the method call is on an Iterator and was handled as an intrinsic.
     fn try_lower_iterator_intrinsic(
         &mut self,
@@ -2757,17 +2808,43 @@ impl<'a> ExprLowering<'a> {
             name: "out".to_string(),
             descriptor: JvmType::Object("java/io/PrintStream".to_string()),
         });
-        if let Some(arg) = args.first() {
+
+        // Determine the PrintStream overload descriptor based on the argument type.
+        // JVM PrintStream has overloads for: int, long, float, double, char, boolean,
+        // String, and Object. For no-arg calls we emit an empty string.
+        let param_ty = if let Some(arg) = args.first() {
             self.lower_expr(arg);
+            self.print_stream_param_type(&arg.ty)
         } else {
             self.ops.push(JvmOp::PushString(String::new()));
-        }
+            JvmType::Object(JVM_STRING.to_string())
+        };
+
         self.ops.push(JvmOp::InvokeVirtual {
             owner: "java/io/PrintStream".to_string(),
             name: name.to_string(),
-            params: vec![JvmType::Object(JVM_STRING.to_string())],
+            params: vec![param_ty],
             ret: JvmType::Void,
         });
+    }
+
+    /// Returns the JVM type to use for the `PrintStream.println`/`print` overload
+    /// corresponding to the given Valen type.
+    ///
+    /// JVM `PrintStream` provides overloads for `int`, `long`, `float`, `double`,
+    /// `char`, `boolean`, `String`, and `Object`. Byte/Short are promoted to `int`.
+    fn print_stream_param_type(&self, ty: &Ty) -> JvmType {
+        match ty {
+            Ty::Prim(PrimTy::Int | PrimTy::Byte | PrimTy::Short) => JvmType::Int,
+            Ty::Prim(PrimTy::Long) => JvmType::Long,
+            Ty::Prim(PrimTy::Float) => JvmType::Float,
+            Ty::Prim(PrimTy::Double) => JvmType::Double,
+            Ty::Prim(PrimTy::Char) => JvmType::Char,
+            Ty::Prim(PrimTy::Bool) => JvmType::Boolean,
+            Ty::Prim(PrimTy::String) => JvmType::Object(JVM_STRING.to_string()),
+            // For all other types (named types, generics, etc.) use the Object overload.
+            _ => JvmType::Object(JVM_OBJECT.to_string()),
+        }
     }
 
     /// `[expr, ...]` → `new ArrayList(); .add(expr); ...`
