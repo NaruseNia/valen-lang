@@ -10,6 +10,18 @@ use std::path::{Path, PathBuf};
 use valen_ast::FileId;
 use valen_codegen::JvmVersion;
 
+/// Compile-phase error (exit code 1). Distinguished from IO/CLI errors (exit code 2).
+#[derive(Debug)]
+struct CompileError(String);
+
+impl std::fmt::Display for CompileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for CompileError {}
+
 /// Parse and validate the --target flag into a JvmVersion.
 fn parse_jvm_version(s: &str) -> Result<JvmVersion, String> {
     match s {
@@ -35,8 +47,8 @@ enum Command {
         inputs: Vec<PathBuf>,
 
         /// Output directory for `.class` files.
-        #[arg(short, long, default_value = "build/classes/valen")]
-        out: PathBuf,
+        #[arg(short = 'o', long = "output", default_value = "build/classes/valen")]
+        output: PathBuf,
 
         /// Target JVM version (21 = baseline, 25 = opt-in).
         #[arg(long, default_value = "21", value_parser = parse_jvm_version)]
@@ -130,7 +142,7 @@ fn run_pipeline_with_classpath(
         line_indexes.push(line_idx);
     }
     if had_parse_errors {
-        anyhow::bail!("parse errors");
+        return Err(CompileError("parse errors".into()).into());
     }
 
     let file_map: Vec<(&std::path::Path, &LineIndex)> = inputs
@@ -143,7 +155,7 @@ fn run_pipeline_with_classpath(
     let resolve_result = valen_hir::resolve::resolve_with_classpath(&all_items, classpath);
     emit_diagnostics(&resolve_result.diagnostics, &file_map);
     if resolve_result.diagnostics.has_errors() {
-        anyhow::bail!("resolve errors");
+        return Err(CompileError("resolve errors".into()).into());
     }
     let hir = resolve_result.hir;
 
@@ -151,7 +163,7 @@ fn run_pipeline_with_classpath(
     let tc = valen_hir::ty::type_check(&hir, &all_items);
     emit_diagnostics(&tc.diagnostics, &file_map);
     if tc.diagnostics.has_errors() {
-        anyhow::bail!("type errors");
+        return Err(CompileError("type errors".into()).into());
     }
 
     // --- Coherence ---
@@ -159,14 +171,14 @@ fn run_pipeline_with_classpath(
     let coherence_result = valen_hir::coherence::check_coherence(&hir, &import_names);
     emit_diagnostics(&coherence_result.diagnostics, &file_map);
     if coherence_result.diagnostics.has_errors() {
-        anyhow::bail!("coherence errors");
+        return Err(CompileError("coherence errors".into()).into());
     }
 
     // --- Exhaustiveness ---
     let exhaustiveness_result = valen_hir::exhaustive::check_exhaustiveness(&hir, &all_items);
     emit_diagnostics(&exhaustiveness_result.diagnostics, &file_map);
     if exhaustiveness_result.diagnostics.has_errors() {
-        anyhow::bail!("exhaustiveness errors");
+        return Err(CompileError("exhaustiveness errors".into()).into());
     }
 
     Ok(FrontendResult {
@@ -182,19 +194,25 @@ fn emit_diagnostics(
 ) {
     for diag in diags.iter() {
         let fid = diag.primary.file_id.0 as usize;
-        let (path, line_idx) = if fid < file_map.len() {
+        let (path, line_idx): (&std::path::Path, &LineIndex) = if fid < file_map.len() {
             file_map[fid]
-        } else if let Some(first) = file_map.first() {
-            *first
         } else {
-            continue;
+            static UNKNOWN: std::sync::LazyLock<(PathBuf, LineIndex)> =
+                std::sync::LazyLock::new(|| (PathBuf::from("<unknown>"), LineIndex::new("")));
+            (&UNKNOWN.0, &UNKNOWN.1)
         };
         let (line, col) = line_idx.line_col(diag.primary.start);
+        let severity = match diag.severity {
+            valen_diagnostics::Severity::Error => "error",
+            valen_diagnostics::Severity::Warning => "warning",
+            valen_diagnostics::Severity::Hint => "hint",
+        };
         eprintln!(
-            "{}:{}:{}: V{:04}: {}",
+            "{}:{}:{}: {}: V{:04}: {}",
             path.display(),
             line,
             col,
+            severity,
             diag.code.0,
             diag.message,
         );
@@ -217,10 +235,10 @@ fn main() {
     let result = match cli.command {
         Command::Compile {
             inputs,
-            out,
+            output,
             target,
             classpath,
-        } => compile(&inputs, &out, target, &classpath),
+        } => compile(&inputs, &output, target, &classpath),
         Command::Check {
             inputs, classpath, ..
         } => check(&inputs, &classpath),
@@ -233,8 +251,7 @@ fn main() {
 
     if let Err(e) = result {
         eprintln!("error: {e}");
-        // Exit code 1 = compile error, 2 = CLI/IO error
-        let code = if e.to_string().ends_with("errors") {
+        let code = if e.downcast_ref::<CompileError>().is_some() {
             1
         } else {
             2
