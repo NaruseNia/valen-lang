@@ -179,6 +179,29 @@ impl Double {
     fn toFloat(self) -> Float { 0.0f }
 }
 
+impl Byte {
+    fn toInt(self) -> Int { 0 }
+    fn toLong(self) -> Long { 0L }
+    fn toFloat(self) -> Float { 0.0f }
+    fn toDouble(self) -> Double { 0.0 }
+    fn toShort(self) -> Short { 0 }
+}
+
+impl Short {
+    fn toInt(self) -> Int { 0 }
+    fn toLong(self) -> Long { 0L }
+    fn toFloat(self) -> Float { 0.0f }
+    fn toDouble(self) -> Double { 0.0 }
+    fn toByte(self) -> Byte { 0 }
+}
+
+impl Char {
+    fn toInt(self) -> Int { 0 }
+    fn toLong(self) -> Long { 0L }
+    fn toFloat(self) -> Float { 0.0f }
+    fn toDouble(self) -> Double { 0.0 }
+}
+
 // --- Ordering ---
 
 pub enum Ordering {

@@ -139,6 +139,7 @@ impl DiagCode {
     pub const DEREF_NOT_REF_MUT: DiagCode = DiagCode(325);
     pub const REF_MUT_JAVA_INTEROP: DiagCode = DiagCode(326);
     pub const INT_LITERAL_OVERFLOW: DiagCode = DiagCode(327);
+    pub const MISSING_ENTRY_POINT: DiagCode = DiagCode(328);
     /// Planned: emit when Java checked exception escapes without Result wrapping.
     pub const JAVA_EXCEPTION_NOT_WRAPPED: DiagCode = DiagCode(600);
     /// Planned: emit when calling a Java method that may throw outside a `safe` block.
