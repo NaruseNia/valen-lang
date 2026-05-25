@@ -655,6 +655,48 @@ impl<'a> ExprLowering<'a> {
                     self.lower_lambda_call(callee, args, result_ty);
                     return;
                 }
+                // Qualified static calls: "ClassName::method" → invokestatic on that class
+                // Must be checked BEFORE constructor detection, since
+                // WidgetBuilder::create() returns WidgetBuilder but is not a ctor.
+                if let Some((class_name, method_name)) = name.split_once("::") {
+                    for arg in args {
+                        self.lower_expr(arg);
+                    }
+                    let owner = crate::descriptor::resolve_type_internal_name(
+                        class_name,
+                        self.pkg,
+                        &self.hir.imports,
+                    );
+                    self.ops.push(JvmOp::InvokeStatic {
+                        owner,
+                        name: method_name.to_string(),
+                        params: param_tys,
+                        ret: ret_ty,
+                    });
+                    return;
+                }
+                // Constructor call: Meters(10.0), Widget(...), etc.
+                if let Ty::Named(n) = result_ty {
+                    if self.is_newtype_or_class_ctor(n) {
+                        let owner = crate::descriptor::resolve_type_internal_name(
+                            n,
+                            self.pkg,
+                            &self.hir.imports,
+                        );
+                        self.ops.push(JvmOp::New(owner.clone()));
+                        self.ops.push(JvmOp::Dup);
+                        for arg in args {
+                            self.lower_expr(arg);
+                        }
+                        self.ops.push(JvmOp::InvokeSpecial {
+                            owner,
+                            name: "<init>".to_string(),
+                            params: param_tys,
+                            ret: JvmType::Void,
+                        });
+                        return;
+                    }
+                }
                 for arg in args {
                     self.lower_expr(arg);
                 }
