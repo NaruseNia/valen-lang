@@ -682,8 +682,7 @@ impl<'a> ExprLowering<'a> {
                     );
                     // Unit enum variant: EnumType::Variant with no args
                     // → getstatic EnumType$Variant.INSTANCE
-                    if args.is_empty() && self.is_enum_unit_variant(class_name, method_name)
-                    {
+                    if args.is_empty() && self.is_enum_unit_variant(class_name, method_name) {
                         let variant_class = format!("{}${}", owner, method_name);
                         self.ops.push(JvmOp::GetStatic {
                             owner: variant_class.clone(),
