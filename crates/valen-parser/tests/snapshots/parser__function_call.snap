@@ -43,6 +43,7 @@ expression: "check(\"fn main() { foo(1, 2, 3) }\")"
                                         },
                                     },
                                 ),
+                                generics: [],
                                 args: [
                                     CallArg {
                                         name: None,

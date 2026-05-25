@@ -1365,12 +1365,35 @@ impl Parser {
                 let span = expr_span(&expr).merge(self.prev_span());
                 expr = Expr::Call(Box::new(CallExpr {
                     callee: Box::new(expr),
+                    generics: Vec::new(),
+                    args,
+                    span,
+                }));
+            } else if self.at(&TokenKind::Lt) && self.looks_like_generic_args() {
+                // Explicit generic type args: `ArrayList<String>(...)` or `parse<Int>(...)`
+                let type_args = self.parse_generic_type_args()?;
+                let args = self.parse_call_args()?;
+                let span = expr_span(&expr).merge(self.prev_span());
+                expr = Expr::Call(Box::new(CallExpr {
+                    callee: Box::new(expr),
+                    generics: type_args,
                     args,
                     span,
                 }));
             } else if self.eat(&TokenKind::Dot).is_some() {
                 let method_name = self.expect_ident()?;
-                if self.at(&TokenKind::LParen) {
+                if self.at(&TokenKind::Lt) && self.looks_like_generic_args() {
+                    let type_args = self.parse_generic_type_args()?;
+                    let args = self.parse_call_args()?;
+                    let span = expr_span(&expr).merge(self.prev_span());
+                    expr = Expr::MethodCall(Box::new(MethodCallExpr {
+                        receiver: Box::new(expr),
+                        method: method_name,
+                        generics: type_args,
+                        args,
+                        span,
+                    }));
+                } else if self.at(&TokenKind::LParen) {
                     let args = self.parse_call_args()?;
                     let span = expr_span(&expr).merge(self.prev_span());
                     expr = Expr::MethodCall(Box::new(MethodCallExpr {
@@ -2355,6 +2378,72 @@ impl Parser {
 
     fn peek_ahead_is(&self, kind: &TokenKind) -> bool {
         self.lookahead(1) == kind
+    }
+
+    /// Lookahead to check if `<` starts a generic type argument list rather than
+    /// a comparison. Scans forward matching angle brackets; returns true if the
+    /// balanced `>` is followed by `(` (call).
+    fn looks_like_generic_args(&self) -> bool {
+        let mut depth = 0i32;
+        let mut i = 0usize;
+        loop {
+            let tok = self.lookahead(i);
+            match tok {
+                TokenKind::Lt => depth += 1,
+                TokenKind::Gt => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return self.lookahead(i + 1) == &TokenKind::LParen;
+                    }
+                }
+                TokenKind::Shr => {
+                    depth -= 2;
+                    if depth <= 0 {
+                        return self.lookahead(i + 1) == &TokenKind::LParen;
+                    }
+                }
+                TokenKind::Ident(_)
+                | TokenKind::Comma
+                | TokenKind::Question
+                | TokenKind::Dot
+                | TokenKind::Fn
+                | TokenKind::LParen
+                | TokenKind::RParen
+                | TokenKind::Arrow
+                | TokenKind::Ref
+                | TokenKind::Mut => {}
+                TokenKind::Eof => return false,
+                _ => return false,
+            }
+            i += 1;
+        }
+    }
+
+    /// Parse `<Type, Type, ...>` as explicit generic type arguments.
+    /// Uses `expect_gt()` to handle `>>` token splitting for nested generics.
+    fn parse_generic_type_args(&mut self) -> Option<Vec<Type>> {
+        self.expect(TokenKind::Lt)?;
+        let mut types = Vec::new();
+        if self.at_gt() {
+            self.diagnostics.error(
+                DiagCode::PARSE_EXPECTED_TOKEN,
+                self.peek_span(),
+                SmolStr::from("expected type argument"),
+            );
+            self.expect_gt()?;
+            return Some(types);
+        }
+        while !self.at_gt() && !self.at_eof() {
+            if !types.is_empty() {
+                self.expect(TokenKind::Comma)?;
+                if self.at_gt() {
+                    break;
+                }
+            }
+            types.push(self.parse_type()?);
+        }
+        self.expect_gt()?;
+        Some(types)
     }
 
     fn parse_fstring_parts(&mut self, raw: &str, span: Span) -> StringInterpExpr {

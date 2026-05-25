@@ -17,6 +17,14 @@ let a = identity(42);       // T = Int と推論される
 let b = identity("hello");  // T = String と推論される
 ```
 
+型推論が不十分な場合や、明示したい場合は型引数を指定できます。
+
+```valen
+let c = identity<String>("hello");  // 明示的に String を指定
+let list = ArrayList<String>();     // Java コンストラクタ
+let map = HashMap<String, Int>();   // 複数の型引数
+```
+
 ## 関数のジェネリクス
 
 関数名の直後に型パラメータを宣言します。

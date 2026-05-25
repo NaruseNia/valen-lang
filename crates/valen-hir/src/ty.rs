@@ -1499,7 +1499,16 @@ impl<'hir> TypeChecker<'hir> {
                 }
 
                 // Constructor call — look up class/data class
-                let ctor_ty = self.resolve_ctor_type(name, &args, call.span);
+                let mut ctor_ty = self.resolve_ctor_type(name, &args, call.span);
+                // Explicit generic type args: ArrayList<String>() → Generic("ArrayList", [String])
+                if !call.generics.is_empty() {
+                    let type_args: Vec<Ty> = call
+                        .generics
+                        .iter()
+                        .map(|t| self.resolve_ast_type(t))
+                        .collect();
+                    ctor_ty = Ty::Generic(name.clone(), type_args);
+                }
                 TypedExpr {
                     kind: TypedExprKind::Call {
                         callee: Box::new(callee),
@@ -2641,6 +2650,7 @@ impl<'hir> TypeChecker<'hir> {
                 new_args.extend(call.args.iter().cloned());
                 let desugared = valen_ast::CallExpr {
                     callee: call.callee.clone(),
+                    generics: call.generics.clone(),
                     args: new_args,
                     span: p.span,
                 };
@@ -2649,6 +2659,7 @@ impl<'hir> TypeChecker<'hir> {
             valen_ast::Expr::Path(_) => {
                 let desugared = valen_ast::CallExpr {
                     callee: Box::new(p.rhs.clone()),
+                    generics: Vec::new(),
                     args: vec![valen_ast::CallArg {
                         name: None,
                         value: p.lhs.clone(),

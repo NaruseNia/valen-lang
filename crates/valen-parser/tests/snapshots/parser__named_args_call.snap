@@ -43,6 +43,7 @@ expression: "check(\"fn main() { greet(msg = hello, count = 3) }\")"
                                         },
                                     },
                                 ),
+                                generics: [],
                                 args: [
                                     CallArg {
                                         name: Some(

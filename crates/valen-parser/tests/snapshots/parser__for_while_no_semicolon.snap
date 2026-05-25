@@ -74,6 +74,7 @@ expression: "check(\"fn f() { for x in xs { process(x); }\\nwhile cond { tick();
                                                                 },
                                                             },
                                                         ),
+                                                        generics: [],
                                                         args: [
                                                             CallArg {
                                                                 name: None,
@@ -199,6 +200,7 @@ expression: "check(\"fn f() { for x in xs { process(x); }\\nwhile cond { tick();
                                                                 },
                                                             },
                                                         ),
+                                                        generics: [],
                                                         args: [],
                                                         span: Span {
                                                             start: 50,

@@ -580,6 +580,8 @@ pub struct PathSegment {
 #[derive(Debug, Clone)]
 pub struct CallExpr {
     pub callee: Box<Expr>,
+    /// Explicit generic type arguments: `ArrayList<String>()`.
+    pub generics: Vec<Type>,
     pub args: Vec<CallArg>,
     pub span: Span,
 }
