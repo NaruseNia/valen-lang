@@ -76,7 +76,7 @@ pub class QueryEngine(pub registry: ComponentRegistry) {
                     let comps = HashMap();
                     let mut k = 0;
                     while k < componentNames.size() {
-                        let cn = componentNames.get(k);
+                        let cn = safe componentNames.get(k);
                         if let Some(comp) = self.registry.getComponent(entity, cn) {
                             comps.put(cn, comp);
                         }

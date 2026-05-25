@@ -127,8 +127,7 @@ impl ServerState {
         let file_id = self.file_id_for(&uri);
         let line_index = convert::LineIndex::new(&text);
         let parse_result = valen_parser::parse(&text, file_id);
-        let parse_diags =
-            convert::to_lsp_diagnostics(&parse_result.diagnostics, &line_index);
+        let parse_diags = convert::to_lsp_diagnostics(&parse_result.diagnostics, &line_index);
         self.documents.insert(
             uri.clone(),
             DocumentState {
@@ -192,8 +191,7 @@ impl ServerState {
 
         let resolve_result =
             valen_hir::resolve::resolve_with_classpath(&all_items, &self.classpath);
-        let coherence_result =
-            valen_hir::coherence::check_coherence(&resolve_result.hir, &[]);
+        let coherence_result = valen_hir::coherence::check_coherence(&resolve_result.hir, &[]);
         let exhaustive_result =
             valen_hir::exhaustive::check_exhaustiveness(&resolve_result.hir, &all_items);
         let tc = valen_hir::ty::type_check(&resolve_result.hir, &all_items);
