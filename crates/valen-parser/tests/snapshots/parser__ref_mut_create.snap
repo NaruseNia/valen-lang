@@ -1,0 +1,81 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"fn f() { let r = ref mut 42; }\")"
+---
+=== AST ===
+[
+    Fn(
+        FnDecl {
+            annotations: [],
+            visibility: Internal,
+            name: "f",
+            generics: [],
+            params: [],
+            return_type: None,
+            body: Some(
+                Block {
+                    stmts: [
+                        Let(
+                            LetStmt {
+                                mutable: false,
+                                name: "r",
+                                ty: None,
+                                init: RefMutCreate(
+                                    RefMutExpr {
+                                        expr: Literal(
+                                            Int(
+                                                42,
+                                                Span {
+                                                    start: 25,
+                                                    end: 27,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                        span: Span {
+                                            start: 17,
+                                            end: 27,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                span: Span {
+                                    start: 9,
+                                    end: 28,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ],
+                    tail: None,
+                    span: Span {
+                        start: 7,
+                        end: 30,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            is_open: false,
+            is_override: false,
+            is_abstract: false,
+            is_unsafe: false,
+            span: Span {
+                start: 0,
+                end: 30,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

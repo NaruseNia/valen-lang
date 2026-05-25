@@ -1,0 +1,12 @@
+package com.example;
+
+pub class App {
+    fn greet(self) -> String {
+        "Hello"
+    }
+}
+
+fn main() {
+    let app = App();
+    let msg = app.greet();
+}

@@ -85,6 +85,48 @@ fn compile_fixture(name: &str) -> Vec<ClassFile<'static>> {
 }
 
 #[test]
+fn fixture_fn_main() {
+    let classes = compile_fixture("fn_main.vln");
+    assert!(
+        !classes.is_empty(),
+        "expected at least App class, got {}",
+        classes.len()
+    );
+    let app = classes
+        .iter()
+        .find(|c| c.class_name().unwrap() == "com/example/App")
+        .expect("App class should be generated");
+
+    // Check that a JVM entry point `public static void main(String[])` exists
+    let has_main = classes.iter().any(|c| {
+        c.methods.iter().any(|m| {
+            let name = c
+                .constant_pool
+                .try_get_utf8(m.name_index)
+                .ok()
+                .and_then(|n| n.as_str().map(|s| s.to_string()));
+            let desc = c
+                .constant_pool
+                .try_get_utf8(m.descriptor_index)
+                .ok()
+                .and_then(|n| n.as_str().map(|s| s.to_string()));
+            name.as_deref() == Some("main") && desc.as_deref() == Some("([Ljava/lang/String;)V")
+        })
+    });
+    assert!(
+        has_main,
+        "should have a JVM entry point main([Ljava/lang/String;)V"
+    );
+
+    // App should have at least <init> + greet
+    assert!(
+        app.methods.len() >= 2,
+        "App should have at least <init> and greet, got {}",
+        app.methods.len()
+    );
+}
+
+#[test]
 fn fixture_empty_class() {
     let classes = compile_fixture("empty_class.vln");
     assert_eq!(classes.len(), 1);
