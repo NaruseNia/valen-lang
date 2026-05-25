@@ -860,6 +860,8 @@ pub struct ForeignClassInfo {
     pub has_valen_closed: bool,
     /// Generic type parameter names (e.g. `["K", "V"]` for `HashMap<K, V>`).
     pub type_params: Vec<SmolStr>,
+    /// Whether this is a Java interface (requires `invokeinterface` instead of `invokevirtual`).
+    pub is_interface: bool,
 }
 
 /// A method on a foreign Java class.

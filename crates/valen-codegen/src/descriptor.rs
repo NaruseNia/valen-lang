@@ -19,7 +19,11 @@ pub fn resolve_type_internal_name(
             .collect::<Vec<_>>()
             .join("/")
     } else {
-        class_internal_name(name, package)
+        match name {
+            "Object" | "Any" => "java/lang/Object".to_string(),
+            "String" => "java/lang/String".to_string(),
+            _ => class_internal_name(name, package),
+        }
     }
 }
 

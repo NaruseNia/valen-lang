@@ -180,6 +180,9 @@ fn load_class_file(path: &Path, internal_name: &str) -> Option<ForeignClassInfo>
 }
 
 fn extract_class_info(cf: &ClassFile, internal_name: &str) -> ForeignClassInfo {
+    use ristretto_classfile::ClassAccessFlags;
+    let is_interface = cf.access_flags.contains(ClassAccessFlags::INTERFACE);
+
     let mut methods = Vec::new();
     let mut constructors = Vec::new();
     let mut fields = Vec::new();
@@ -297,6 +300,7 @@ fn extract_class_info(cf: &ClassFile, internal_name: &str) -> ForeignClassInfo {
         permitted_subclasses,
         has_valen_closed,
         type_params,
+        is_interface,
     }
 }
 

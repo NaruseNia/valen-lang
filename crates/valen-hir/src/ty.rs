@@ -427,11 +427,10 @@ impl<'hir> TypeChecker<'hir> {
     }
 
     fn register_prelude_functions(&mut self) {
-        let string_to_unit = Ty::Fn(vec![Ty::Prim(PrimTy::String)], Box::new(Ty::unit()));
+        let any_to_unit = Ty::Fn(vec![Ty::Named(SmolStr::from("Any"))], Box::new(Ty::unit()));
         self.env
-            .define(SmolStr::from("println"), string_to_unit.clone(), false);
-        self.env
-            .define(SmolStr::from("print"), string_to_unit, false);
+            .define(SmolStr::from("println"), any_to_unit.clone(), false);
+        self.env.define(SmolStr::from("print"), any_to_unit, false);
 
         let list_t = Ty::Generic(
             SmolStr::from("List"),
@@ -3482,9 +3481,17 @@ impl<'hir> TypeChecker<'hir> {
                 args[0].clone()
             }
             Ty::Error => Ty::Error,
+            // Java Iterable types (ArrayList, HashSet, etc.) — must have iterator() method
+            Ty::Named(n)
+                if self.hir.foreign_types.get(n.as_str()).is_some_and(|info| {
+                    info.methods
+                        .iter()
+                        .any(|m| m.name == "iterator" && m.params.is_empty())
+                }) =>
+            {
+                Ty::Named(SmolStr::from("Any"))
+            }
             other => {
-                // Issue #019: Unknown iterable type — report diagnostic instead of
-                // silently defaulting to Int.
                 self.diags.error(
                     DiagCode::FOR_LOOP_UNKNOWN_ELEM,
                     f.span,
@@ -4592,6 +4599,7 @@ mod tests {
                 permitted_subclasses: vec![],
                 has_valen_closed: false,
                 type_params: vec![],
+                is_interface: false,
             },
         );
         let r = type_check(&resolved.hir, &parsed.items);

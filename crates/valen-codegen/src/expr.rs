@@ -7,6 +7,7 @@ use valen_hir::{
     DefKind, Hir, PrimTy, Ty, TypedBody, TypedExpr, TypedExprKind, TypedStmt, TypedStringPart,
 };
 
+use crate::descriptor::tyref_to_jvm;
 use crate::jvm_const::*;
 use crate::jvm_ir::{
     ArithOp, BitwiseOp, BootstrapArg, BootstrapMethodRef, CmpKind, ExceptionHandler,
@@ -357,12 +358,8 @@ impl<'a> ExprLowering<'a> {
                 }
             }
         }
-        // Check foreign types (Java interfaces loaded from classpath)
         if let Some(foreign) = self.hir.foreign_types.get(type_name) {
-            // If the foreign type has no super_class, it's likely an interface
-            // (Java interfaces have java/lang/Object as super but are flagged differently;
-            // however, for our purposes, check if any Valen trait references it)
-            let _ = foreign;
+            return foreign.is_interface;
         }
         false
     }
@@ -485,13 +482,44 @@ impl<'a> ExprLowering<'a> {
                         self.lower_expr(arg);
                     }
                     let receiver_ty = self.ty_to_jvm(&receiver.ty);
-                    let ret_ty = self.ty_to_jvm(&expr.ty);
-                    let param_tys: Vec<JvmType> =
-                        args.iter().map(|a| self.ty_to_jvm(&a.ty)).collect();
+                    let type_name_str = self.receiver_type_name(&receiver.ty);
+                    // For foreign (Java) methods, use actual Java parameter and return types
+                    // from the class file instead of Valen-inferred types.
+                    let (param_tys, ret_ty) =
+                        if let Some(ref tn) = type_name_str {
+                            if let Some(info) = self.hir.foreign_types.get(tn.as_str()) {
+                                if let Some(m) = info.methods.iter().find(|m| {
+                                    m.name == method.as_str() && m.params.len() == args.len()
+                                }) {
+                                    (
+                                        m.params
+                                            .iter()
+                                            .map(|p| tyref_to_jvm(p, self.pkg, &self.hir.imports))
+                                            .collect(),
+                                        tyref_to_jvm(&m.return_ty, self.pkg, &self.hir.imports),
+                                    )
+                                } else {
+                                    (
+                                        args.iter().map(|a| self.ty_to_jvm(&a.ty)).collect(),
+                                        self.ty_to_jvm(&expr.ty),
+                                    )
+                                }
+                            } else {
+                                (
+                                    args.iter().map(|a| self.ty_to_jvm(&a.ty)).collect(),
+                                    self.ty_to_jvm(&expr.ty),
+                                )
+                            }
+                        } else {
+                            (
+                                args.iter().map(|a| self.ty_to_jvm(&a.ty)).collect(),
+                                self.ty_to_jvm(&expr.ty),
+                            )
+                        };
                     if let JvmType::Object(owner) = receiver_ty {
-                        // Check if the receiver type is a trait/interface — if so,
-                        // emit InvokeInterface instead of InvokeVirtual (JVM spec
-                        // requires invokeinterface for interface method calls).
+                        let needs_pop = !matches!(ret_ty, JvmType::Void)
+                            && matches!(expr.ty, Ty::Prim(PrimTy::Unit) | Ty::Error);
+                        let wide_pop = ret_ty.is_wide();
                         let type_name = self.receiver_type_name(&receiver.ty);
                         if type_name
                             .as_deref()
@@ -510,6 +538,13 @@ impl<'a> ExprLowering<'a> {
                                 params: param_tys,
                                 ret: ret_ty,
                             });
+                        }
+                        if needs_pop {
+                            if wide_pop {
+                                self.ops.push(JvmOp::Pop2);
+                            } else {
+                                self.ops.push(JvmOp::Pop);
+                            }
                         }
                     }
                 }
@@ -719,7 +754,7 @@ impl<'a> ExprLowering<'a> {
                     });
                     return;
                 }
-                // Constructor call: Meters(10.0), Widget(...), etc.
+                // Constructor call: Meters(10.0), Widget(...), ArrayList(), etc.
                 if let Ty::Named(n) = result_ty {
                     if self.is_newtype_or_class_ctor(n) {
                         let owner = crate::descriptor::resolve_type_internal_name(
@@ -736,6 +771,33 @@ impl<'a> ExprLowering<'a> {
                             owner,
                             name: "<init>".to_string(),
                             params: param_tys,
+                            ret: JvmType::Void,
+                        });
+                        return;
+                    }
+                    // Foreign (Java) constructor — use actual Java constructor descriptor
+                    if let Some(info) = self.hir.foreign_types.get(n.as_str()) {
+                        let owner = info.internal_name.clone();
+                        let ctor_params = info
+                            .constructors
+                            .iter()
+                            .find(|c| c.params.len() == args.len())
+                            .map(|c| {
+                                c.params
+                                    .iter()
+                                    .map(|p| tyref_to_jvm(p, self.pkg, &self.hir.imports))
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or(param_tys);
+                        self.ops.push(JvmOp::New(owner.clone()));
+                        self.ops.push(JvmOp::Dup);
+                        for arg in args {
+                            self.lower_expr(arg);
+                        }
+                        self.ops.push(JvmOp::InvokeSpecial {
+                            owner,
+                            name: "<init>".to_string(),
+                            params: ctor_params,
                             ret: JvmType::Void,
                         });
                         return;
@@ -1824,6 +1886,8 @@ impl<'a> ExprLowering<'a> {
                 &iter.ty,
                 body,
             );
+        } else if self.is_java_iterable(&iter.ty) {
+            self.lower_for_java_iterator(var, iter, body);
         } else {
             self.lower_for_iterator(var, iter, body);
         }
@@ -1965,6 +2029,100 @@ impl<'a> ExprLowering<'a> {
         // Loop exit
         self.ops.push(JvmOp::Label(break_label));
         self.emit_frame(vec![]);
+
+        self.pop_scope();
+    }
+
+    /// Check if a type is a Java collection (Iterable) that uses java.util.Iterator.
+    fn is_java_iterable(&self, ty: &Ty) -> bool {
+        let name = match ty {
+            Ty::Named(n) => n.as_str(),
+            Ty::Generic(n, _) => n.as_str(),
+            _ => return false,
+        };
+        self.hir.foreign_types.get(name).is_some_and(|info| {
+            info.methods
+                .iter()
+                .any(|m| m.name == "iterator" && m.params.is_empty())
+        })
+    }
+
+    /// Emits a for-loop over a Java Iterable: calls .iterator(), then
+    /// hasNext()/next() in a loop.
+    fn lower_for_java_iterator(&mut self, var: &SmolStr, iter: &TypedExpr, body: &TypedBody) {
+        let elem_ty = JvmType::Object(JVM_OBJECT.to_string());
+        let java_iter = "java/util/Iterator";
+
+        self.push_scope();
+
+        // Call .iterator() on the collection
+        self.lower_expr(iter);
+        let coll_ty = self.ty_to_jvm(&iter.ty);
+        if let JvmType::Object(ref owner) = coll_ty {
+            self.ops.push(JvmOp::InvokeVirtual {
+                owner: owner.clone(),
+                name: "iterator".to_string(),
+                params: vec![],
+                ret: JvmType::Object(java_iter.to_string()),
+            });
+        }
+        let iter_slot = self.alloc_local(
+            SmolStr::from("__java_iter"),
+            JvmType::Object(java_iter.to_string()),
+        );
+        self.ops.push(JvmOp::StoreLocal(
+            iter_slot,
+            JvmType::Object(java_iter.to_string()),
+        ));
+
+        let loop_label = self.alloc_label();
+        let break_label = self.alloc_label();
+
+        let pre_loop_locals = self.locals_snapshot();
+
+        self.ops.push(JvmOp::Label(loop_label));
+        self.emit_frame_with_locals(pre_loop_locals.clone(), vec![]);
+
+        // hasNext()
+        self.ops.push(JvmOp::LoadLocal(
+            iter_slot,
+            JvmType::Object(java_iter.to_string()),
+        ));
+        self.ops.push(JvmOp::InvokeInterface {
+            owner: java_iter.to_string(),
+            name: "hasNext".to_string(),
+            params: vec![],
+            ret: JvmType::Boolean,
+        });
+        self.ops.push(JvmOp::IfEq(break_label));
+
+        // next()
+        self.ops.push(JvmOp::LoadLocal(
+            iter_slot,
+            JvmType::Object(java_iter.to_string()),
+        ));
+        self.ops.push(JvmOp::InvokeInterface {
+            owner: java_iter.to_string(),
+            name: "next".to_string(),
+            params: vec![],
+            ret: JvmType::Object(JVM_OBJECT.to_string()),
+        });
+
+        let var_slot = self.alloc_local(var.clone(), elem_ty.clone());
+        self.ops.push(JvmOp::StoreLocal(var_slot, elem_ty));
+
+        // Body
+        self.loop_stack.push(LoopContext {
+            break_label,
+            continue_label: loop_label,
+        });
+        self.lower_body(body);
+        self.loop_stack.pop();
+
+        self.ops.push(JvmOp::Goto(loop_label));
+
+        self.ops.push(JvmOp::Label(break_label));
+        self.emit_frame_with_locals(pre_loop_locals, vec![]);
 
         self.pop_scope();
     }
