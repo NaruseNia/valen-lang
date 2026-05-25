@@ -1491,6 +1491,10 @@ impl Parser {
             }
             TokenKind::LParen => {
                 self.bump();
+                if self.at(&TokenKind::RParen) {
+                    let end = self.expect(TokenKind::RParen)?;
+                    return Some(Expr::Literal(Literal::Unit(span.merge(end))));
+                }
                 let inner = self.parse_expr()?;
                 self.expect(TokenKind::RParen)?;
                 Some(inner)
