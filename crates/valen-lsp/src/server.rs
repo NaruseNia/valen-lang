@@ -58,6 +58,8 @@ pub struct ServerState {
     classpath: Vec<std::path::PathBuf>,
     /// Semantic diagnostics from the last cross-file analysis pass.
     last_semantic_diags: Vec<valen_diagnostics::Diagnostic>,
+    /// Cached Java class index for import completion.
+    java_class_index: Vec<String>,
 }
 
 impl ServerState {
@@ -70,6 +72,7 @@ impl ServerState {
             workspace_root: None,
             classpath: valen_hir::classpath::detect_jdk_classpath(),
             last_semantic_diags: Vec::new(),
+            java_class_index: Vec::new(),
         };
         let mut router = Router::from_language_server(this);
         router.event(Self::on_event);
@@ -427,6 +430,23 @@ impl ServerState {
             }
         }
 
+        // Static methods from foreign (Java) types
+        if let Some(info) = hir.foreign_types.get(name) {
+            for m in &info.methods {
+                if m.is_static {
+                    items.push(CompletionItem {
+                        label: m.name.to_string(),
+                        kind: Some(CompletionItemKind::FUNCTION),
+                        detail: Some(format!(
+                            "(Java) static fn {}(...) -> {}",
+                            m.name, m.return_ty
+                        )),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+
         items
     }
 
@@ -532,6 +552,29 @@ impl ServerState {
                             });
                         }
                     }
+                }
+            }
+
+            // Methods/fields from foreign (Java) types
+            if let Some(info) = hir.foreign_types.get(tn.as_str()) {
+                for m in &info.methods {
+                    if m.is_static {
+                        continue;
+                    }
+                    items.push(CompletionItem {
+                        label: m.name.to_string(),
+                        kind: Some(CompletionItemKind::METHOD),
+                        detail: Some(format!("(Java) fn {}(...) -> {}", m.name, m.return_ty)),
+                        ..Default::default()
+                    });
+                }
+                for f in &info.fields {
+                    items.push(CompletionItem {
+                        label: f.name.to_string(),
+                        kind: Some(CompletionItemKind::FIELD),
+                        detail: Some(format!("(Java) {}", f.ty)),
+                        ..Default::default()
+                    });
                 }
             }
         }
@@ -887,6 +930,20 @@ impl ServerState {
                         });
                     }
                 }
+            }
+        }
+
+        // Suggest Java classes from classpath index
+        for class_name in &self.java_class_index {
+            let short = class_name.rsplit('.').next().unwrap_or(class_name);
+            if seen.insert(class_name.clone()) {
+                items.push(CompletionItem {
+                    label: class_name.clone(),
+                    kind: Some(CompletionItemKind::CLASS),
+                    detail: Some(format!("(Java) {short}")),
+                    filter_text: Some(short.to_string()),
+                    ..Default::default()
+                });
             }
         }
 
@@ -3487,6 +3544,7 @@ impl LanguageServer for ServerState {
             self.workspace_root = Some(root.clone());
             self.index_workspace(&root);
         }
+        self.java_class_index = valen_hir::classpath::list_available_classes(&self.classpath);
         Box::pin(async {
             Ok(InitializeResult {
                 capabilities: ServerCapabilities {
