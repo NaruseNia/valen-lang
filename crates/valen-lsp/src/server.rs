@@ -41,6 +41,8 @@ pub struct DocumentState {
     pub hir: Option<valen_hir::Hir>,
     /// Typed bodies from type checking, indexed by DefId.
     pub bodies: Option<indexmap::IndexMap<valen_hir::DefId, valen_hir::TypedBody>>,
+    /// FileId for this document, used to filter cross-file data.
+    pub file_id: valen_ast::FileId,
 }
 
 /// The Valen LSP server state.
@@ -109,6 +111,7 @@ impl ServerState {
                                 items: parse_result.items,
                                 hir: None,
                                 bodies: None,
+                                file_id,
                             },
                         );
                     }
@@ -134,6 +137,7 @@ impl ServerState {
                 items: parse_result.items,
                 hir: None,
                 bodies: None,
+                file_id,
             },
         );
 
@@ -1357,6 +1361,7 @@ pub fn analyze_document(
         items: parse_result.items,
         hir,
         bodies,
+        file_id,
     };
 
     (doc, diags)
@@ -2630,11 +2635,23 @@ fn build_inlay_hints(doc: &DocumentState, range: Range) -> Vec<InlayHint> {
         Some(b) => b,
         None => return Vec::new(),
     };
+    let hir = match doc.hir.as_ref() {
+        Some(h) => h,
+        None => return Vec::new(),
+    };
 
     let mut hints = Vec::new();
 
-    for body in bodies.values() {
-        collect_hints_from_body(body, doc, range, &mut hints);
+    // Only process bodies whose owning Def belongs to this file.
+    for (def_id, body) in bodies {
+        let belongs_to_file = hir
+            .defs
+            .get(def_id)
+            .map(|d| d.span.file_id == doc.file_id)
+            .unwrap_or(false);
+        if belongs_to_file {
+            collect_hints_from_body(body, doc, range, &mut hints);
+        }
     }
 
     hints
