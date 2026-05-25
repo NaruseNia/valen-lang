@@ -60,9 +60,14 @@ pub fn resolve_with_classpath(items: &[Item], classpath: &[std::path::PathBuf]) 
     resolver.validate_class_hierarchy();
     resolver.check_naming_conventions();
 
-    if !classpath.is_empty() {
+    let effective_classpath = if classpath.is_empty() {
+        crate::classpath::detect_jdk_classpath()
+    } else {
+        classpath.to_vec()
+    };
+    if !effective_classpath.is_empty() {
         resolver.hir.foreign_types =
-            crate::classpath::scan_classpath(classpath, &resolver.hir.imports);
+            crate::classpath::scan_classpath(&effective_classpath, &resolver.hir.imports);
     }
 
     ResolveResult {

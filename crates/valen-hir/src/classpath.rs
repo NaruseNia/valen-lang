@@ -1,5 +1,11 @@
 //! Classpath scanning — reads Java .class files and extracts type metadata.
+//!
+//! Supports three classpath entry types:
+//! - **Directories**: look for `entry/internal_name.class`
+//! - **JAR files** (`.jar`): standard ZIP archives containing `.class` entries
+//! - **JMOD files** (`.jmod`): ZIP archives with a 4-byte magic prefix and `classes/` entry prefix
 
+use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 
 use indexmap::IndexMap;
@@ -33,6 +39,24 @@ pub fn scan_classpath(
     result
 }
 
+/// Detects the default JDK classpath entries from `JAVA_HOME`.
+pub fn detect_jdk_classpath() -> Vec<PathBuf> {
+    if let Ok(java_home) = std::env::var("JAVA_HOME") {
+        let java_home = PathBuf::from(java_home);
+        // Java 9+: jmods directory
+        let jmod = java_home.join("jmods").join("java.base.jmod");
+        if jmod.exists() {
+            return vec![jmod];
+        }
+        // Java 8: rt.jar
+        let rt = java_home.join("lib").join("rt.jar");
+        if rt.exists() {
+            return vec![rt];
+        }
+    }
+    vec![]
+}
+
 fn load_class_from_classpath(
     classpath: &[PathBuf],
     internal_name: &str,
@@ -40,12 +64,54 @@ fn load_class_from_classpath(
     let relative = format!("{}.class", internal_name);
 
     for entry in classpath {
-        let class_path = entry.join(&relative);
-        if class_path.exists() {
-            return load_class_file(&class_path, internal_name);
+        if entry.is_dir() {
+            let class_path = entry.join(&relative);
+            if class_path.exists() {
+                return load_class_file(&class_path, internal_name);
+            }
+        } else if entry.is_file() {
+            let ext = entry.extension().and_then(|e| e.to_str()).unwrap_or("");
+            match ext {
+                "jar" => {
+                    if let Some(info) = load_class_from_archive(entry, &relative, internal_name) {
+                        return Some(info);
+                    }
+                }
+                "jmod" => {
+                    let jmod_relative = format!("classes/{}", relative);
+                    if let Some(info) =
+                        load_class_from_archive(entry, &jmod_relative, internal_name)
+                    {
+                        return Some(info);
+                    }
+                }
+                _ => {}
+            }
         }
     }
     None
+}
+
+fn load_class_from_archive(
+    archive_path: &Path,
+    entry_name: &str,
+    internal_name: &str,
+) -> Option<ForeignClassInfo> {
+    let data = std::fs::read(archive_path).ok()?;
+    // JMOD files start with magic "JM\x01\x00" — skip it to reach ZIP data
+    let zip_data = if data.starts_with(b"JM\x01\x00") {
+        &data[4..]
+    } else {
+        &data[..]
+    };
+    let cursor = Cursor::new(zip_data);
+    let mut archive = zip::ZipArchive::new(cursor).ok()?;
+    let mut zip_entry = archive.by_name(entry_name).ok()?;
+    let mut bytes = Vec::new();
+    zip_entry.read_to_end(&mut bytes).ok()?;
+    drop(zip_entry);
+    let cf = ClassFile::from_bytes(&bytes).ok()?;
+    Some(extract_class_info(&cf, internal_name))
 }
 
 fn load_class_file(path: &Path, internal_name: &str) -> Option<ForeignClassInfo> {
@@ -595,5 +661,44 @@ mod tests {
         let class_params = vec![SmolStr::from("T")];
         let ret = parse_generic_return_type("()I", &class_params);
         assert_eq!(ret, Some(TyRef::Prim(PrimTy::Int)));
+    }
+
+    #[test]
+    fn detect_jdk_finds_classpath() {
+        if std::env::var("JAVA_HOME").is_err() {
+            return;
+        }
+        let paths = detect_jdk_classpath();
+        assert!(
+            !paths.is_empty(),
+            "expected at least one JDK classpath entry"
+        );
+        for p in &paths {
+            assert!(p.exists(), "detected path does not exist: {:?}", p);
+        }
+    }
+
+    #[test]
+    fn load_hashmap_from_jdk() {
+        if std::env::var("JAVA_HOME").is_err() {
+            return;
+        }
+        let classpath = detect_jdk_classpath();
+        let info = load_class_from_classpath(&classpath, "java/util/HashMap");
+        assert!(info.is_some(), "should find HashMap in JDK");
+        let info = info.unwrap();
+        assert!(
+            info.methods.iter().any(|m| m.name == "get"),
+            "HashMap should have a get method"
+        );
+        assert!(
+            info.methods.iter().any(|m| m.name == "put"),
+            "HashMap should have a put method"
+        );
+        assert!(
+            !info.constructors.is_empty(),
+            "HashMap should have constructors"
+        );
+        assert_eq!(info.type_params.len(), 2, "HashMap has K and V type params");
     }
 }
