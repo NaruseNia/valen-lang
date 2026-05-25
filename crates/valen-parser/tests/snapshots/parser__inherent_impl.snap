@@ -36,7 +36,7 @@ expression: "check(\"impl Vec2 { fn length(self) -> Float { 1.0 } fn scale(self,
                 Fn(
                     FnDecl {
                         annotations: [],
-                        visibility: Pub,
+                        visibility: Internal,
                         name: "length",
                         generics: [],
                         params: [
@@ -145,7 +145,7 @@ expression: "check(\"impl Vec2 { fn length(self) -> Float { 1.0 } fn scale(self,
                 Fn(
                     FnDecl {
                         annotations: [],
-                        visibility: Pub,
+                        visibility: Internal,
                         name: "scale",
                         generics: [],
                         params: [

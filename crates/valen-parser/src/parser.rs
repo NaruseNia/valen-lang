@@ -281,7 +281,7 @@ impl Parser {
             let name = self.expect_ident()?;
             self.expect(TokenKind::Colon)?;
             let ty = self.parse_type()?;
-            let span = param_start.merge(type_span(&ty));
+            let span = param_start.merge(ty.span());
             params.push(AnnotationParam {
                 visibility: vis,
                 name,
@@ -398,7 +398,7 @@ impl Parser {
             self.bump(); // ref
             self.bump(); // mut
             let inner = self.parse_type()?;
-            let span = start.merge(type_span(&inner));
+            let span = start.merge(inner.span());
             return Some(Type::RefMut {
                 inner: Box::new(inner),
                 span,
@@ -419,7 +419,7 @@ impl Parser {
             self.expect(TokenKind::RParen)?;
             self.expect(TokenKind::Arrow)?;
             let return_type = self.parse_type()?;
-            let end = type_span(&return_type);
+            let end = return_type.span();
             return Some(Type::Fn(valen_ast::FnType {
                 params,
                 return_type: Box::new(return_type),
@@ -443,7 +443,7 @@ impl Parser {
         });
 
         if let Some(q_span) = self.eat(&TokenKind::Question) {
-            let inner_span = type_span(&ty);
+            let inner_span = ty.span();
             ty = Type::Nullable {
                 inner: Box::new(ty),
                 span: inner_span.merge(q_span),
@@ -631,7 +631,7 @@ impl Parser {
                     bounds.push(self.parse_type()?);
                 }
             }
-            let end = bounds.last().map(type_span).unwrap_or(start);
+            let end = bounds.last().map(|t| t.span()).unwrap_or(start);
             params.push(GenericParam {
                 name,
                 variance,
@@ -781,7 +781,7 @@ impl Parser {
                 let field_name = self.expect_ident()?;
                 self.expect(TokenKind::Colon)?;
                 let ty = self.parse_type()?;
-                let span = field_start.merge(type_span(&ty));
+                let span = field_start.merge(ty.span());
                 fs.push(EnumField {
                     name: field_name,
                     ty,
@@ -928,6 +928,8 @@ impl Parser {
         let mut items = Vec::new();
         while !self.at(&TokenKind::RBrace) && !self.at_eof() {
             let item_start = self.peek_span();
+            let item_annotations = self.parse_annotations();
+            let vis = self.parse_visibility();
             if self.at(&TokenKind::Type) {
                 self.bump();
                 let type_name = self.expect_ident()?;
@@ -942,7 +944,7 @@ impl Parser {
                 continue;
             }
             let fn_decl =
-                self.parse_fn_decl(vec![], Visibility::Pub, item_start, false, false, false)?;
+                self.parse_fn_decl(item_annotations, vis, item_start, false, false, false)?;
             items.push(ImplItem::Fn(fn_decl));
         }
         let end = self.expect(TokenKind::RBrace)?;
@@ -1392,7 +1394,7 @@ impl Parser {
                 });
             } else if self.eat(&TokenKind::As).is_some() {
                 let target_ty = self.parse_type()?;
-                let span = expr_span(&expr).merge(type_span(&target_ty));
+                let span = expr_span(&expr).merge(target_ty.span());
                 expr = Expr::Cast(CastExpr {
                     expr: Box::new(expr),
                     target_ty,
@@ -2184,7 +2186,7 @@ impl Parser {
                 };
                 let p_span = ty
                     .as_ref()
-                    .map(|t| p_start.merge(type_span(t)))
+                    .map(|t| p_start.merge(t.span()))
                     .unwrap_or(p_start);
                 ps.push(LambdaParam {
                     name,
@@ -2571,17 +2573,6 @@ fn expr_span(expr: &Expr) -> Span {
     }
 }
 
-/// Extract the source span from any type variant.
-fn type_span(ty: &Type) -> Span {
-    match ty {
-        Type::Path(p) => p.span,
-        Type::Nullable { span, .. } => *span,
-        Type::Fn(f) => f.span,
-        Type::Tuple(_, span) => *span,
-        Type::RefMut { span, .. } => *span,
-    }
-}
-
 fn pattern_span(pat: &Pattern) -> Span {
     match pat {
         Pattern::Wildcard(s) => *s,
@@ -2635,30 +2626,137 @@ fn extract_pattern_name(pattern: &Pattern) -> SmolStr {
 
 fn describe_token(kind: &TokenKind) -> &'static str {
     match kind {
+        // Literals
+        TokenKind::IntLit(_) => "integer literal",
+        TokenKind::LongLit(_) => "long literal",
+        TokenKind::FloatLit(_) => "float literal",
+        TokenKind::DoubleLit(_) => "double literal",
+        TokenKind::StringLit(_) => "string literal",
+        TokenKind::FStringLit(_) => "interpolated string literal",
+        TokenKind::CharLit(_) => "char literal",
+        TokenKind::BoolLit(_) => "bool literal",
+
+        // Identifiers
+        TokenKind::Ident(_) => "identifier",
+
+        // Keywords
         TokenKind::Fn => "`fn`",
         TokenKind::Let => "`let`",
         TokenKind::Mut => "`mut`",
-        TokenKind::Class => "`class`",
-        TokenKind::If => "`if`",
-        TokenKind::Match => "`match`",
+        TokenKind::SelfKw => "`self`",
         TokenKind::Return => "`return`",
+        TokenKind::If => "`if`",
+        TokenKind::Else => "`else`",
+        TokenKind::Match => "`match`",
+        TokenKind::Class => "`class`",
+        TokenKind::Data => "`data`",
+        TokenKind::Enum => "`enum`",
+        TokenKind::Trait => "`trait`",
+        TokenKind::Impl => "`impl`",
+        TokenKind::Pub => "`pub`",
+        TokenKind::Internal => "`internal`",
+        TokenKind::Private => "`private`",
+        TokenKind::Open => "`open`",
+        TokenKind::Override => "`override`",
+        TokenKind::Abstract => "`abstract`",
+        TokenKind::Sealed => "`sealed`",
+        TokenKind::Package => "`package`",
+        TokenKind::Import => "`import`",
+        TokenKind::For => "`for`",
+        TokenKind::In => "`in`",
+        TokenKind::While => "`while`",
+        TokenKind::Loop => "`loop`",
+        TokenKind::Break => "`break`",
+        TokenKind::Continue => "`continue`",
+        TokenKind::True => "`true`",
+        TokenKind::False => "`false`",
+        TokenKind::As => "`as`",
+        TokenKind::Safe => "`safe`",
+        TokenKind::Unsafe => "`unsafe`",
+        TokenKind::Ref => "`ref`",
+        TokenKind::Annotation => "`annotation`",
+        // Reserved keywords
+        TokenKind::Suspend => "`suspend`",
+        TokenKind::Async => "`async`",
+        TokenKind::Await => "`await`",
+        TokenKind::Yield => "`yield`",
+        TokenKind::TypeAlias => "`typealias`",
+        TokenKind::NewType => "`newtype`",
+        TokenKind::Type => "`type`",
+        // JVM reserved words
+        TokenKind::Static => "`static`",
+        TokenKind::Void => "`void`",
+        TokenKind::This => "`this`",
+        TokenKind::Super => "`super`",
+        TokenKind::Null => "`null`",
+        TokenKind::Throw => "`throw`",
+        TokenKind::Try => "`try`",
+        TokenKind::Catch => "`catch`",
+        TokenKind::Finally => "`finally`",
+        TokenKind::Extends => "`extends`",
+        TokenKind::Implements => "`implements`",
+
+        // Punctuation
         TokenKind::LParen => "`(`",
         TokenKind::RParen => "`)`",
         TokenKind::LBrace => "`{`",
         TokenKind::RBrace => "`}`",
+        TokenKind::LBracket => "`[`",
+        TokenKind::RBracket => "`]`",
+        TokenKind::Comma => "`,`",
         TokenKind::Semi => "`;`",
-        TokenKind::Eq => "`=`",
-        TokenKind::Arrow => "`->`",
-        TokenKind::FatArrow => "`=>`",
         TokenKind::Colon => "`:`",
         TokenKind::DoubleColon => "`::`",
-        TokenKind::Comma => "`,`",
         TokenKind::Dot => "`.`",
         TokenKind::DotDot => "`..`",
         TokenKind::DotDotEq => "`..=`",
-        TokenKind::Lt => "`<`",
-        TokenKind::Gt => "`>`",
+        TokenKind::Arrow => "`->`",
+        TokenKind::FatArrow => "`=>`",
         TokenKind::Question => "`?`",
-        _ => "token",
+        TokenKind::Bang => "`!`",
+        TokenKind::At => "`@`",
+        TokenKind::Hash => "`#`",
+        TokenKind::Underscore => "`_`",
+
+        // Operators
+        TokenKind::Eq => "`=`",
+        TokenKind::EqEq => "`==`",
+        TokenKind::EqEqEq => "`===`",
+        TokenKind::NotEq => "`!=`",
+        TokenKind::NotEqEq => "`!==`",
+        TokenKind::Lt => "`<`",
+        TokenKind::Le => "`<=`",
+        TokenKind::Gt => "`>`",
+        TokenKind::Ge => "`>=`",
+        TokenKind::Plus => "`+`",
+        TokenKind::Minus => "`-`",
+        TokenKind::Star => "`*`",
+        TokenKind::Slash => "`/`",
+        TokenKind::Percent => "`%`",
+        TokenKind::Amp => "`&`",
+        TokenKind::AmpAmp => "`&&`",
+        TokenKind::Pipe => "`|`",
+        TokenKind::PipeGt => "`|>`",
+        TokenKind::PipePipe => "`||`",
+        TokenKind::Caret => "`^`",
+        TokenKind::Shl => "`<<`",
+        TokenKind::Shr => "`>>`",
+        TokenKind::PlusEq => "`+=`",
+        TokenKind::MinusEq => "`-=`",
+        TokenKind::StarEq => "`*=`",
+        TokenKind::SlashEq => "`/=`",
+        TokenKind::PercentEq => "`%=`",
+
+        // Trivia
+        TokenKind::Whitespace => "whitespace",
+        TokenKind::LineComment => "line comment",
+        TokenKind::BlockComment => "block comment",
+        TokenKind::DocComment(_) => "doc comment",
+
+        // End of file
+        TokenKind::Eof => "end of file",
+
+        // Error
+        TokenKind::Error(_) => "error token",
     }
 }
