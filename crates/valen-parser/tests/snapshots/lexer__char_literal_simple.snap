@@ -1,0 +1,15 @@
+---
+source: crates/valen-parser/tests/lexer.rs
+expression: "fmt(\"fn main() { let c = 'A'; }\")"
+---
+Fn @ 0..2
+Ident("main") @ 3..7
+LParen @ 7..8
+RParen @ 8..9
+LBrace @ 10..11
+Let @ 12..15
+Ident("c") @ 16..17
+Eq @ 18..19
+CharLit('A') @ 20..23
+Semi @ 23..24
+RBrace @ 25..26

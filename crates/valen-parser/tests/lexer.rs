@@ -105,3 +105,58 @@ fn bom_only_source_produces_eof() {
     assert!(matches!(tokens[0].0, TokenKind::Eof));
     assert!(!diags.has_errors());
 }
+
+// -- char literals (#051) ---------------------------------------------------
+
+#[test]
+fn char_literal_simple() {
+    assert_snapshot!(fmt("fn main() { let c = 'A'; }"));
+}
+
+#[test]
+fn char_literal_escape() {
+    assert_snapshot!(fmt("fn main() { let c = '\\n'; }"));
+}
+
+// -- long literals (#051) ---------------------------------------------------
+
+#[test]
+fn long_literal() {
+    assert_snapshot!(fmt("fn main() { let x = 42L; }"));
+}
+
+#[test]
+fn long_literal_negative() {
+    assert_snapshot!(fmt("fn main() { let x = -100L; }"));
+}
+
+// -- float literal with suffix (#051) ---------------------------------------
+
+#[test]
+fn float_literal_with_suffix() {
+    assert_snapshot!(fmt("fn main() { let x = 3.14f; }"));
+}
+
+#[test]
+fn float_literal_no_suffix() {
+    assert_snapshot!(fmt("fn main() { let x = 2.718; }"));
+}
+
+// -- f-string literals (#051) -----------------------------------------------
+
+#[test]
+fn fstring_simple() {
+    assert_snapshot!(fmt(r#"fn main() { let s = f"hello {name}"; }"#));
+}
+
+#[test]
+fn fstring_multiple_interp() {
+    assert_snapshot!(fmt(r#"fn main() { let s = f"{a} + {b} = {c}"; }"#));
+}
+
+// -- underscore separators (#051) -------------------------------------------
+
+#[test]
+fn int_underscore_separator() {
+    assert_snapshot!(fmt("fn main() { let x = 1_000_000; }"));
+}

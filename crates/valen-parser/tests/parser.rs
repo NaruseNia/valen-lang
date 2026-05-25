@@ -454,3 +454,35 @@ fn typealias_simple() {
 fn typealias_generic() {
     assert_snapshot!(check("pub typealias Mapping<K, V> = java.util.Map<K, V>;"));
 }
+
+// --- unsafe/safe/cast/deref/ref-mut (#052) ---
+
+#[test]
+fn unsafe_block() {
+    assert_snapshot!(check("fn f() { unsafe { let x = 1; x } }"));
+}
+
+#[test]
+fn unsafe_expr() {
+    assert_snapshot!(check("fn f() -> Int { unsafe 42 }"));
+}
+
+#[test]
+fn safe_block() {
+    assert_snapshot!(check("fn f() { safe { call() } }"));
+}
+
+#[test]
+fn as_cast() {
+    assert_snapshot!(check("fn f(x: Int) -> Long { x as Long }"));
+}
+
+#[test]
+fn deref_expr() {
+    assert_snapshot!(check("fn f(r: ref mut Int) -> Int { *r }"));
+}
+
+#[test]
+fn ref_mut_create() {
+    assert_snapshot!(check("fn f() { let r = ref mut 42; }"));
+}

@@ -4805,4 +4805,216 @@ mod tests {
         );
         assert_no_errors(&r);
     }
+
+    // -- numeric conversion methods (#029) ------------------------------------
+
+    #[test]
+    fn int_to_long_conversion() {
+        let r = check_source(
+            r#"
+            fn test() -> Long {
+                let x: Int = 42;
+                x.toLong()
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn int_to_float_conversion() {
+        let r = check_source(
+            r#"
+            fn test() -> Float {
+                let x: Int = 42;
+                x.toFloat()
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn int_to_double_conversion() {
+        let r = check_source(
+            r#"
+            fn test() -> Double {
+                let x: Int = 42;
+                x.toDouble()
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn float_to_double_conversion() {
+        let r = check_source(
+            r#"
+            fn test() -> Double {
+                let x: Float = 3.14f;
+                x.toDouble()
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn long_to_int_conversion() {
+        let r = check_source(
+            r#"
+            fn test() -> Int {
+                let x: Long = 100L;
+                x.toInt()
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn double_to_int_conversion() {
+        let r = check_source(
+            r#"
+            fn test() -> Int {
+                let x: Double = 3.14;
+                x.toInt()
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    // -- Option/Result construction and match (#030) --------------------------
+
+    #[test]
+    fn option_some_construction() {
+        let r = check_source(
+            r#"
+            fn test() -> Option<Int> {
+                Option::Some(42)
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn option_none_construction() {
+        let r = check_source(
+            r#"
+            fn test() -> Option<Int> {
+                Option::None
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn result_ok_construction() {
+        let r = check_source(
+            r#"
+            fn test() -> Result<Int, String> {
+                Result::Ok(42)
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn result_err_construction() {
+        let r = check_source(
+            r#"
+            fn test() -> Result<Int, String> {
+                Result::Err("fail")
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn option_match_some_none() {
+        let r = check_source(
+            r#"
+            fn test(opt: Option<Int>) -> Int {
+                match opt {
+                    Option::Some(v) => v,
+                    Option::None => 0,
+                }
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn result_match_ok_err() {
+        let r = check_source(
+            r#"
+            fn test(res: Result<Int, String>) -> Int {
+                match res {
+                    Result::Ok(v) => v,
+                    Result::Err(e) => 0,
+                }
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn option_try_operator() {
+        let r = check_source(
+            r#"
+            fn inner() -> Option<Int> { Option::Some(42) }
+            fn test() -> Option<Int> {
+                let v = inner()?;
+                Option::Some(v + 1)
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn result_try_operator() {
+        let r = check_source(
+            r#"
+            fn inner() -> Result<Int, String> { Result::Ok(42) }
+            fn test() -> Result<Int, String> {
+                let v = inner()?;
+                Result::Ok(v + 1)
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn bare_some_none_shorthand() {
+        let r = check_source(
+            r#"
+            fn test(x: Int) -> Option<Int> {
+                if x > 0 { Some(x) } else { None }
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn bare_ok_err_shorthand() {
+        let r = check_source(
+            r#"
+            fn test(x: Int) -> Result<Int, String> {
+                if x > 0 { Ok(x) } else { Err("negative") }
+            }
+            "#,
+        );
+        assert_no_errors(&r);
+    }
 }

@@ -457,6 +457,104 @@ fn walkdir(dir: &Path) -> Vec<std::path::PathBuf> {
     files
 }
 
+// ── Unsafe Block (#059) ────────────────────────────────────────────
+
+#[test]
+fn unsafe_block() {
+    let input = "\
+package x;
+
+pub class C {
+    fn f(self) -> Int {
+        unsafe {
+            42
+        }
+    }
+}
+";
+    assert_format(input, input);
+}
+
+#[test]
+fn unsafe_expr_inline() {
+    let input = "\
+package x;
+
+pub class C {
+    fn f(self) -> Int {
+        unsafe 42
+    }
+}
+";
+    assert_format(input, input);
+}
+
+// ── Safe Block (#059) ──────────────────────────────────────────────
+
+#[test]
+fn safe_block() {
+    let input = "\
+package x;
+
+pub class C {
+    fn f(self) -> Int {
+        safe {
+            call()
+        }
+    }
+}
+";
+    assert_format(input, input);
+}
+
+// ── As Cast (#059) ─────────────────────────────────────────────────
+
+#[test]
+fn as_cast_expr() {
+    let input = "\
+package x;
+
+pub class C {
+    fn f(self, x: Int) -> Long {
+        x as Long
+    }
+}
+";
+    assert_format(input, input);
+}
+
+// ── Deref (#059) ───────────────────────────────────────────────────
+
+#[test]
+fn deref_expr() {
+    let input = "\
+package x;
+
+pub class C {
+    fn f(self, r: ref mut Int) -> Int {
+        *r
+    }
+}
+";
+    assert_format(input, input);
+}
+
+// ── Ref Mut (#059) ─────────────────────────────────────────────────
+
+#[test]
+fn ref_mut_create() {
+    let input = "\
+package x;
+
+pub class C {
+    fn f(self) -> ref mut Int {
+        ref mut 42
+    }
+}
+";
+    assert_format(input, input);
+}
+
 // ── Parse error handling ────────────────────────────────────────────
 
 #[test]

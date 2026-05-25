@@ -377,3 +377,121 @@ fn main() {
         "Rectangle should be in defs"
     );
 }
+
+// -- basic analysis: locals, return types, HIR defs (#042) -----------------
+
+#[test]
+fn analysis_finds_local_variables() {
+    use valen_lsp::server::collect_local_variables_pub;
+
+    let src = r#"
+fn main() {
+    let x = 42;
+    let y = "hello";
+    let z = x;
+}
+"#;
+    let (doc, _) = analyze_document(src, FileId(0));
+    assert!(doc.bodies.is_some());
+    let bodies = doc.bodies.as_ref().unwrap();
+
+    let marker = "let z";
+    let offset = src.find(marker).unwrap() as u32;
+    let locals = collect_local_variables_pub(bodies, offset, doc.hir.as_ref());
+    let names: Vec<&str> = locals.iter().map(|(n, _)| n.as_str()).collect();
+    assert!(names.contains(&"x"), "x should be visible, got: {names:?}");
+    assert!(names.contains(&"y"), "y should be visible, got: {names:?}");
+}
+
+#[test]
+fn analysis_fn_def_has_return_type() {
+    let src = "fn add(a: Int, b: Int) -> Int { a + b }";
+    let (doc, diags) = analyze_document(src, FileId(0));
+    assert!(diags.is_empty(), "no errors expected: {diags:?}");
+    let hir = doc.hir.as_ref().unwrap();
+    let add_def = hir
+        .defs
+        .values()
+        .find(|d| d.name == "add")
+        .expect("add should be in HIR defs");
+    if let valen_hir::DefKind::Fn(f) = &add_def.kind {
+        assert!(
+            f.return_ty != Some(valen_hir::TyRef::Prim(valen_hir::PrimTy::Unit)),
+            "add() should have a non-Unit return type"
+        );
+    } else {
+        panic!("add should be a function def");
+    }
+}
+
+#[test]
+fn analysis_trait_def_discovered() {
+    let src = r#"
+trait Greetable {
+    fn greet(self) -> String;
+}
+"#;
+    let (doc, _) = analyze_document(src, FileId(0));
+    let hir = doc.hir.as_ref().unwrap();
+    assert!(
+        hir.defs.values().any(|d| d.name == "Greetable"),
+        "Greetable trait should be in defs"
+    );
+}
+
+#[test]
+fn analysis_enum_variants_in_hir() {
+    let src = r#"
+enum Direction {
+    North,
+    South,
+    East,
+    West,
+}
+"#;
+    let (doc, _) = analyze_document(src, FileId(0));
+    let hir = doc.hir.as_ref().unwrap();
+    let dir_def = hir
+        .defs
+        .values()
+        .find(|d| d.name == "Direction")
+        .expect("Direction should be in defs");
+    if let valen_hir::DefKind::Enum(e) = &dir_def.kind {
+        assert_eq!(e.variants.len(), 4, "should have 4 variants");
+    } else {
+        panic!("Direction should be an enum def");
+    }
+}
+
+#[test]
+fn analysis_data_class_fields() {
+    let src = "data class Point(pub x: Int, pub y: Int);";
+    let (doc, _) = analyze_document(src, FileId(0));
+    let hir = doc.hir.as_ref().unwrap();
+    let point_def = hir
+        .defs
+        .values()
+        .find(|d| d.name == "Point")
+        .expect("Point should be in defs");
+    if let valen_hir::DefKind::DataClass(dc) = &point_def.kind {
+        assert_eq!(dc.ctor_params.len(), 2, "should have 2 ctor params");
+    } else {
+        panic!("Point should be a data class def");
+    }
+}
+
+#[test]
+fn analysis_impl_methods_in_type_methods() {
+    let src = r#"
+class Dog(pub name: String) {}
+impl Dog {
+    fn bark(self) -> String { self.name }
+}
+"#;
+    let (doc, _) = analyze_document(src, FileId(0));
+    let hir = doc.hir.as_ref().unwrap();
+    assert!(
+        hir.type_methods.contains_key("Dog"),
+        "Dog should have type_methods entry"
+    );
+}

@@ -1,0 +1,92 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"fn f() -> Int { unsafe 42 }\")"
+---
+=== AST ===
+[
+    Fn(
+        FnDecl {
+            annotations: [],
+            visibility: Internal,
+            name: "f",
+            generics: [],
+            params: [],
+            return_type: Some(
+                Path(
+                    TypePath {
+                        segments: [
+                            TypePathSegment {
+                                name: "Int",
+                                generics: [],
+                                span: Span {
+                                    start: 10,
+                                    end: 13,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ],
+                        span: Span {
+                            start: 10,
+                            end: 13,
+                            file_id: FileId(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+            ),
+            body: Some(
+                Block {
+                    stmts: [],
+                    tail: Some(
+                        Unsafe(
+                            UnsafeExpr {
+                                body: Literal(
+                                    Int(
+                                        42,
+                                        Span {
+                                            start: 23,
+                                            end: 25,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    ),
+                                ),
+                                span: Span {
+                                    start: 16,
+                                    end: 25,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    span: Span {
+                        start: 14,
+                        end: 27,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            is_open: false,
+            is_override: false,
+            is_abstract: false,
+            is_unsafe: false,
+            span: Span {
+                start: 0,
+                end: 27,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

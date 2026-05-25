@@ -1,0 +1,121 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"fn f() { unsafe { let x = 1; x } }\")"
+---
+=== AST ===
+[
+    Fn(
+        FnDecl {
+            annotations: [],
+            visibility: Internal,
+            name: "f",
+            generics: [],
+            params: [],
+            return_type: None,
+            body: Some(
+                Block {
+                    stmts: [],
+                    tail: Some(
+                        Unsafe(
+                            UnsafeExpr {
+                                body: Block(
+                                    Block {
+                                        stmts: [
+                                            Let(
+                                                LetStmt {
+                                                    mutable: false,
+                                                    name: "x",
+                                                    ty: None,
+                                                    init: Literal(
+                                                        Int(
+                                                            1,
+                                                            Span {
+                                                                start: 26,
+                                                                end: 27,
+                                                                file_id: FileId(
+                                                                    0,
+                                                                ),
+                                                            },
+                                                        ),
+                                                    ),
+                                                    span: Span {
+                                                        start: 18,
+                                                        end: 28,
+                                                        file_id: FileId(
+                                                            0,
+                                                        ),
+                                                    },
+                                                },
+                                            ),
+                                        ],
+                                        tail: Some(
+                                            Path(
+                                                Path {
+                                                    segments: [
+                                                        PathSegment {
+                                                            name: "x",
+                                                            double_colon: false,
+                                                            generics: [],
+                                                            span: Span {
+                                                                start: 29,
+                                                                end: 30,
+                                                                file_id: FileId(
+                                                                    0,
+                                                                ),
+                                                            },
+                                                        },
+                                                    ],
+                                                    span: Span {
+                                                        start: 29,
+                                                        end: 30,
+                                                        file_id: FileId(
+                                                            0,
+                                                        ),
+                                                    },
+                                                },
+                                            ),
+                                        ),
+                                        span: Span {
+                                            start: 16,
+                                            end: 32,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                span: Span {
+                                    start: 9,
+                                    end: 32,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    span: Span {
+                        start: 7,
+                        end: 34,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            is_open: false,
+            is_override: false,
+            is_abstract: false,
+            is_unsafe: false,
+            span: Span {
+                start: 0,
+                end: 34,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)
