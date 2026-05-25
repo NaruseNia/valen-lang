@@ -401,7 +401,7 @@ fn main() {
     let z = x;
 }
 "#;
-    let (doc, _) = analyze_document(src, FileId(0));
+    let (doc, _) = analyze_document_test(src, FileId(0));
     assert!(doc.bodies.is_some());
     let bodies = doc.bodies.as_ref().unwrap();
 
@@ -416,7 +416,7 @@ fn main() {
 #[test]
 fn analysis_fn_def_has_return_type() {
     let src = "fn add(a: Int, b: Int) -> Int { a + b }";
-    let (doc, diags) = analyze_document(src, FileId(0));
+    let (doc, diags) = analyze_document_test(src, FileId(0));
     assert!(diags.is_empty(), "no errors expected: {diags:?}");
     let hir = doc.hir.as_ref().unwrap();
     let add_def = hir
@@ -441,7 +441,7 @@ trait Greetable {
     fn greet(self) -> String;
 }
 "#;
-    let (doc, _) = analyze_document(src, FileId(0));
+    let (doc, _) = analyze_document_test(src, FileId(0));
     let hir = doc.hir.as_ref().unwrap();
     assert!(
         hir.defs.values().any(|d| d.name == "Greetable"),
@@ -459,7 +459,7 @@ enum Direction {
     West,
 }
 "#;
-    let (doc, _) = analyze_document(src, FileId(0));
+    let (doc, _) = analyze_document_test(src, FileId(0));
     let hir = doc.hir.as_ref().unwrap();
     let dir_def = hir
         .defs
@@ -476,7 +476,7 @@ enum Direction {
 #[test]
 fn analysis_data_class_fields() {
     let src = "data class Point(pub x: Int, pub y: Int);";
-    let (doc, _) = analyze_document(src, FileId(0));
+    let (doc, _) = analyze_document_test(src, FileId(0));
     let hir = doc.hir.as_ref().unwrap();
     let point_def = hir
         .defs
@@ -498,7 +498,7 @@ impl Dog {
     fn bark(self) -> String { self.name }
 }
 "#;
-    let (doc, _) = analyze_document(src, FileId(0));
+    let (doc, _) = analyze_document_test(src, FileId(0));
     let hir = doc.hir.as_ref().unwrap();
     assert!(
         hir.type_methods.contains_key("Dog"),
