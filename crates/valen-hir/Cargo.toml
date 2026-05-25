@@ -15,3 +15,4 @@ valen-parser = { workspace = true }
 smol_str = { workspace = true }
 indexmap = { workspace = true }
 ristretto_classfile = { workspace = true }
+zip = { workspace = true }

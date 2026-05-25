@@ -486,3 +486,28 @@ fn deref_expr() {
 fn ref_mut_create() {
     assert_snapshot!(check("fn f() { let r = ref mut 42; }"));
 }
+
+#[test]
+fn if_let_no_trailing_semi() {
+    assert_snapshot!(check(
+        "fn main() {
+    let x: Option<Int> = Some(42);
+    if let Some(v) = x {
+        v
+    }
+    let y = 1;
+}"
+    ));
+}
+
+#[test]
+fn while_let_no_trailing_semi() {
+    assert_snapshot!(check(
+        "fn main() {
+    while let Some(v) = iter.next() {
+        println(v);
+    }
+    let done = true;
+}"
+    ));
+}

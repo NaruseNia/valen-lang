@@ -259,7 +259,7 @@ fn type_path_span() {
         }],
         span: Span::new(0, 3, FileId(0)),
     });
-    assert_eq!(ty.span(), Some(Span::new(0, 3, FileId(0))));
+    assert_eq!(ty.span(), Span::new(0, 3, FileId(0)));
 }
 
 #[test]
@@ -276,7 +276,7 @@ fn type_nullable_span() {
         inner,
         span: Span::new(0, 7, FileId(0)),
     };
-    assert_eq!(ty.span(), Some(Span::new(0, 7, FileId(0))));
+    assert_eq!(ty.span(), Span::new(0, 7, FileId(0)));
 }
 
 #[test]
@@ -294,13 +294,13 @@ fn type_fn_span() {
         return_type: ret,
         span: Span::new(0, 15, FileId(0)),
     });
-    assert_eq!(ty.span(), Some(Span::new(0, 15, FileId(0))));
+    assert_eq!(ty.span(), Span::new(0, 15, FileId(0)));
 }
 
 #[test]
 fn type_tuple_span() {
     let ty = Type::Tuple(vec![], Span::new(0, 2, FileId(0)));
-    assert_eq!(ty.span(), Some(Span::new(0, 2, FileId(0))));
+    assert_eq!(ty.span(), Span::new(0, 2, FileId(0)));
 }
 
 #[test]
@@ -317,5 +317,5 @@ fn type_refmut_span() {
         inner,
         span: Span::new(0, 11, FileId(0)),
     };
-    assert_eq!(ty.span(), Some(Span::new(0, 11, FileId(0))));
+    assert_eq!(ty.span(), Span::new(0, 11, FileId(0)));
 }

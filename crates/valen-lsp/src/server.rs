@@ -52,6 +52,8 @@ pub struct ServerState {
     /// Counter for allocating new FileIds.
     next_file_id: u32,
     workspace_root: Option<std::path::PathBuf>,
+    /// Classpath entries for Java interop resolution (JDK jmods/jars).
+    classpath: Vec<std::path::PathBuf>,
 }
 
 impl ServerState {
@@ -62,6 +64,7 @@ impl ServerState {
             file_ids: HashMap::new(),
             next_file_id: 0,
             workspace_root: None,
+            classpath: valen_hir::classpath::detect_jdk_classpath(),
         };
         let mut router = Router::from_language_server(this);
         router.event(Self::on_event);
@@ -95,7 +98,7 @@ impl ServerState {
                 if let Ok(uri) = Url::from_file_path(&path) {
                     if !self.documents.contains_key(&uri) {
                         let file_id = self.file_id_for(&uri);
-                        let (doc_state, _) = analyze_document(&text, file_id);
+                        let (doc_state, _) = analyze_document(&text, file_id, &self.classpath);
                         self.documents.insert(uri, doc_state);
                     }
                 }
@@ -113,7 +116,7 @@ impl ServerState {
     //    not all open documents.
     fn analyze_and_publish(&mut self, uri: Url, text: String, version: i32) {
         let file_id = self.file_id_for(&uri);
-        let (doc_state, diags) = analyze_document(&text, file_id);
+        let (doc_state, diags) = analyze_document(&text, file_id, &self.classpath);
         self.documents.insert(uri.clone(), doc_state);
 
         // Re-analyze all other open documents so that cross-file dependents
@@ -128,7 +131,8 @@ impl ServerState {
             if let Some(doc) = self.documents.get(&other_uri) {
                 let other_text = doc.text.clone();
                 let other_fid = self.file_id_for(&other_uri);
-                let (new_state, new_diags) = analyze_document(&other_text, other_fid);
+                let (new_state, new_diags) =
+                    analyze_document(&other_text, other_fid, &self.classpath);
                 self.documents.insert(other_uri.clone(), new_state);
                 self.client
                     .publish_diagnostics(PublishDiagnosticsParams {
@@ -1090,6 +1094,42 @@ impl ServerState {
             });
         }
 
+        // Check foreign (Java) types
+        if let Some(info) = hir.foreign_types.get(name) {
+            let mut lines = vec![format!("```java\n// {}\nclass {name}", info.internal_name)];
+            if !info.type_params.is_empty() {
+                lines[0] = format!(
+                    "```java\n// {}\nclass {name}<{}>",
+                    info.internal_name,
+                    info.type_params.join(", ")
+                );
+            }
+            lines.push("```\n".to_string());
+            if !info.constructors.is_empty() {
+                lines.push(format!("**Constructors:** {}", info.constructors.len()));
+            }
+            if !info.methods.is_empty() {
+                let method_names: Vec<&str> = info
+                    .methods
+                    .iter()
+                    .map(|m| m.name.as_str())
+                    .take(10)
+                    .collect();
+                lines.push(format!("**Methods:** {}", method_names.join(", ")));
+                if info.methods.len() > 10 {
+                    lines.push(format!("… and {} more", info.methods.len() - 10));
+                }
+            }
+            let value = lines.join("\n");
+            return Some(Hover {
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value,
+                }),
+                range: None,
+            });
+        }
+
         // Search typed bodies for expression type info at cursor
         if let Some(bodies) = doc.bodies.as_ref() {
             if let Some(expr) = find_expr_at_offset(bodies, offset) {
@@ -1207,13 +1247,14 @@ impl ServerState {
 pub fn analyze_document(
     text: &str,
     file_id: valen_ast::FileId,
+    classpath: &[std::path::PathBuf],
 ) -> (DocumentState, Vec<async_lsp::lsp_types::Diagnostic>) {
     let line_index = convert::LineIndex::new(text);
 
     let parse_result = valen_parser::parse(text, file_id);
     let mut diags = convert::to_lsp_diagnostics(&parse_result.diagnostics, &line_index);
 
-    let resolve_result = valen_hir::resolve::resolve(&parse_result.items);
+    let resolve_result = valen_hir::resolve::resolve_with_classpath(&parse_result.items, classpath);
     diags.extend(convert::to_lsp_diagnostics(
         &resolve_result.diagnostics,
         &line_index,

@@ -1007,6 +1007,8 @@ impl Parser {
             let is_block_expr = matches!(
                 &expr,
                 Expr::If(_)
+                    | Expr::IfLet(_)
+                    | Expr::WhileLet(_)
                     | Expr::Match(_)
                     | Expr::Block(_)
                     | Expr::For(_)
