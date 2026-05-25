@@ -144,17 +144,50 @@ match color {
 - ライブラリ作者が「この sealed hierarchy は安定しており、permit 先が増えることはない」と保証する意思表示です
 - `@valen.Closed` がなければ、Java の `sealed` であっても `_` が必須です
 
+## for ループで Java コレクションを反復
+
+Java の `Iterable` を実装するコレクション（`ArrayList`, `HashSet`, `LinkedList` 等）は、`for` ループで直接反復できます。
+
+```valen
+import java.util.ArrayList;
+
+fn main() -> Unit {
+    let list = ArrayList();
+    list.add("hello");
+    list.add("world");
+    for item in list {
+        println(item);   // "hello", "world"
+    }
+}
+```
+
+内部的には `.iterator()` → `hasNext()` / `next()` のパターンに変換されます。要素型は `Any`（`java.lang.Object`）として扱われます。
+
+## println / print
+
+`println` と `print` は `Any` 型を受け取ります。文字列以外の型も渡せます。
+
+```valen
+println("text");         // String
+println(42);             // Int
+println(3.14);           // Double
+println(someObject);     // Any → Object.toString()
+```
+
 ## classpath の設定
 
 `valenc` は Java の `.class` ファイルを classpath から読み取り、Java 型の情報を取得します。
 
+**JDK 自動検出:** `--classpath` を指定しなくても、`JAVA_HOME` 環境変数から JDK の `java.base.jmod`（Java 9+）または `rt.jar`（Java 8）を自動検出します。`java.util.ArrayList` 等の標準ライブラリは追加設定なしで使えます。
+
 ```sh
+# 追加のライブラリを使う場合のみ --classpath を指定
 valenc compile --classpath lib/guava.jar:lib/commons.jar src/main.vln
 ```
 
-- `--classpath`（または `-cp`）で JAR ファイルやディレクトリを指定します
+- `--classpath` で JAR ファイル、JMOD ファイル、ディレクトリを指定できます
 - 複数のパスは `:`（Linux/macOS）または `;`（Windows）で区切ります
-- JDK の標準ライブラリ（`java.lang`、`java.util` 等）は自動的に参照できます
+- JDK 標準ライブラリは `JAVA_HOME` から自動検出されるため、通常は指定不要
 
 ## valen.collections — 標準コレクション
 
@@ -215,5 +248,7 @@ let first: Option<Int> = iter(numbers).find(|x: Int| -> Bool { x > 3 });
 | 名前の衝突回避 | `import ... as Alias;` |
 | Java メソッド呼び出し | `safe { javaMethod() }` → `Result<T, JavaException>` |
 | null の扱い | `safe` 内の戻り値は自動で `T?` |
+| コレクション反復 | `for item in list { ... }` |
+| 出力 | `println(anyValue)` — Any 型を受け取る |
 | sealed の網羅性 | `@valen.Closed` 付きなら exhaustive、なしなら `_` 必須 |
-| classpath 指定 | `valenc compile --classpath ...` |
+| classpath 指定 | `valenc compile --classpath ...`（JDK は自動検出） |

@@ -71,8 +71,15 @@ Valen コンパイラ `valenc` は Rust で実装され、`.vln` ソースから
 
 | ツール | 実装言語 | 範囲 |
 |--------|---------|------|
-| LSP | Rust | syntax error, type diagnostics, goto definition（MVP） |
+| LSP | Rust | diagnostics, goto-def, completion (./::/import), hover, inlay hints, cross-file resolution, classpath auto-detect |
 | valenfmt | Rust | brace style, indent, trailing semicolon（最小版） |
+
+## Classpath と Java 相互運用
+
+- `valen-hir/src/classpath.rs` が `.class` ファイルから型メタデータを抽出（メソッド、コンストラクタ、フィールド、ジェネリクス）
+- ディレクトリ、JAR、JMOD（4 byte magic prefix をスキップ）に対応
+- `JAVA_HOME` から `java.base.jmod`（Java 9+）または `rt.jar`（Java 8）を自動検出
+- トップレベル関数は `Main` クラス（旧称 `MainKt`）にまとめられ、`fn main()` がエントリポイント
 
 ## 制約・前提条件
 

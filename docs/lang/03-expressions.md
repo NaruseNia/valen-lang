@@ -42,7 +42,49 @@ fn abs(x: Int) -> Int {
 }
 ```
 
-## 3.4 break / continue
+## 3.4 for ループ
+
+`for` は Range またはコレクションを反復する。
+
+```valen
+// Range
+for i in 0..10 {
+    println(f"{i}");
+}
+
+// Java コレクション（Iterable を実装する型）
+import java.util.ArrayList;
+let list = ArrayList();
+list.add("hello");
+list.add("world");
+for item in list {
+    println(item);
+}
+```
+
+Java の `Iterable` を実装する型（`ArrayList`, `HashSet`, `LinkedList` 等）は直接 `for` で回せる。要素型は `Any`（`java.lang.Object`）。
+
+## 3.5 if let / while let
+
+`if let` と `while let` はパターンマッチと条件分岐を組み合わせた式。ブロック式として扱われるため、末尾のセミコロンは不要。
+
+```valen
+if let Some(value) = opt {
+    println(f"found: {value}");
+}
+
+if let Some(x) = a {
+    use_x(x);
+} else {
+    fallback();
+}
+
+while let Some(item) = iter.next() {
+    process(item);
+}
+```
+
+## 3.6 break / continue
 
 `break` と `continue` は `loop` / `while` / `for` の中で使える。
 
@@ -78,7 +120,7 @@ while condition() {
 }
 ```
 
-## 3.8 コレクションリテラル
+## 3.10 コレクションリテラル
 
 ### リストリテラル
 
@@ -98,7 +140,7 @@ let scores = #{"alice": 100, "bob": 85};  // Map<String, Int>
 let empty: Map<String, Int> = #{};        // 空マップは型アノテーション必須
 ```
 
-## 3.9 パイプライン演算子
+## 3.11 パイプライン演算子
 
 `|>` 演算子は最低優先度の中置演算子で、左辺の値を右辺の関数呼び出しの第1引数に挿入する。
 
@@ -110,7 +152,7 @@ data |> process(config) |> format(style);  // format(process(data, config), styl
 
 右辺は関数呼び出しまたは関数名でなければならない。チェーン可能（左結合）。
 
-## 3.10 `unsafe` ブロック式
+## 3.12 `unsafe` ブロック式
 
 `unsafe { expr }` は安全性保証を bypass するブロック式。最後の式の値を返す。短縮形 `unsafe expr` も使用可能。
 
@@ -121,7 +163,7 @@ let pos: Position = unsafe obj as Position;  // 短縮形
 
 詳細は §8.5 参照。
 
-## 3.11 `as` キャスト式
+## 3.13 `as` キャスト式
 
 `expr as Type` で型キャストを行う。数値 widening（`Int` → `Long` 等）は safe、ダウンキャストは `unsafe` 必須。
 
@@ -132,7 +174,7 @@ let pos: Position = unsafe { obj as Position };   // unsafe downcast
 
 詳細は §8.7 参照。
 
-## 3.12 deref 式
+## 3.14 deref 式
 
 `*expr` で `ref mut T` 型の参照を読み取る。`*expr = value` で参照先に書き込む。
 
@@ -142,7 +184,7 @@ let v = *r;       // 読み取り
 *r = v + 1;       // 書き込み
 ```
 
-## 3.13 `ref mut` 式
+## 3.15 `ref mut` 式
 
 `ref mut expr` でミュータブル参照を作成する。結果は `ref mut T` 型。
 

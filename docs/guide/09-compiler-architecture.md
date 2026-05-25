@@ -135,11 +135,15 @@ HIR の定義（`Def`）を codegen IR に変換します。codegen IR は以下
 
 ## LSP サーバー（valen-lsp）
 
-`async-lsp` crate を使った LSP サーバーです。MVP では以下の機能を提供します。
+`async-lsp` crate を使った LSP サーバーです。以下の機能を提供します。
 
-- シンタックスエラーの診断
-- 型エラーの診断
+- シンタックスエラー・型エラーの診断
 - Go to Definition
+- **クロスファイル解決** — ワークスペース内の全 `.vln` ファイルを結合して名前解決・型チェック
+- **Java 型の補完** — `.` で Java メソッド、`::` で static メソッド、`import` で Java クラス候補を表示
+- **Java 型の hover** — import された Java クラスの情報を表示
+- **Inlay hints** — 変数の型ヒント、パラメータ名ヒント
+- **Classpath 自動検出** — `JAVA_HOME` から JDK を検出し、Java 型情報を取得
 
 将来的には別リポジトリに分離する予定です。
 
