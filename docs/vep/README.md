@@ -84,3 +84,4 @@ Rejected
 | [VEP-033](accepted/VEP-033-operator-overload.md) | Operator overload (trait-based) | 1.5 | Must | Accepted |
 | [VEP-034](accepted/VEP-034-annotation.md) | Annotation (declaration + application + runtime) | 1.5 | Must | Accepted |
 | [VEP-035](draft/VEP-035-struct.md) | struct (value type) | 3 | Could | Draft |
+| [VEP-036](draft/VEP-036-inline-fn-reified-generics.md) | inline fn + reified generics | 2 | Must | Draft |
