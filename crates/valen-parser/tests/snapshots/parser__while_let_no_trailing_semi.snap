@@ -1,0 +1,257 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"fn main() {\n    while let Some(v) = iter.next() {\n        println(v);\n    }\n    let done = true;\n}\")"
+---
+=== AST ===
+[
+    Fn(
+        FnDecl {
+            annotations: [],
+            visibility: Internal,
+            name: "main",
+            generics: [],
+            params: [],
+            return_type: None,
+            body: Some(
+                Block {
+                    stmts: [
+                        ExprSemi(
+                            WhileLet(
+                                WhileLetExpr {
+                                    pattern: Struct(
+                                        StructPattern {
+                                            path: Path {
+                                                segments: [
+                                                    PathSegment {
+                                                        name: "Some",
+                                                        double_colon: false,
+                                                        generics: [],
+                                                        span: Span {
+                                                            start: 26,
+                                                            end: 30,
+                                                            file_id: FileId(
+                                                                0,
+                                                            ),
+                                                        },
+                                                    },
+                                                ],
+                                                span: Span {
+                                                    start: 26,
+                                                    end: 30,
+                                                    file_id: FileId(
+                                                        0,
+                                                    ),
+                                                },
+                                            },
+                                            fields: [
+                                                StructPatternField {
+                                                    name: "v",
+                                                    pattern: None,
+                                                    span: Span {
+                                                        start: 31,
+                                                        end: 32,
+                                                        file_id: FileId(
+                                                            0,
+                                                        ),
+                                                    },
+                                                },
+                                            ],
+                                            rest: false,
+                                            span: Span {
+                                                start: 26,
+                                                end: 33,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
+                                        },
+                                    ),
+                                    expr: MethodCall(
+                                        MethodCallExpr {
+                                            receiver: Path(
+                                                Path {
+                                                    segments: [
+                                                        PathSegment {
+                                                            name: "iter",
+                                                            double_colon: false,
+                                                            generics: [],
+                                                            span: Span {
+                                                                start: 36,
+                                                                end: 40,
+                                                                file_id: FileId(
+                                                                    0,
+                                                                ),
+                                                            },
+                                                        },
+                                                    ],
+                                                    span: Span {
+                                                        start: 36,
+                                                        end: 40,
+                                                        file_id: FileId(
+                                                            0,
+                                                        ),
+                                                    },
+                                                },
+                                            ),
+                                            method: "next",
+                                            generics: [],
+                                            args: [],
+                                            span: Span {
+                                                start: 36,
+                                                end: 47,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
+                                        },
+                                    ),
+                                    body: Block {
+                                        stmts: [
+                                            ExprSemi(
+                                                Call(
+                                                    CallExpr {
+                                                        callee: Path(
+                                                            Path {
+                                                                segments: [
+                                                                    PathSegment {
+                                                                        name: "println",
+                                                                        double_colon: false,
+                                                                        generics: [],
+                                                                        span: Span {
+                                                                            start: 58,
+                                                                            end: 65,
+                                                                            file_id: FileId(
+                                                                                0,
+                                                                            ),
+                                                                        },
+                                                                    },
+                                                                ],
+                                                                span: Span {
+                                                                    start: 58,
+                                                                    end: 65,
+                                                                    file_id: FileId(
+                                                                        0,
+                                                                    ),
+                                                                },
+                                                            },
+                                                        ),
+                                                        args: [
+                                                            CallArg {
+                                                                name: None,
+                                                                value: Path(
+                                                                    Path {
+                                                                        segments: [
+                                                                            PathSegment {
+                                                                                name: "v",
+                                                                                double_colon: false,
+                                                                                generics: [],
+                                                                                span: Span {
+                                                                                    start: 66,
+                                                                                    end: 67,
+                                                                                    file_id: FileId(
+                                                                                        0,
+                                                                                    ),
+                                                                                },
+                                                                            },
+                                                                        ],
+                                                                        span: Span {
+                                                                            start: 66,
+                                                                            end: 67,
+                                                                            file_id: FileId(
+                                                                                0,
+                                                                            ),
+                                                                        },
+                                                                    },
+                                                                ),
+                                                                span: Span {
+                                                                    start: 66,
+                                                                    end: 67,
+                                                                    file_id: FileId(
+                                                                        0,
+                                                                    ),
+                                                                },
+                                                            },
+                                                        ],
+                                                        span: Span {
+                                                            start: 58,
+                                                            end: 68,
+                                                            file_id: FileId(
+                                                                0,
+                                                            ),
+                                                        },
+                                                    },
+                                                ),
+                                            ),
+                                        ],
+                                        tail: None,
+                                        span: Span {
+                                            start: 48,
+                                            end: 75,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    },
+                                    span: Span {
+                                        start: 16,
+                                        end: 75,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                            ),
+                        ),
+                        Let(
+                            LetStmt {
+                                mutable: false,
+                                name: "done",
+                                ty: None,
+                                init: Literal(
+                                    Bool(
+                                        true,
+                                        Span {
+                                            start: 91,
+                                            end: 95,
+                                            file_id: FileId(
+                                                0,
+                                            ),
+                                        },
+                                    ),
+                                ),
+                                span: Span {
+                                    start: 80,
+                                    end: 96,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ],
+                    tail: None,
+                    span: Span {
+                        start: 10,
+                        end: 98,
+                        file_id: FileId(
+                            0,
+                        ),
+                    },
+                },
+            ),
+            is_open: false,
+            is_override: false,
+            is_abstract: false,
+            is_unsafe: false,
+            span: Span {
+                start: 0,
+                end: 98,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)
