@@ -358,12 +358,8 @@ impl<'a> ExprLowering<'a> {
                 }
             }
         }
-        // Check foreign types (Java interfaces loaded from classpath)
         if let Some(foreign) = self.hir.foreign_types.get(type_name) {
-            // If the foreign type has no super_class, it's likely an interface
-            // (Java interfaces have java/lang/Object as super but are flagged differently;
-            // however, for our purposes, check if any Valen trait references it)
-            let _ = foreign;
+            return foreign.is_interface;
         }
         false
     }
@@ -760,9 +756,7 @@ impl<'a> ExprLowering<'a> {
                 }
                 // Constructor call: Meters(10.0), Widget(...), ArrayList(), etc.
                 if let Ty::Named(n) = result_ty {
-                    let is_ctor = self.is_newtype_or_class_ctor(n)
-                        || self.hir.foreign_types.contains_key(n.as_str());
-                    if is_ctor {
+                    if self.is_newtype_or_class_ctor(n) {
                         let owner = crate::descriptor::resolve_type_internal_name(
                             n,
                             self.pkg,
@@ -777,6 +771,33 @@ impl<'a> ExprLowering<'a> {
                             owner,
                             name: "<init>".to_string(),
                             params: param_tys,
+                            ret: JvmType::Void,
+                        });
+                        return;
+                    }
+                    // Foreign (Java) constructor — use actual Java constructor descriptor
+                    if let Some(info) = self.hir.foreign_types.get(n.as_str()) {
+                        let owner = info.internal_name.clone();
+                        let ctor_params = info
+                            .constructors
+                            .iter()
+                            .find(|c| c.params.len() == args.len())
+                            .map(|c| {
+                                c.params
+                                    .iter()
+                                    .map(|p| tyref_to_jvm(p, self.pkg, &self.hir.imports))
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or(param_tys);
+                        self.ops.push(JvmOp::New(owner.clone()));
+                        self.ops.push(JvmOp::Dup);
+                        for arg in args {
+                            self.lower_expr(arg);
+                        }
+                        self.ops.push(JvmOp::InvokeSpecial {
+                            owner,
+                            name: "<init>".to_string(),
+                            params: ctor_params,
                             ret: JvmType::Void,
                         });
                         return;
@@ -2019,7 +2040,11 @@ impl<'a> ExprLowering<'a> {
             Ty::Generic(n, _) => n.as_str(),
             _ => return false,
         };
-        self.hir.foreign_types.contains_key(name)
+        self.hir.foreign_types.get(name).is_some_and(|info| {
+            info.methods
+                .iter()
+                .any(|m| m.name == "iterator" && m.params.is_empty())
+        })
     }
 
     /// Emits a for-loop over a Java Iterable: calls .iterator(), then

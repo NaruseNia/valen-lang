@@ -3481,8 +3481,14 @@ impl<'hir> TypeChecker<'hir> {
                 args[0].clone()
             }
             Ty::Error => Ty::Error,
-            // Java collections (ArrayList, HashSet, etc.) without generic args
-            Ty::Named(n) if self.hir.foreign_types.contains_key(n.as_str()) => {
+            // Java Iterable types (ArrayList, HashSet, etc.) — must have iterator() method
+            Ty::Named(n)
+                if self.hir.foreign_types.get(n.as_str()).is_some_and(|info| {
+                    info.methods
+                        .iter()
+                        .any(|m| m.name == "iterator" && m.params.is_empty())
+                }) =>
+            {
                 Ty::Named(SmolStr::from("Any"))
             }
             other => {
@@ -4593,6 +4599,7 @@ mod tests {
                 permitted_subclasses: vec![],
                 has_valen_closed: false,
                 type_params: vec![],
+                is_interface: false,
             },
         );
         let r = type_check(&resolved.hir, &parsed.items);
