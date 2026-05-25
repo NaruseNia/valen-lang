@@ -28,7 +28,7 @@ cd -
 ```bash
 cd examples/type-safe-builder
 JAVA_HOME=$(mise where java 21.0.2) ./gradlew compileValen
-java -cp build/classes/valen/main builder.MainKt
+java -cp build/classes/valen/main builder.Main
 ```
 
 ### Expected output (type-safe-builder)

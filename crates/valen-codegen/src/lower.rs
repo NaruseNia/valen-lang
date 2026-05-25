@@ -124,8 +124,8 @@ pub fn lower_hir(
 
 /// Generates a synthetic class hosting top-level functions as `public static` methods.
 ///
-/// The class name is derived from the package name (e.g. `com/example/MainKt`) or
-/// defaults to `MainKt` if no package is declared. If one of the functions is named
+/// The class name is derived from the package name (e.g. `com/example/Main`) or
+/// defaults to `Main` if no package is declared. If one of the functions is named
 /// `main` with no parameters, a JVM-compatible entry point wrapper
 /// `main([Ljava/lang/String;)V` is also generated.
 fn lower_top_level_functions(
@@ -134,7 +134,7 @@ fn lower_top_level_functions(
     pkg: Option<&[SmolStr]>,
 ) -> JvmClass {
     let class_name = {
-        let base = "MainKt";
+        let base = "Main";
         class_internal_name(base, pkg)
     };
 
@@ -256,7 +256,7 @@ fn lower_top_level_functions(
         interfaces: vec![],
         fields: vec![],
         methods,
-        source_file: Some("MainKt.vln".to_string()),
+        source_file: Some("Main.vln".to_string()),
         permitted_subclasses: vec![],
         is_record: false,
         bootstrap_methods: all_bootstrap_methods,
