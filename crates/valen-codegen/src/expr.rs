@@ -222,6 +222,12 @@ impl<'a> ExprLowering<'a> {
         self.ops.push(JvmOp::Frame { locals, stack });
     }
 
+    /// Emits a frame using a previously captured locals snapshot instead of the
+    /// current live locals. Used after `pop_scope()` to avoid stale slot gaps.
+    fn emit_frame_with_locals(&mut self, locals: Vec<JvmType>, stack: Vec<JvmType>) {
+        self.ops.push(JvmOp::Frame { locals, stack });
+    }
+
     fn pop_if_needed(&mut self, ty: &Ty) {
         if matches!(ty, Ty::Prim(PrimTy::Unit | PrimTy::Nothing) | Ty::Error) {
             return;
@@ -1176,6 +1182,8 @@ impl<'a> ExprLowering<'a> {
         let else_label = self.alloc_label();
         let end_label = self.alloc_label();
 
+        let pre_if_locals = self.locals_snapshot();
+
         self.lower_expr(cond);
         self.ops.push(JvmOp::IfEq(else_label));
         self.push_scope();
@@ -1187,7 +1195,7 @@ impl<'a> ExprLowering<'a> {
         }
 
         self.ops.push(JvmOp::Label(else_label));
-        self.emit_frame(vec![]);
+        self.emit_frame_with_locals(pre_if_locals.clone(), vec![]);
 
         if let Some(else_expr) = else_branch {
             self.push_scope();
@@ -1200,7 +1208,7 @@ impl<'a> ExprLowering<'a> {
             } else {
                 vec![jvm_result]
             };
-            self.emit_frame(end_stack);
+            self.emit_frame_with_locals(pre_if_locals, end_stack);
         }
     }
 
@@ -1212,12 +1220,13 @@ impl<'a> ExprLowering<'a> {
     ) {
         self.lower_expr(scrutinee);
         let scrutinee_ty = self.ty_to_jvm(&scrutinee.ty);
-        let temp_slot = self.next_slot;
-        self.next_slot += scrutinee_ty.slot_count();
+        let temp_slot = self.alloc_local(SmolStr::from("__match_scrutinee"), scrutinee_ty.clone());
         self.ops
             .push(JvmOp::StoreLocal(temp_slot, scrutinee_ty.clone()));
 
         let end_label = self.alloc_label();
+
+        let pre_match_locals = self.locals_snapshot();
 
         for (i, arm) in arms.iter().enumerate() {
             let is_last = i == arms.len() - 1;
@@ -1240,7 +1249,7 @@ impl<'a> ExprLowering<'a> {
             if !is_last {
                 self.ops.push(JvmOp::Goto(end_label));
                 self.ops.push(JvmOp::Label(next_arm));
-                self.emit_frame(vec![]);
+                self.emit_frame_with_locals(pre_match_locals.clone(), vec![]);
             }
         }
 
@@ -1251,7 +1260,7 @@ impl<'a> ExprLowering<'a> {
         } else {
             vec![jvm_result]
         };
-        self.emit_frame(end_stack);
+        self.emit_frame_with_locals(pre_match_locals, end_stack);
     }
 
     /// Lower `let Pattern = expr else { diverge };` into JVM bytecode.
@@ -1272,14 +1281,17 @@ impl<'a> ExprLowering<'a> {
         // Evaluate the scrutinee and store in a temp slot
         self.lower_expr(scrutinee);
         let scrutinee_ty = self.ty_to_jvm(&scrutinee.ty);
-        let temp_slot = self.next_slot;
-        self.next_slot += scrutinee_ty.slot_count();
+        let temp_slot =
+            self.alloc_local(SmolStr::from("__let_else_scrutinee"), scrutinee_ty.clone());
         self.ops
             .push(JvmOp::StoreLocal(temp_slot, scrutinee_ty.clone()));
 
         // Allocate labels
         let else_label = self.alloc_label();
         let continue_label = self.alloc_label();
+
+        // Snapshot before pattern bindings — else branch sees pre-pattern state
+        let pre_pattern_locals = self.locals_snapshot();
 
         // Check the pattern — if it fails, jump to else_label.
         // Do NOT wrap in push_scope/pop_scope: pattern bindings must
@@ -1291,7 +1303,7 @@ impl<'a> ExprLowering<'a> {
 
         // Else block — executes when pattern doesn't match (diverges)
         self.ops.push(JvmOp::Label(else_label));
-        self.emit_frame(vec![]);
+        self.emit_frame_with_locals(pre_pattern_locals, vec![]);
         self.lower_body(else_body);
 
         // Continue label — after the pattern match succeeded
@@ -3011,13 +3023,14 @@ impl<'a> ExprLowering<'a> {
     ) {
         self.lower_expr(scrutinee);
         let scrutinee_ty = self.ty_to_jvm(&scrutinee.ty);
-        let temp_slot = self.next_slot;
-        self.next_slot += scrutinee_ty.slot_count();
+        let temp_slot = self.alloc_local(SmolStr::from("__if_let_scrutinee"), scrutinee_ty.clone());
         self.ops
             .push(JvmOp::StoreLocal(temp_slot, scrutinee_ty.clone()));
 
         let else_label = self.alloc_label();
         let end_label = self.alloc_label();
+
+        let pre_scope_locals = self.locals_snapshot();
 
         self.push_scope();
         self.lower_pattern_check(pattern, temp_slot, &scrutinee_ty, else_label);
@@ -3026,7 +3039,7 @@ impl<'a> ExprLowering<'a> {
         self.ops.push(JvmOp::Goto(end_label));
 
         self.ops.push(JvmOp::Label(else_label));
-        self.emit_frame(vec![]);
+        self.emit_frame_with_locals(pre_scope_locals.clone(), vec![]);
         if let Some(else_expr) = else_branch {
             self.lower_expr(else_expr);
         }
@@ -3038,7 +3051,7 @@ impl<'a> ExprLowering<'a> {
         } else {
             vec![jvm_result]
         };
-        self.emit_frame(end_stack);
+        self.emit_frame_with_locals(pre_scope_locals, end_stack);
     }
 
     fn lower_while_let(
@@ -3050,13 +3063,15 @@ impl<'a> ExprLowering<'a> {
         let loop_start = self.alloc_label();
         let loop_end = self.alloc_label();
 
+        let pre_loop_locals = self.locals_snapshot();
+
         self.ops.push(JvmOp::Label(loop_start));
-        self.emit_frame(vec![]);
+        self.emit_frame_with_locals(pre_loop_locals.clone(), vec![]);
 
         self.lower_expr(scrutinee);
         let scrutinee_ty = self.ty_to_jvm(&scrutinee.ty);
-        let temp_slot = self.next_slot;
-        self.next_slot += scrutinee_ty.slot_count();
+        let temp_slot =
+            self.alloc_local(SmolStr::from("__while_let_scrutinee"), scrutinee_ty.clone());
         self.ops
             .push(JvmOp::StoreLocal(temp_slot, scrutinee_ty.clone()));
 
@@ -3072,7 +3087,7 @@ impl<'a> ExprLowering<'a> {
         self.ops.push(JvmOp::Goto(loop_start));
 
         self.ops.push(JvmOp::Label(loop_end));
-        self.emit_frame(vec![]);
+        self.emit_frame_with_locals(pre_loop_locals, vec![]);
     }
 
     fn lower_try(&mut self, inner: &TypedExpr, is_option: bool, result_ty: &Ty) {
