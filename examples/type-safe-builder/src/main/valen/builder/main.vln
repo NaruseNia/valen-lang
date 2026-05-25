@@ -1,0 +1,76 @@
+package builder;
+
+/// Demonstrates: newtype (Meters/Pixels/Seconds), derives, fluent builder,
+/// ref-mut, unsafe/safe blocks, variant shorthand, f-string, pattern matching.
+fn main() -> Unit {
+    println("=== Type-safe builder ===");
+
+    let button = WidgetBuilder::create("submit-btn")
+        .at(Meters(10.0), Meters(20.0))
+        .withSize(Meters(5.0), Meters(2.0))
+        .withBackground(Color(r = 0, g = 120, b = 215))
+        .withBorder(BorderStyle::Solid(
+            width = Pixels(2.0),
+            color = Color(r = 0, g = 0, b = 0),
+        ))
+        .withAlignment(Align::Center)
+        .build();
+
+    println(f"  built: {button.name}");
+    println(f"  position: ({button.position.x}, {button.position.y})");
+    println(f"  size: {button.size.width} x {button.size.height}");
+    println(f"  visible: {button.visible}, opacity: {button.opacity}");
+
+    match button.border {
+        .Solid(width, color) => {
+            println(f"  border: solid {width}px rgb({color.r}, {color.g}, {color.b})");
+        },
+        .Dashed(width, color, gap) => {
+            println(f"  border: dashed {width}px gap={gap}px");
+        },
+        .None => println("  border: none"),
+    }
+
+    match button.alignment {
+        .Center => println("  alignment: centered"),
+        _ => println("  alignment: other"),
+    }
+
+    println("");
+    println("=== Hidden overlay ===");
+
+    let overlay = WidgetBuilder::create("loading-overlay")
+        .withSize(Meters(100.0), Meters(100.0))
+        .withBackground(Color(r = 0, g = 0, b = 0))
+        .withOpacity(0.5)
+        .hidden()
+        .build();
+
+    if overlay.visible {
+        println("  overlay is visible");
+    } else {
+        println(f"  overlay is hidden (opacity={overlay.opacity})");
+    }
+
+    println("");
+    println("=== ref-mut counter ===");
+
+    let mut count = 0;
+    let r = ref mut count;
+    Counter::increment(r);
+    Counter::increment(r);
+    Counter::incrementBy(r, 3);
+    println(f"  counter after 2 + 3 increments: {*r}");
+
+    println("");
+    println("=== Unsafe cast demo ===");
+
+    let safeValue: Long = 42 as Long;
+    println(f"  safe widening cast: 42 as Long = {safeValue}");
+
+    let unsafeValue: Int = unsafe { 999L as Int };
+    println(f"  unsafe narrowing cast: 999L as Int = {unsafeValue}");
+
+    println("");
+    println("builder demo complete");
+}

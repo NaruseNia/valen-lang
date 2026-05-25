@@ -1,0 +1,25 @@
+package calc;
+
+/// Binary operators for arithmetic expressions.
+pub enum BinOp derives(Eq, Display) {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+/// Unary operators.
+pub enum UnaryOp derives(Eq, Display) {
+    Neg,
+    Abs,
+}
+
+/// An arithmetic expression tree (AST).
+/// Demonstrates Valen's ADT enums with recursive structure.
+pub enum Expr derives(Display) {
+    Num(value: Double),
+    Binary(op: BinOp, left: Expr, right: Expr),
+    Unary(op: UnaryOp, operand: Expr),
+    Let(name: String, value: Expr, body: Expr),
+    Var(name: String),
+}

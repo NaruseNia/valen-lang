@@ -304,6 +304,22 @@ impl<'a> ExprLowering<'a> {
         })
     }
 
+    fn is_enum_variant(&self, enum_name: &str, variant_name: &str) -> bool {
+        use valen_hir::DefKind;
+        self.hir.defs.values().any(|d| {
+            d.name == enum_name
+                && matches!(&d.kind, DefKind::Enum(e) if e.variants.iter().any(|v| v.name == variant_name))
+        })
+    }
+
+    fn is_enum_unit_variant(&self, enum_name: &str, variant_name: &str) -> bool {
+        use valen_hir::DefKind;
+        self.hir.defs.values().any(|d| {
+            d.name == enum_name
+                && matches!(&d.kind, DefKind::Enum(e) if e.variants.iter().any(|v| v.name == variant_name && v.fields.is_empty()))
+        })
+    }
+
     fn resolve_type_alias(&self, name: &str) -> Option<Ty> {
         use valen_hir::DefKind;
         for def in self.hir.defs.values() {
@@ -654,6 +670,77 @@ impl<'a> ExprLowering<'a> {
                 if matches!(callee.ty, Ty::Fn(_, _)) {
                     self.lower_lambda_call(callee, args, result_ty);
                     return;
+                }
+                // Qualified static calls: "ClassName::method" → invokestatic on that class
+                // Must be checked BEFORE constructor detection, since
+                // WidgetBuilder::create() returns WidgetBuilder but is not a ctor.
+                if let Some((class_name, method_name)) = name.split_once("::") {
+                    let owner = crate::descriptor::resolve_type_internal_name(
+                        class_name,
+                        self.pkg,
+                        &self.hir.imports,
+                    );
+                    // Unit enum variant: EnumType::Variant with no args
+                    // → getstatic EnumType$Variant.INSTANCE
+                    if args.is_empty() && self.is_enum_unit_variant(class_name, method_name)
+                    {
+                        let variant_class = format!("{}${}", owner, method_name);
+                        self.ops.push(JvmOp::GetStatic {
+                            owner: variant_class.clone(),
+                            name: "INSTANCE".to_string(),
+                            descriptor: JvmType::Object(variant_class),
+                        });
+                        return;
+                    }
+                    // Enum variant with payload: EnumType::Variant(args...)
+                    // → new EnumType$Variant + invokespecial <init>
+                    if self.is_enum_variant(class_name, method_name) {
+                        let variant_class = format!("{}${}", owner, method_name);
+                        self.ops.push(JvmOp::New(variant_class.clone()));
+                        self.ops.push(JvmOp::Dup);
+                        for arg in args {
+                            self.lower_expr(arg);
+                        }
+                        self.ops.push(JvmOp::InvokeSpecial {
+                            owner: variant_class,
+                            name: "<init>".to_string(),
+                            params: param_tys,
+                            ret: JvmType::Void,
+                        });
+                        return;
+                    }
+                    for arg in args {
+                        self.lower_expr(arg);
+                    }
+                    self.ops.push(JvmOp::InvokeStatic {
+                        owner,
+                        name: method_name.to_string(),
+                        params: param_tys,
+                        ret: ret_ty,
+                    });
+                    return;
+                }
+                // Constructor call: Meters(10.0), Widget(...), etc.
+                if let Ty::Named(n) = result_ty {
+                    if self.is_newtype_or_class_ctor(n) {
+                        let owner = crate::descriptor::resolve_type_internal_name(
+                            n,
+                            self.pkg,
+                            &self.hir.imports,
+                        );
+                        self.ops.push(JvmOp::New(owner.clone()));
+                        self.ops.push(JvmOp::Dup);
+                        for arg in args {
+                            self.lower_expr(arg);
+                        }
+                        self.ops.push(JvmOp::InvokeSpecial {
+                            owner,
+                            name: "<init>".to_string(),
+                            params: param_tys,
+                            ret: JvmType::Void,
+                        });
+                        return;
+                    }
                 }
                 for arg in args {
                     self.lower_expr(arg);
@@ -1422,10 +1509,13 @@ impl<'a> ExprLowering<'a> {
                                 )
                             })
                     };
-                    self.ops.push(JvmOp::GetField {
+                    // Enum variant fields are record components (private) —
+                    // use accessor method instead of direct field access.
+                    self.ops.push(JvmOp::InvokeVirtual {
                         owner: variant_internal.clone(),
                         name: actual_field_name,
-                        descriptor: field_ty.clone(),
+                        params: vec![],
+                        ret: field_ty.clone(),
                     });
                     if let Some(pat) = &field.pattern {
                         let inner_slot = self.next_slot;
@@ -1597,10 +1687,11 @@ impl<'a> ExprLowering<'a> {
                                     )
                                 })
                         };
-                        self.ops.push(JvmOp::GetField {
+                        self.ops.push(JvmOp::InvokeVirtual {
                             owner: variant_internal.clone(),
                             name: actual_field_name,
-                            descriptor: field_ty.clone(),
+                            params: vec![],
+                            ret: field_ty.clone(),
                         });
                         if let Some(pat) = &field.pattern {
                             let inner_slot = self.next_slot;

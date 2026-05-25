@@ -1,26 +1,24 @@
 package ecs;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.HashSet;
 
 /// The central ECS container. Manages entities, components, and systems.
 pub class World(
     pub mut allocator: EntityAllocator,
     pub mut components: ComponentRegistry,
     pub mut events: EventQueue,
-    pub mut alive: java.util.HashSet,
+    pub mut alive: HashSet,
 ) {
-    /// Create an empty world.
     fn create() -> World {
         World(
             allocator = EntityAllocator::create(),
             components = ComponentRegistry::create(),
             events = EventQueue::create(),
-            alive = java.util.HashSet(),
+            alive = HashSet(),
         )
     }
 
-    /// Spawn a new entity and return it.
     fn spawn(mut self) -> Entity {
         let entity = self.allocator.allocate();
         self.alive.add(entity.id);
@@ -28,7 +26,6 @@ pub class World(
         entity
     }
 
-    /// Despawn an entity, removing all its components.
     fn despawn(mut self, entity: Entity) -> Unit {
         self.alive.remove(entity.id);
         self.components.removeAll(entity);
@@ -36,43 +33,35 @@ pub class World(
         self.events.push(Event::EntityDespawned(entity = entity));
     }
 
-    /// Check if an entity is alive.
     fn isAlive(self, entity: Entity) -> Bool {
         self.alive.contains(entity.id)
     }
 
-    /// Add a component to an entity.
     fn addComponent(mut self, entity: Entity, typeName: String, component: java.lang.Object) -> Unit {
         self.components.addComponent(entity, typeName, component);
     }
 
-    /// Get a component from an entity.
     fn getComponent(self, entity: Entity, typeName: String) -> Option<java.lang.Object> {
         self.components.getComponent(entity, typeName)
     }
 
-    /// Remove a component from an entity.
     fn removeComponent(mut self, entity: Entity, typeName: String) -> Option<java.lang.Object> {
         self.components.removeComponent(entity, typeName)
     }
 
-    /// Check if an entity has a component.
     fn hasComponent(self, entity: Entity, typeName: String) -> Bool {
         self.components.hasComponent(entity, typeName)
     }
 
-    /// Query entities matching a filter.
     fn query(self, filter: QueryFilter) -> ArrayList {
         let engine = QueryEngine(registry = self.components);
         engine.query(filter)
     }
 
-    /// Get the total number of alive entities.
     fn entityCount(self) -> Int {
         self.alive.size()
     }
 
-    /// Drain all pending events.
     fn drainEvents(mut self) -> ArrayList {
         self.events.drain()
     }

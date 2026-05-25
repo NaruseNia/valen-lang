@@ -8,32 +8,24 @@ pub class Scheduler(pub mut entries: ArrayList) {
         Scheduler(entries = ArrayList())
     }
 
-    /// Register a system with this scheduler.
     fn addSystem(mut self, name: String, phase: SystemPhase) -> Unit {
         self.entries.add(SystemEntry(name = name, phase = phase, enabled = true));
     }
 
-    /// Run all enabled systems for one frame.
     fn tick(self, world: World, dt: Float) -> Unit {
         let mut i = 0;
         while i < self.entries.size() {
             let entry = self.entries.get(i);
             if entry.enabled {
-                match entry.phase {
-                    SystemPhase::PreUpdate => {},
-                    SystemPhase::Update => {},
-                    SystemPhase::PostUpdate => {},
-                    SystemPhase::Render => {},
-                }
+                println(f"[tick] running system: {entry.name}");
             }
             i = i + 1;
         }
     }
 }
 
-/// Example simulation demonstrating the ECS in action.
+/// Example simulation demonstrating the ECS with modern Valen features.
 pub class Simulation {
-    /// Set up a sample world with some entities and components.
     fn setup(world: World) -> Unit {
         let player = world.spawn();
         world.addComponent(player, "Position", Position(x = 0.0f, y = 0.0f));
@@ -41,6 +33,7 @@ pub class Simulation {
         world.addComponent(player, "Health", Health(current = 100, max = 100));
         world.addComponent(player, "BoundingBox", BoundingBox(width = 2.0f, height = 2.0f));
         world.addComponent(player, "Sprite", Sprite(name = "player", layer = 10));
+        println(f"spawned player entity {player.id}");
 
         let enemy1 = world.spawn();
         world.addComponent(enemy1, "Position", Position(x = 5.0f, y = 3.0f));
@@ -58,9 +51,10 @@ pub class Simulation {
         let obstacle = world.spawn();
         world.addComponent(obstacle, "Position", Position(x = 3.0f, y = 1.0f));
         world.addComponent(obstacle, "BoundingBox", BoundingBox(width = 4.0f, height = 4.0f));
+
+        println(f"world ready: {world.entityCount()} entities");
     }
 
-    /// Run the simulation for a given number of frames.
     fn run(frames: Int) -> World {
         let world = World::create();
         Simulation::setup(world);
@@ -68,84 +62,86 @@ pub class Simulation {
         let dt = 0.016f;
         let mut frame = 0;
         while frame < frames {
+            println(f"--- frame {frame} ---");
             Simulation::step(world, dt);
+            Simulation::processEvents(world);
             frame = frame + 1;
         }
         world
     }
 
-    /// Execute one simulation frame.
+    /// Movement step using if-let to flatten nested Option matching.
     fn step(world: World, dt: Float) -> Unit {
         let required = ArrayList();
         required.add("Position");
         required.add("Velocity");
-        let filter = QueryFilter::All(components = required);
-        let results = world.query(filter);
+        let results = world.query(QueryFilter::All(components = required));
 
         let mut i = 0;
         while i < results.size() {
             let qr = results.get(i);
-            match world.getComponent(qr.entity, "Position") {
-                Option::Some(posObj) => {
-                    match world.getComponent(qr.entity, "Velocity") {
-                        Option::Some(velObj) => {
-                            let pos = posObj;
-                            let vel = velObj;
-                            let px = 1.0f;
-                            let py = 1.0f;
-                        },
-                        Option::None => {},
-                    }
-                },
-                Option::None => {},
+            if let Some(posObj) = world.getComponent(qr.entity, "Position") {
+                if let Some(velObj) = world.getComponent(qr.entity, "Velocity") {
+                    println(f"  move entity {qr.entity.id}");
+                }
             }
             i = i + 1;
         }
     }
 
-    /// Query example: find all entities with health below a threshold.
+    /// Find entities with health below threshold using let-else.
     fn findDamaged(world: World, threshold: Int) -> ArrayList {
         let required = ArrayList();
         required.add("Health");
-        let filter = QueryFilter::All(components = required);
-        let results = world.query(filter);
+        let results = world.query(QueryFilter::All(components = required));
 
         let damaged = ArrayList();
         let mut i = 0;
         while i < results.size() {
             let qr = results.get(i);
-            match world.getComponent(qr.entity, "Health") {
-                Option::Some(health) => {
-                    if health.current < threshold {
-                        damaged.add(qr.entity);
-                    }
-                },
-                Option::None => {},
+            if let Some(health) = world.getComponent(qr.entity, "Health") {
+                if health.current < threshold {
+                    println(f"  damaged: entity {qr.entity.id} hp={health.current}/{health.max}");
+                    damaged.add(qr.entity);
+                }
             }
             i = i + 1;
         }
         damaged
     }
 
-    /// Event handling example: process all pending events via match.
+    /// Event handling using variant shorthand in match arms.
     fn processEvents(world: World) -> Unit {
         let events = world.drainEvents();
         let mut i = 0;
         while i < events.size() {
             let event = events.get(i);
             match event {
-                Event::EntitySpawned(entity) => {},
-                Event::EntityDespawned(entity) => {},
-                Event::Collision(a, b) => {
+                .EntitySpawned(entity) => {
+                    println(f"  event: entity {entity.id} spawned");
+                },
+                .EntityDespawned(entity) => {
+                    println(f"  event: entity {entity.id} despawned");
+                },
+                .Collision(a, b) => {
+                    println(f"  event: collision between {a.id} and {b.id}");
                     world.events.push(Event::DamageTaken(target = a, amount = 10));
                     world.events.push(Event::DamageTaken(target = b, amount = 10));
                 },
-                Event::DamageTaken(target, amount) => {},
-                Event::EntityDied(entity) => {
+                .DamageTaken(target, amount) => {
+                    println(f"  event: entity {target.id} took {amount} damage");
+                },
+                .EntityDied(entity) => {
+                    println(f"  event: entity {entity.id} died");
                     world.despawn(entity);
                 },
             }
             i = i + 1;
         }
     }
+}
+
+fn main() -> Unit {
+    let world = Simulation::run(3);
+    println(f"simulation complete: {world.entityCount()} entities remaining");
 }

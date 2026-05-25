@@ -1,0 +1,93 @@
+package calc;
+
+/// Demonstrates the expression evaluator with various expression types.
+/// Showcases: ADT enums, exhaustive pattern matching, variant shorthand,
+/// try operator (?), f-string interpolation, derives, and Result handling.
+fn main() -> Unit {
+    let eval = Evaluator::create();
+
+    println("=== Simple arithmetic ===");
+
+    // (2 + 3) * 4 = 20
+    let expr1 = Expr::Binary(
+        op = BinOp::Mul,
+        left = Expr::Binary(
+            op = BinOp::Add,
+            left = Expr::Num(value = 2.0),
+            right = Expr::Num(value = 3.0),
+        ),
+        right = Expr::Num(value = 4.0),
+    );
+    let formatted = Evaluator::format(expr1);
+    println(f"  expr: {formatted}");
+    match eval.eval(expr1) {
+        .Ok(result) => println(f"  result: {result}"),
+        .Err(msg) => println(f"  error: {msg}"),
+    }
+
+    // |(-5)| = 5
+    let expr2 = Expr::Unary(
+        op = UnaryOp::Abs,
+        operand = Expr::Unary(
+            op = UnaryOp::Neg,
+            operand = Expr::Num(value = 5.0),
+        ),
+    );
+    println(f"  expr: {Evaluator::format(expr2)}");
+    match eval.eval(expr2) {
+        .Ok(result) => println(f"  result: {result}"),
+        .Err(msg) => println(f"  error: {msg}"),
+    }
+
+    println("");
+    println("=== Division by zero ===");
+
+    // 10 / 0 → error
+    let expr3 = Expr::Binary(
+        op = BinOp::Div,
+        left = Expr::Num(value = 10.0),
+        right = Expr::Num(value = 0.0),
+    );
+    println(f"  expr: {Evaluator::format(expr3)}");
+    match eval.eval(expr3) {
+        .Ok(result) => println(f"  result: {result}"),
+        .Err(msg) => println(f"  error: {msg}"),
+    }
+
+    println("");
+    println("=== Let bindings ===");
+
+    // let x = 3 in (x + x) * 2 = 12
+    let expr4 = Expr::Let(
+        name = "x",
+        value = Expr::Num(value = 3.0),
+        body = Expr::Binary(
+            op = BinOp::Mul,
+            left = Expr::Binary(
+                op = BinOp::Add,
+                left = Expr::Var(name = "x"),
+                right = Expr::Var(name = "x"),
+            ),
+            right = Expr::Num(value = 2.0),
+        ),
+    );
+    println(f"  expr: {Evaluator::format(expr4)}");
+    match eval.eval(expr4) {
+        .Ok(result) => println(f"  result: {result}"),
+        .Err(msg) => println(f"  error: {msg}"),
+    }
+
+    println("");
+    println("=== Undefined variable ===");
+
+    // y → error
+    let expr5 = Expr::Var(name = "y");
+    println(f"  expr: {Evaluator::format(expr5)}");
+    match eval.eval(expr5) {
+        .Ok(result) => println(f"  result: {result}"),
+        .Err(msg) => println(f"  error: {msg}"),
+    }
+
+    println("");
+    println("calculator demo complete");
+}

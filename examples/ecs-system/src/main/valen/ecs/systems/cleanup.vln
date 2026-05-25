@@ -2,8 +2,7 @@ package ecs.systems;
 
 import java.util.ArrayList;
 
-/// System that removes dead entities at end of frame.
-/// Processes EntityDied events and despawns the targets.
+/// Removes dead entities at end of frame using if-let event filtering.
 pub class CleanupSystem {}
 
 impl System for CleanupSystem {
@@ -13,12 +12,8 @@ impl System for CleanupSystem {
 
         let mut i = 0;
         while i < events.size() {
-            let event = events.get(i);
-            match event {
-                Event::EntityDied(entity) => {
-                    toRemove.add(entity);
-                },
-                _ => {},
+            if let Event::EntityDied(entity) = events.get(i) {
+                toRemove.add(entity);
             }
             i = i + 1;
         }
@@ -27,6 +22,7 @@ impl System for CleanupSystem {
         while j < toRemove.size() {
             let entity = toRemove.get(j);
             if world.isAlive(entity) {
+                println(f"  cleanup: despawning entity {entity.id}");
                 world.despawn(entity);
             }
             j = j + 1;

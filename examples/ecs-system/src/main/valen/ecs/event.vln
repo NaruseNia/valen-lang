@@ -1,8 +1,9 @@
 package ecs;
 
+import java.util.ArrayList;
+
 /// Events emitted by the ECS during simulation.
-/// Uses Valen's ADT enum for exhaustive event handling.
-pub enum Event {
+pub enum Event derives(Eq, Display) {
     EntitySpawned(entity: Entity),
     EntityDespawned(entity: Entity),
     Collision(a: Entity, b: Entity),
@@ -11,7 +12,7 @@ pub enum Event {
 }
 
 /// Priority levels for event processing order.
-pub enum EventPriority {
+pub enum EventPriority derives(Eq, Display) {
     Critical,
     High,
     Normal,
@@ -24,18 +25,18 @@ pub trait EventHandler {
 }
 
 /// Stores events for deferred processing within a frame.
-pub class EventQueue(pub mut entries: java.util.ArrayList) {
+pub class EventQueue(pub mut entries: ArrayList) {
     fn create() -> EventQueue {
-        EventQueue(entries = java.util.ArrayList())
+        EventQueue(entries = ArrayList())
     }
 
     fn push(mut self, event: Event) -> Unit {
         self.entries.add(event);
     }
 
-    fn drain(mut self) -> java.util.ArrayList {
+    fn drain(mut self) -> ArrayList {
         let drained = self.entries;
-        self.entries = java.util.ArrayList();
+        self.entries = ArrayList();
         drained
     }
 

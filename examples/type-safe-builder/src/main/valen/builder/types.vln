@@ -1,0 +1,47 @@
+package builder;
+
+/// Type-safe units using newtype — prevents mixing meters with pixels.
+pub newtype Meters = Double;
+pub newtype Pixels = Double;
+pub newtype Seconds = Double;
+
+/// RGB color with 0-255 range.
+pub data class Color(pub r: Int, pub g: Int, pub b: Int) derives(Eq, Display, Clone);
+
+/// 2D point using meters.
+pub data class Point(pub x: Meters, pub y: Meters) derives(Eq, Display, Clone);
+
+/// 2D size using meters.
+pub data class Size(pub width: Meters, pub height: Meters) derives(Eq, Display, Clone);
+
+/// Border style options.
+pub enum BorderStyle derives(Eq, Display) {
+    None,
+    Solid(width: Pixels, color: Color),
+    Dashed(width: Pixels, color: Color, gap: Pixels),
+}
+
+/// Alignment options.
+pub enum Align derives(Eq, Display) {
+    TopLeft,
+    TopCenter,
+    TopRight,
+    CenterLeft,
+    Center,
+    CenterRight,
+    BottomLeft,
+    BottomCenter,
+    BottomRight,
+}
+
+/// A UI widget built by the builder.
+pub data class Widget(
+    pub name: String,
+    pub position: Point,
+    pub size: Size,
+    pub backgroundColor: Color,
+    pub border: BorderStyle,
+    pub alignment: Align,
+    pub visible: Bool,
+    pub opacity: Double,
+) derives(Eq, Display);

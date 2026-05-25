@@ -18,7 +18,7 @@ use valen_ast::{BinaryOp, Span, UnaryOp};
 pub type DefId = u32;
 
 /// The top-level HIR container holding all definitions in a compilation unit.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Hir {
     /// All definitions keyed by their unique `DefId`.
     pub defs: IndexMap<DefId, Def>,

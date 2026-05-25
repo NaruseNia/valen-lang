@@ -1,0 +1,31 @@
+package todo;
+
+import java.util.ArrayList;
+
+/// Type-safe wrapper for task IDs — prevents mixing with plain Int.
+pub newtype TaskId = Int;
+
+/// Priority levels for tasks.
+pub enum Priority derives(Eq, Display) {
+    Low,
+    Medium,
+    High,
+    Urgent,
+}
+
+/// Possible states for a task.
+pub enum Status derives(Eq, Display) {
+    Pending,
+    InProgress,
+    Done,
+    Cancelled,
+}
+
+/// A single TODO item.
+pub data class Task(
+    pub id: TaskId,
+    pub title: String,
+    pub priority: Priority,
+    pub status: Status,
+    pub tags: ArrayList,
+) derives(Eq, Display);

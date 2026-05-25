@@ -54,6 +54,8 @@ pub struct ServerState {
     workspace_root: Option<std::path::PathBuf>,
     /// Classpath entries for Java interop resolution (JDK jmods/jars).
     classpath: Vec<std::path::PathBuf>,
+    /// Semantic diagnostics from the last cross-file analysis pass.
+    last_semantic_diags: Vec<valen_diagnostics::Diagnostic>,
 }
 
 impl ServerState {
@@ -65,6 +67,7 @@ impl ServerState {
             next_file_id: 0,
             workspace_root: None,
             classpath: valen_hir::classpath::detect_jdk_classpath(),
+            last_semantic_diags: Vec::new(),
         };
         let mut router = Router::from_language_server(this);
         router.event(Self::on_event);
@@ -89,8 +92,6 @@ impl ServerState {
         id
     }
 
-    // TODO(#041): index_workspace runs synchronously during initialize, blocking
-    // the handshake. Move to a background task post-initialization.
     fn index_workspace(&mut self, root: &std::path::Path) {
         let vln_files = find_vln_files(root);
         for path in vln_files {
@@ -98,29 +99,58 @@ impl ServerState {
                 if let Ok(uri) = Url::from_file_path(&path) {
                     if !self.documents.contains_key(&uri) {
                         let file_id = self.file_id_for(&uri);
-                        let (doc_state, _) = analyze_document(&text, file_id, &self.classpath);
-                        self.documents.insert(uri, doc_state);
+                        let line_index = convert::LineIndex::new(&text);
+                        let parse_result = valen_parser::parse(&text, file_id);
+                        self.documents.insert(
+                            uri,
+                            DocumentState {
+                                text,
+                                line_index,
+                                items: parse_result.items,
+                                hir: None,
+                                bodies: None,
+                            },
+                        );
                     }
                 }
             }
         }
+        self.run_cross_file_analysis();
     }
 
-    // TODO(#035): Full reparse on every keystroke — known performance limitation.
-    // Every didChange triggers full re-analysis of the changed document PLUS all other
-    // open documents, which is O(N) full re-analyses per keystroke. Planned improvements:
-    // 1. Add debounce (50-100ms) to batch rapid keystrokes into a single analysis pass.
-    // 2. Implement incremental parsing (e.g. tree-sitter or incremental re-lex) so only
-    //    changed regions are re-parsed.
-    // 3. Build a dependency graph between files so only dependents are re-analyzed,
-    //    not all open documents.
+    /// Re-parse the changed file, then run a combined resolve + type-check
+    /// across ALL workspace documents so cross-file types are visible.
     fn analyze_and_publish(&mut self, uri: Url, text: String, version: i32) {
         let file_id = self.file_id_for(&uri);
-        let (doc_state, diags) = analyze_document(&text, file_id, &self.classpath);
-        self.documents.insert(uri.clone(), doc_state);
+        let line_index = convert::LineIndex::new(&text);
+        let parse_result = valen_parser::parse(&text, file_id);
+        let parse_diags =
+            convert::to_lsp_diagnostics(&parse_result.diagnostics, &line_index);
+        self.documents.insert(
+            uri.clone(),
+            DocumentState {
+                text,
+                line_index,
+                items: parse_result.items,
+                hir: None,
+                bodies: None,
+            },
+        );
 
-        // Re-analyze all other open documents so that cross-file dependents
-        // pick up changes (e.g. new/renamed definitions).
+        self.run_cross_file_analysis();
+
+        // Publish diagnostics for changed document
+        let mut diags = parse_diags;
+        diags.extend(self.semantic_diags_for(&uri));
+        self.client
+            .publish_diagnostics(PublishDiagnosticsParams {
+                uri: uri.clone(),
+                diagnostics: diags,
+                version: Some(version),
+            })
+            .ok();
+
+        // Re-publish diagnostics for other documents
         let other_uris: Vec<Url> = self
             .documents
             .keys()
@@ -128,29 +158,73 @@ impl ServerState {
             .cloned()
             .collect();
         for other_uri in other_uris {
-            if let Some(doc) = self.documents.get(&other_uri) {
-                let other_text = doc.text.clone();
-                let other_fid = self.file_id_for(&other_uri);
-                let (new_state, new_diags) =
-                    analyze_document(&other_text, other_fid, &self.classpath);
-                self.documents.insert(other_uri.clone(), new_state);
-                self.client
-                    .publish_diagnostics(PublishDiagnosticsParams {
-                        uri: other_uri,
-                        diagnostics: new_diags,
-                        version: None,
-                    })
-                    .ok();
-            }
+            let other_fid = self.file_id_for(&other_uri);
+            let other_diags = if let Some(doc) = self.documents.get(&other_uri) {
+                let mut d = convert::to_lsp_diagnostics(
+                    &valen_parser::parse(&doc.text, other_fid).diagnostics,
+                    &doc.line_index,
+                );
+                d.extend(self.semantic_diags_for(&other_uri));
+                d
+            } else {
+                vec![]
+            };
+            self.client
+                .publish_diagnostics(PublishDiagnosticsParams {
+                    uri: other_uri,
+                    diagnostics: other_diags,
+                    version: None,
+                })
+                .ok();
+        }
+    }
+
+    /// Combine all workspace document items and run a single resolve + type check pass.
+    fn run_cross_file_analysis(&mut self) {
+        let mut all_items: Vec<valen_ast::Item> = Vec::new();
+        for doc in self.documents.values() {
+            all_items.extend(doc.items.iter().cloned());
         }
 
-        self.client
-            .publish_diagnostics(PublishDiagnosticsParams {
-                uri,
-                diagnostics: diags,
-                version: Some(version),
-            })
-            .ok();
+        let resolve_result =
+            valen_hir::resolve::resolve_with_classpath(&all_items, &self.classpath);
+        let coherence_result =
+            valen_hir::coherence::check_coherence(&resolve_result.hir, &[]);
+        let exhaustive_result =
+            valen_hir::exhaustive::check_exhaustiveness(&resolve_result.hir, &all_items);
+        let tc = valen_hir::ty::type_check(&resolve_result.hir, &all_items);
+
+        let mut all_semantic_diags = Vec::new();
+        all_semantic_diags.extend(resolve_result.diagnostics.iter().cloned());
+        all_semantic_diags.extend(coherence_result.diagnostics.iter().cloned());
+        all_semantic_diags.extend(exhaustive_result.diagnostics.iter().cloned());
+        all_semantic_diags.extend(tc.diagnostics.iter().cloned());
+        self.last_semantic_diags = all_semantic_diags;
+
+        let hir = resolve_result.hir;
+        let bodies = tc.bodies;
+        for doc in self.documents.values_mut() {
+            doc.hir = Some(hir.clone());
+            doc.bodies = Some(bodies.clone());
+        }
+    }
+
+    /// Get LSP diagnostics from the last semantic analysis that belong to a specific file.
+    fn semantic_diags_for(&self, uri: &Url) -> Vec<async_lsp::lsp_types::Diagnostic> {
+        let Some(fid) = self.file_ids.get(uri) else {
+            return vec![];
+        };
+        let Some(doc) = self.documents.get(uri) else {
+            return vec![];
+        };
+        let filtered: Vec<_> = self
+            .last_semantic_diags
+            .iter()
+            .filter(|d| d.primary.file_id == *fid)
+            .cloned()
+            .collect();
+        let temp = valen_diagnostics::Diagnostics::from_vec(filtered);
+        convert::to_lsp_diagnostics(&temp, &doc.line_index)
     }
 
     // TODO(#039): Goto definition currently resolves by name only via linear

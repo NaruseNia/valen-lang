@@ -159,6 +159,11 @@ impl Diagnostics {
         Self::default()
     }
 
+    /// Create from a pre-built list of diagnostics.
+    pub fn from_vec(entries: Vec<Diagnostic>) -> Self {
+        Self { entries }
+    }
+
     /// Append an already-constructed diagnostic.
     pub fn push(&mut self, diag: Diagnostic) {
         self.entries.push(diag);
