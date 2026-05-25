@@ -6,5 +6,5 @@ group = "io.github.narusenia.examples"
 version = "0.0.1"
 
 valen {
-    jvmTarget.set(21)
+    target.set(21)
 }
