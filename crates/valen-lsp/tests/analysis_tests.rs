@@ -2,17 +2,27 @@ use async_lsp::lsp_types::DiagnosticSeverity;
 use valen_ast::FileId;
 use valen_lsp::server::{analyze_document, extract_word_at};
 
+fn analyze_document_test(
+    text: &str,
+    file_id: FileId,
+) -> (
+    valen_lsp::server::DocumentState,
+    Vec<async_lsp::lsp_types::Diagnostic>,
+) {
+    analyze_document(text, file_id, &[])
+}
+
 // -- diagnostics --
 
 #[test]
 fn valid_source_no_diagnostics() {
-    let (_, diags) = analyze_document("fn main() -> Int { 42 }", FileId(0));
+    let (_, diags) = analyze_document_test("fn main() -> Int { 42 }", FileId(0));
     assert!(diags.is_empty(), "expected no diagnostics, got: {diags:?}");
 }
 
 #[test]
 fn parse_error_produces_diagnostic() {
-    let (_, diags) = analyze_document("fn main( { }", FileId(0));
+    let (_, diags) = analyze_document_test("fn main( { }", FileId(0));
     assert!(!diags.is_empty(), "expected parse error diagnostics");
     assert!(diags
         .iter()
@@ -21,7 +31,7 @@ fn parse_error_produces_diagnostic() {
 
 #[test]
 fn type_error_produces_diagnostic() {
-    let (_, diags) = analyze_document("fn main() -> Int { true }", FileId(0));
+    let (_, diags) = analyze_document_test("fn main() -> Int { true }", FileId(0));
     assert!(
         diags
             .iter()
@@ -32,7 +42,7 @@ fn type_error_produces_diagnostic() {
 
 #[test]
 fn diagnostic_code_is_valen_format() {
-    let (_, diags) = analyze_document("fn main() -> Int { true }", FileId(0));
+    let (_, diags) = analyze_document_test("fn main() -> Int { true }", FileId(0));
     for d in &diags {
         if let Some(async_lsp::lsp_types::NumberOrString::String(code)) = &d.code {
             assert!(code.starts_with('V'), "code should start with V: {code}");
@@ -42,7 +52,7 @@ fn diagnostic_code_is_valen_format() {
 
 #[test]
 fn diagnostic_range_is_valid() {
-    let (_, diags) = analyze_document("fn main( { }", FileId(0));
+    let (_, diags) = analyze_document_test("fn main( { }", FileId(0));
     for d in &diags {
         assert!(d.range.start.line <= d.range.end.line);
     }
@@ -52,7 +62,7 @@ fn diagnostic_range_is_valid() {
 
 #[test]
 fn goto_def_finds_function() {
-    let (doc, _) = analyze_document(
+    let (doc, _) = analyze_document_test(
         "fn greet() -> String { \"hi\" }\nfn main() -> Int { 42 }",
         FileId(0),
     );
@@ -63,7 +73,7 @@ fn goto_def_finds_function() {
 
 #[test]
 fn goto_def_finds_class() {
-    let (doc, _) = analyze_document("class Dog(pub name: String) {}", FileId(0));
+    let (doc, _) = analyze_document_test("class Dog(pub name: String) {}", FileId(0));
     let hir = doc.hir.as_ref().unwrap();
     let def = hir.defs.values().find(|d| d.name == "Dog");
     assert!(def.is_some(), "Dog should be in HIR defs");
@@ -71,7 +81,7 @@ fn goto_def_finds_class() {
 
 #[test]
 fn goto_def_finds_enum() {
-    let (doc, _) = analyze_document("enum Color { Red, Green, Blue }", FileId(0));
+    let (doc, _) = analyze_document_test("enum Color { Red, Green, Blue }", FileId(0));
     let hir = doc.hir.as_ref().unwrap();
     let def = hir.defs.values().find(|d| d.name == "Color");
     assert!(def.is_some(), "Color should be in HIR defs");
@@ -116,7 +126,7 @@ fn main() {
     let x = circle;
 }
 "#;
-    let (doc, _diags) = analyze_document(src, FileId(0));
+    let (doc, _diags) = analyze_document_test(src, FileId(0));
     assert!(doc.bodies.is_some(), "typed bodies should be present");
 }
 
@@ -151,7 +161,7 @@ fn main() {
     let circleArea = circle.area();
 }
 "#;
-    let (doc, diags) = analyze_document(src, FileId(0));
+    let (doc, diags) = analyze_document_test(src, FileId(0));
     eprintln!(
         "diags: {:?}",
         diags.iter().map(|d| &d.message).collect::<Vec<_>>()
@@ -272,7 +282,7 @@ fn main() {
     circle.
 }
 "#;
-    let (doc, _diags) = analyze_document(src, FileId(0));
+    let (doc, _diags) = analyze_document_test(src, FileId(0));
 
     let hir = doc
         .hir
@@ -363,7 +373,7 @@ fn main() {
     let margedArea = rectArea + circleArea;
 }
 "#;
-    let (doc, _diags) = analyze_document(src, FileId(0));
+    let (doc, _diags) = analyze_document_test(src, FileId(0));
     assert!(doc.hir.is_some(), "HIR should be present");
     assert!(doc.bodies.is_some(), "typed bodies should be present");
 
