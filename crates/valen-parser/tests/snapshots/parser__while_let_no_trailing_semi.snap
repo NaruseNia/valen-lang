@@ -135,6 +135,7 @@ expression: "check(\"fn main() {\n    while let Some(v) = iter.next() {\n       
                                                                 },
                                                             },
                                                         ),
+                                                        generics: [],
                                                         args: [
                                                             CallArg {
                                                                 name: None,

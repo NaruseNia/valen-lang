@@ -2641,6 +2641,7 @@ impl<'hir> TypeChecker<'hir> {
                 new_args.extend(call.args.iter().cloned());
                 let desugared = valen_ast::CallExpr {
                     callee: call.callee.clone(),
+                    generics: call.generics.clone(),
                     args: new_args,
                     span: p.span,
                 };
@@ -2649,6 +2650,7 @@ impl<'hir> TypeChecker<'hir> {
             valen_ast::Expr::Path(_) => {
                 let desugared = valen_ast::CallExpr {
                     callee: Box::new(p.rhs.clone()),
+                    generics: Vec::new(),
                     args: vec![valen_ast::CallArg {
                         name: None,
                         value: p.lhs.clone(),

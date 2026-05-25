@@ -97,6 +97,7 @@ expression: "check(\"fn main() {\n    let x: Option<Int> = Some(42);\n    if let
                                                 },
                                             },
                                         ),
+                                        generics: [],
                                         args: [
                                             CallArg {
                                                 name: None,

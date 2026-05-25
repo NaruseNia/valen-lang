@@ -951,6 +951,16 @@ impl<'a> Printer<'a> {
 
     fn print_call(&mut self, c: &CallExpr) {
         self.print_expr(&c.callee);
+        if !c.generics.is_empty() {
+            self.w("<");
+            for (i, g) in c.generics.iter().enumerate() {
+                if i > 0 {
+                    self.w(", ");
+                }
+                self.print_type(g);
+            }
+            self.w(">");
+        }
         self.w("(");
         self.print_call_args(&c.args);
         self.w(")");
