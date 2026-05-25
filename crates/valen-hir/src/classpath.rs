@@ -57,6 +57,65 @@ pub fn detect_jdk_classpath() -> Vec<PathBuf> {
     vec![]
 }
 
+/// Lists available Java class names from classpath entries.
+/// Returns dotted names like "java.util.HashMap", "java.util.ArrayList".
+/// Only includes classes under common packages to avoid overwhelming results.
+pub fn list_available_classes(classpath: &[PathBuf]) -> Vec<String> {
+    let mut classes = Vec::new();
+    let allowed_prefixes = [
+        "java/lang/",
+        "java/util/",
+        "java/io/",
+        "java/math/",
+        "java/time/",
+        "java/net/",
+        "java/nio/",
+        "java/text/",
+        "java/sql/",
+    ];
+
+    for entry in classpath {
+        if !entry.is_file() {
+            continue;
+        }
+        let data = match std::fs::read(entry) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        let zip_data = if data.starts_with(b"JM\x01\x00") {
+            &data[4..]
+        } else {
+            &data[..]
+        };
+        let cursor = Cursor::new(zip_data);
+        let archive = match zip::ZipArchive::new(cursor) {
+            Ok(a) => a,
+            Err(_) => continue,
+        };
+        for i in 0..archive.len() {
+            let name = match archive.name_for_index(i) {
+                Some(n) => n.to_string(),
+                None => continue,
+            };
+            let class_path = name.strip_prefix("classes/").unwrap_or(&name);
+            if !class_path.ends_with(".class") {
+                continue;
+            }
+            let internal = class_path.strip_suffix(".class").unwrap_or(class_path);
+            if internal.contains('$') {
+                continue;
+            }
+            if !allowed_prefixes.iter().any(|p| internal.starts_with(p)) {
+                continue;
+            }
+            classes.push(internal.replace('/', "."));
+        }
+    }
+    classes.sort();
+    classes.dedup();
+    classes
+}
+
 fn load_class_from_classpath(
     classpath: &[PathBuf],
     internal_name: &str,
