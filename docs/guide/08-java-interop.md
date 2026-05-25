@@ -204,12 +204,21 @@ Java のコレクションライブラリがそのまま使えるため、既存
 
 ### ジェネリクス型追跡
 
-Valen コンパイラは Java クラスの `Signature` 属性を解析し、ジェネリクス型引数を追跡します。これにより、Java コレクションのメソッド呼び出しで正確な型が得られます。
+Valen コンパイラは Java クラスの `Signature` 属性を解析し、ジェネリクス型引数を追跡します。コンストラクタ・関数・メソッドに明示的な型引数を指定できます。
 
 ```valen
 import java.util.HashMap;
+import java.util.ArrayList;
+
+// コンストラクタに型引数を指定
 let map = HashMap<String, Int>();
-let v = map.get("key");   // v: Int? (nullableとして返される)
+let list = ArrayList<String>();
+
+// ネストしたジェネリクスも可
+let nested = HashMap<String, ArrayList<Int>>();
+
+// 型引数は省略可能（推論で十分な場合）
+let inferred = ArrayList();  // ArrayList<Any> として扱われる
 ```
 
 型変数（`K`, `V` など）はインスタンスの型引数で具体化され、戻り値は null 安全のため nullable (`T?`) として扱われます。

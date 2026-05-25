@@ -61,6 +61,20 @@ Valen の欠損表現は **`Option<T>` に一本化**。
 - erasure（JVM 互換）
 - `reified` 型パラメータは Phase 2（MVP は普通のジェネリクス）
 
+### 式位置での明示的型引数
+
+コンストラクタ・関数・メソッド呼び出しで型引数を明示的に指定できる。
+
+```valen
+let list = ArrayList<String>();           // コンストラクタ
+let map = HashMap<String, Int>();
+let nested = HashMap<String, List<Int>>(); // ネストも可
+let x = parse<Int>("42");                 // 関数呼び出し
+let items = iter(list).collect<List<String>>(); // メソッド呼び出し
+```
+
+型引数は省略可能（型推論が十分な場合）。`ArrayList()` と `ArrayList<String>()` は両方有効。
+
 ## 2.5 typealias
 
 ```valen
