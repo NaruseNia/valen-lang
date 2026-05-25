@@ -25,13 +25,6 @@ pub fn scan_classpath(
             .collect::<Vec<_>>()
             .join("/");
 
-        if !internal_name.starts_with("java/")
-            && !internal_name.starts_with("javax/")
-            && !internal_name.starts_with("org/")
-        {
-            continue;
-        }
-
         if let Some(info) = load_class_from_classpath(classpath, &internal_name) {
             result.insert(short_name.clone(), info);
         }

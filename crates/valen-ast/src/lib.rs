@@ -321,7 +321,7 @@ pub enum Visibility {
 }
 
 /// Type representation as produced by the parser (before name resolution).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     /// Named type path: `Int`, `List<String>`.
     Path(TypePath),
@@ -336,14 +336,14 @@ pub enum Type {
 }
 
 /// A dot-separated type path (e.g. `java.util.List<String>`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TypePath {
     pub segments: Vec<TypePathSegment>,
     pub span: Span,
 }
 
 /// One segment of a type path, optionally carrying generic arguments.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TypePathSegment {
     pub name: SmolStr,
     pub generics: Vec<Type>,
@@ -351,7 +351,7 @@ pub struct TypePathSegment {
 }
 
 /// Function type: `fn(A, B) -> C`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FnType {
     pub params: Vec<Type>,
     pub return_type: Box<Type>,
@@ -455,7 +455,7 @@ pub enum Expr {
 }
 
 /// Literal value (integer, float, string, etc.).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     /// Integer literal. Stored as `i64` so the AST can represent both `Int` and
     /// `Long` ranges without loss, but the language type is 32-bit (`Int`).
@@ -528,14 +528,14 @@ impl Expr {
 }
 
 impl Type {
-    /// Returns the source span of this type, if available.
-    pub fn span(&self) -> Option<Span> {
+    /// Returns the source span of this type.
+    pub fn span(&self) -> Span {
         match self {
-            Type::Path(p) => Some(p.span),
-            Type::Nullable { span, .. } => Some(*span),
-            Type::Fn(f) => Some(f.span),
-            Type::Tuple(_, span) => Some(*span),
-            Type::RefMut { span, .. } => Some(*span),
+            Type::Path(p) => p.span,
+            Type::Nullable { span, .. } => *span,
+            Type::Fn(f) => f.span,
+            Type::Tuple(_, span) => *span,
+            Type::RefMut { span, .. } => *span,
         }
     }
 }
@@ -559,14 +559,14 @@ impl Pattern {
 }
 
 /// A value-level path (e.g. `foo.bar`, `Shape::Circle`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Path {
     pub segments: Vec<PathSegment>,
     pub span: Span,
 }
 
 /// One segment of a value-level path.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PathSegment {
     pub name: SmolStr,
     /// `true` if preceded by `::` (variant access like `Shape::Circle`),
@@ -701,7 +701,7 @@ pub struct MatchArm {
 }
 
 /// Pattern used in `match` arms and `let` bindings.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Pattern {
     /// `_` — matches anything, binds nothing.
     Wildcard(Span),
@@ -720,7 +720,7 @@ pub enum Pattern {
 }
 
 /// Variable binding pattern (e.g. `x` or `mut x`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BindingPattern {
     pub name: SmolStr,
     pub mutable: bool,
@@ -728,7 +728,7 @@ pub struct BindingPattern {
 }
 
 /// Destructuring pattern for enum variants or data classes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StructPattern {
     pub path: Path,
     pub fields: Vec<StructPatternField>,
@@ -738,7 +738,7 @@ pub struct StructPattern {
 }
 
 /// A named field inside a struct/enum destructuring pattern.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StructPatternField {
     pub name: SmolStr,
     /// Sub-pattern; `None` means shorthand binding (field name = variable name).
@@ -747,7 +747,7 @@ pub struct StructPatternField {
 }
 
 /// Range pattern for matching ranges of values (e.g. `1..10`, `0..=255`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RangePattern {
     pub start: Option<Literal>,
     pub end: Option<Literal>,
@@ -756,7 +756,7 @@ pub struct RangePattern {
 }
 
 /// `name @ pattern` — binds the whole matched value while destructuring.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AtPattern {
     pub name: SmolStr,
     pub pattern: Box<Pattern>,
@@ -794,7 +794,7 @@ pub struct MapLiteralExpr {
 }
 
 /// `.Variant` or `.Variant(fields)` — enum variant shorthand pattern.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct VariantShorthandPattern {
     pub variant_name: SmolStr,
     pub fields: Vec<StructPatternField>,
