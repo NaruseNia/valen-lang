@@ -152,6 +152,8 @@ struct TypeChecker<'hir> {
     type_param_bounds: IndexMap<SmolStr, Vec<SmolStr>>,
     /// The concrete type that `Self` resolves to in the current class/impl context.
     current_self_ty: Option<Ty>,
+    /// Package of the item currently being type-checked (for visibility).
+    current_package: Option<Vec<SmolStr>>,
 }
 
 impl<'hir> TypeChecker<'hir> {
@@ -161,6 +163,7 @@ impl<'hir> TypeChecker<'hir> {
             env: TypeEnv::new(),
             diags: Diagnostics::new(),
             current_self_ty: None,
+            current_package: None,
             bodies: IndexMap::new(),
             return_ty: None,
             in_loop: false,
@@ -182,6 +185,9 @@ impl<'hir> TypeChecker<'hir> {
 
         for item in items {
             match item {
+                valen_ast::Item::Package(pkg) => {
+                    self.current_package = Some(pkg.path.clone());
+                }
                 valen_ast::Item::Fn(f) => {
                     let def_id = self.lookup_def_id(&f.name);
                     self.check_fn_decl(f, None, def_id);
@@ -1895,7 +1901,11 @@ impl<'hir> TypeChecker<'hir> {
                             Ty::Named(n) => Some(n.as_str().to_owned()),
                             _ => None,
                         });
-                        if !self.hir.check_visibility(def_id, accessor.as_deref()) {
+                        if !self.hir.check_visibility_from_package(
+                            def_id,
+                            accessor.as_deref(),
+                            self.current_package.as_deref(),
+                        ) {
                             self.diags.error(
                                 DiagCode::NO_SUCH_METHOD,
                                 mc.span,
