@@ -1,7 +1,4 @@
 //! `valen-lsp` — Valen Language Server Protocol implementation.
-//!
-//! MVP: diagnostics (parse + type errors) and goto-definition.
-//! Uses async-lsp with the omnitrait `LanguageServer` API.
 
 use async_lsp::MainLoop;
 use tower::ServiceBuilder;
@@ -26,9 +23,16 @@ async fn main() -> anyhow::Result<()> {
             .service(ServerState::new_router(client))
     });
 
+    #[cfg(unix)]
     let (stdin, stdout) = (
         async_lsp::stdio::PipeStdin::lock_tokio().unwrap(),
         async_lsp::stdio::PipeStdout::lock_tokio().unwrap(),
+    );
+
+    #[cfg(not(unix))]
+    let (stdin, stdout) = (
+        tokio::io::BufReader::new(tokio::io::stdin()),
+        tokio::io::stdout(),
     );
 
     server.run_buffered(stdin, stdout).await?;
