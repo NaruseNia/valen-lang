@@ -24,7 +24,6 @@ env:
 jobs:
   build:
     name: build / ${{ matrix.target }}
-    if: inputs.target == 'all' || inputs.target == matrix.target
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -44,22 +43,34 @@ jobs:
             archive: zip
 
     steps:
+      - name: Skip if not selected
+        id: guard
+        shell: bash
+        run: |
+          if [[ "${{ inputs.target }}" != "all" && "${{ inputs.target }}" != "${{ matrix.target }}" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v6
+        if: steps.guard.outputs.skip != 'true'
 
       - name: Install Rust toolchain
+        if: steps.guard.outputs.skip != 'true'
         run: |
           rustup toolchain install stable --profile minimal
           rustup target add ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
+        if: steps.guard.outputs.skip != 'true'
         with:
           shared-key: release-${{ matrix.target }}
 
       - name: Build release binaries
+        if: steps.guard.outputs.skip != 'true'
         run: cargo build --release --target ${{ matrix.target }} --bin valenc --bin valen-lsp
 
       - name: Package (tar.gz)
-        if: matrix.archive == 'tar.gz'
+        if: steps.guard.outputs.skip != 'true' && matrix.archive == 'tar.gz'
         shell: bash
         run: |
           STAGING="valen-test-${{ matrix.target }}"
@@ -69,7 +80,7 @@ jobs:
           tar czf "${STAGING}.tar.gz" "${STAGING}"
 
       - name: Package (zip)
-        if: matrix.archive == 'zip'
+        if: steps.guard.outputs.skip != 'true' && matrix.archive == 'zip'
         shell: bash
         run: |
           STAGING="valen-test-${{ matrix.target }}"
@@ -79,6 +90,7 @@ jobs:
           7z a "${STAGING}.zip" "${STAGING}"
 
       - name: Upload artifact
+        if: steps.guard.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: valen-test-${{ matrix.target }}
