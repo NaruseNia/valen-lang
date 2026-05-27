@@ -249,6 +249,26 @@ let allPos: Bool = iter(numbers).all(|x: Int| -> Bool { x > 0 });
 let first: Option<Int> = iter(numbers).find(|x: Int| -> Bool { x > 3 });
 ```
 
+## inline fn と reified の Java 互換性
+
+Valen の `inline fn` は Java 側からは通常のメソッドとして見えます。Java コードから呼び出せますが、インライン展開は行われません。
+
+`reified` 型パラメータは Java からの呼び出し時には無効です。JVM の型消去が適用されるため、`is T` や `T::class` のような reified 依存の操作は正しく動作しません。
+
+```valen
+// Valen 側
+inline fn <reified T> isInstance(value: Any) -> Bool {
+    value is T
+}
+```
+
+```java
+// Java 側 — 通常のメソッドとして呼べるが、reified は効かない
+// ValenClass.isInstance(obj) のように呼び出し可能
+```
+
+reified の恩恵が必要な場合は、Valen コードから呼び出してください。
+
 ## まとめ
 
 | 操作 | 方法 |
@@ -260,4 +280,5 @@ let first: Option<Int> = iter(numbers).find(|x: Int| -> Bool { x > 3 });
 | コレクション反復 | `for item in list { ... }` |
 | 出力 | `println(anyValue)` — Any 型を受け取る |
 | sealed の網羅性 | `@valen.Closed` 付きなら exhaustive、なしなら `_` 必須 |
+| inline fn の Java 互換 | 通常メソッドとして見える。`reified` は無効 |
 | classpath 指定 | `valenc compile --classpath ...`（JDK は自動検出） |

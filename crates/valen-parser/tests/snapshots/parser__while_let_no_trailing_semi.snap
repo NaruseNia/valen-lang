@@ -1,5 +1,6 @@
 ---
 source: crates/valen-parser/tests/parser.rs
+assertion_line: 505
 expression: "check(\"fn main() {\n    while let Some(v) = iter.next() {\n        println(v);\n    }\n    let done = true;\n}\")"
 ---
 === AST ===
@@ -244,6 +245,7 @@ expression: "check(\"fn main() {\n    while let Some(v) = iter.next() {\n       
             is_override: false,
             is_abstract: false,
             is_unsafe: false,
+            is_inline: false,
             span: Span {
                 start: 0,
                 end: 98,

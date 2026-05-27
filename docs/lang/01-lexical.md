@@ -16,11 +16,12 @@ package import
 for in while loop break continue
 true false
 as safe unsafe ref annotation typealias type
+inline reified
 ```
 
 予約語（将来用）：`suspend async await yield`
 
-コンテキストキーワード（特定の位置でのみキーワード、他は識別子）：`data`（`data class` の位置でのみキーワード）
+コンテキストキーワード（特定の位置でのみキーワード、他は識別子）：`data`（`data class` の位置でのみキーワード）、`reified`（ジェネリクスパラメータ位置でのみキーワード）
 
 JVM 予約語（Valen では使わないが、識別子としても使用不可）：
 ```

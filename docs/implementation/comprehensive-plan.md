@@ -553,8 +553,8 @@ let inc = || { *r = *r + 1; };
 | extension adapter（Java 型への直接 trait impl） | orphan rule の根本変更が必要。短期は stdlib アダプタ (M11 TASK-033)、中期は newtype (M13 TASK-053) でカバー | #120 |
 | if let ガード条件 (`if let P = e && cond`) | 構文の複雑さが増す。Phase 2 では非対応 | — |
 | `suspend fn` / async | virtual thread 統合戦略の仕様化が必要 | — |
-| `reified` 型パラメータ | inline fn の上位機能 | — |
-| `inline fn` | Phase 2 では優先度低 | — |
+| `reified` 型パラメータ | ✅ VEP-036 で実装済み | — |
+| `inline fn` | ✅ VEP-036 で実装済み | — |
 | annotation processing (KSP 相当) | annotation 基盤が先 | — |
 | DSL receiver lambda | extension と隔離する設計が必要 | — |
 

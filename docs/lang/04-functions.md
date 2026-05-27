@@ -88,3 +88,52 @@ println("hello world");          // hello world\n
 print("no newline");             // no newline
 println(f"count: {x}");          // f-string と組み合わせ
 ```
+
+## 4.8 インライン関数
+
+`inline fn` はコールサイトに本体をインライン展開する関数。ラムダ引数もインライン化されるため、ボクシングを回避できる。
+
+```valen
+inline fn <T> measure(block: fn() -> T) -> T {
+    let start = System.nanoTime();
+    let result = block();
+    println(f"elapsed: {System.nanoTime() - start}ns");
+    result
+}
+```
+
+### 構文
+
+```
+inline fn <Params> name(params) -> ReturnType { body }
+```
+
+- `inline` キーワードを `fn` の前に付与
+- 関数本体は呼び出し側にインライン展開される
+- ラムダ引数はデフォルトでインライン化される（ボクシングなし）
+
+### ラムダのインライン化
+
+`inline fn` に渡されたラムダ引数は呼び出し側に展開される。
+
+```valen
+inline fn <T> run(block: fn() -> T) -> T {
+    block()
+}
+
+fn main() {
+    let x = run(|| { 42 });
+    // block() の本体がここに展開される
+}
+```
+
+non-local return（ラムダ内の `return` が呼び出し元関数から脱出する動作）は将来対応予定。
+
+### 制約
+
+- **再帰禁止**: `inline fn` が自身を再帰呼び出しするとコンパイルエラー（展開が無限ループになるため）
+- `inline fn` の本体変更は呼び出し側の再コンパイルが必要
+
+### Java interop
+
+Java 側からは `inline fn` は通常のメソッドとして見える。`reified` 型パラメータは Java 呼び出し時には無効（型消去される）。

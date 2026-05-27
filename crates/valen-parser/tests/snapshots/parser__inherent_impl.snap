@@ -1,5 +1,6 @@
 ---
 source: crates/valen-parser/tests/parser.rs
+assertion_line: 355
 expression: "check(\"impl Vec2 { fn length(self) -> Float { 1.0 } fn scale(self, factor: Float) -> Float { factor } }\")"
 ---
 === AST ===
@@ -133,6 +134,7 @@ expression: "check(\"impl Vec2 { fn length(self) -> Float { 1.0 } fn scale(self,
                         is_override: false,
                         is_abstract: false,
                         is_unsafe: false,
+                        is_inline: false,
                         span: Span {
                             start: 12,
                             end: 44,
@@ -291,6 +293,7 @@ expression: "check(\"impl Vec2 { fn length(self) -> Float { 1.0 } fn scale(self,
                         is_override: false,
                         is_abstract: false,
                         is_unsafe: false,
+                        is_inline: false,
                         span: Span {
                             start: 45,
                             end: 94,

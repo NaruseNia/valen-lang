@@ -1,5 +1,6 @@
 ---
 source: crates/valen-parser/tests/parser.rs
+assertion_line: 174
 expression: "check(\"fn f(x: Int) -> Bool { match x { 1 | 2 | 3 => true, _ => false } }\")"
 ---
 === AST ===
@@ -230,6 +231,7 @@ expression: "check(\"fn f(x: Int) -> Bool { match x { 1 | 2 | 3 => true, _ => fa
             is_override: false,
             is_abstract: false,
             is_unsafe: false,
+            is_inline: false,
             span: Span {
                 start: 0,
                 end: 66,

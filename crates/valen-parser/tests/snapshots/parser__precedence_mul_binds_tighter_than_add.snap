@@ -1,5 +1,6 @@
 ---
 source: crates/valen-parser/tests/parser.rs
+assertion_line: 47
 expression: "check(\"fn main() { 1 + 2 * 3 }\")"
 ---
 === AST ===
@@ -90,6 +91,7 @@ expression: "check(\"fn main() { 1 + 2 * 3 }\")"
             is_override: false,
             is_abstract: false,
             is_unsafe: false,
+            is_inline: false,
             span: Span {
                 start: 0,
                 end: 23,

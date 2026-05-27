@@ -23,9 +23,9 @@ Valen の芯は以下の4点。新機能提案はこの芯を補強するかで�
 ### 実装済み仕様
 
 - [1. 字句構文](lang/01-lexical.md)
-- [2. 型](lang/02-types.md)（ref mut T ミュータブル参照型）
+- [2. 型](lang/02-types.md)（ref mut T ミュータブル参照型 / reified 型パラメータ）
 - [3. 式と文](lang/03-expressions.md)（unsafe 式 / as キャスト / deref / ref mut 式）
-- [4. 関数](lang/04-functions.md)
+- [4. 関数](lang/04-functions.md)（inline fn / reified generics）
 - [5. クラス](lang/05-classes.md)
 - [6. enum（ADT）](lang/06-enum.md)
 - [7. trait / impl](lang/07-traits.md)

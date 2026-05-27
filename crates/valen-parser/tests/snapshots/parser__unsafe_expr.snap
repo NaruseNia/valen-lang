@@ -1,5 +1,6 @@
 ---
 source: crates/valen-parser/tests/parser.rs
+assertion_line: 467
 expression: "check(\"fn f() -> Int { unsafe 42 }\")"
 ---
 === AST ===
@@ -78,6 +79,7 @@ expression: "check(\"fn f() -> Int { unsafe 42 }\")"
             is_override: false,
             is_abstract: false,
             is_unsafe: false,
+            is_inline: false,
             span: Span {
                 start: 0,
                 end: 27,
