@@ -24,6 +24,7 @@ env:
 jobs:
   build:
     name: build / ${{ matrix.target }}
+    if: inputs.target == 'all' || inputs.target == matrix.target
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -41,11 +42,6 @@ jobs:
           - target: x86_64-pc-windows-msvc
             runner: windows-latest
             archive: zip
-        exclude:
-          - target: ${{ inputs.target != 'all' && inputs.target != 'x86_64-unknown-linux-gnu' && 'x86_64-unknown-linux-gnu' || 'NONE' }}
-          - target: ${{ inputs.target != 'all' && inputs.target != 'x86_64-apple-darwin' && 'x86_64-apple-darwin' || 'NONE' }}
-          - target: ${{ inputs.target != 'all' && inputs.target != 'aarch64-apple-darwin' && 'aarch64-apple-darwin' || 'NONE' }}
-          - target: ${{ inputs.target != 'all' && inputs.target != 'x86_64-pc-windows-msvc' && 'x86_64-pc-windows-msvc' || 'NONE' }}
 
     steps:
       - uses: actions/checkout@v6
