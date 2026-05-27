@@ -140,7 +140,7 @@ fn accept(value: Any) {}   // 任意の型を受け取る
 ```
 
 - `Any` へのアップキャストは暗黙（boxing される）
-- ダウンキャストは `unsafe`（VEP-001）または `is` チェック（Phase 3）
+- ダウンキャストは現在 unsafe キャスト (`as`) のみサポート（VEP-001 参照）
 
 ## 2.8 `ref mut T` — ミュータブル参照型
 

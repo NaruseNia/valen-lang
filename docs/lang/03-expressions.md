@@ -107,18 +107,7 @@ while condition() {
 }
 ```
 
-**ラベル付き break（Phase 1.5）:**
-
-ネストしたループからの脱出は Phase 1.5 で導入予定。
-
-```valen
-// Phase 1.5+
-'outer: for x in xs {
-    for y in ys {
-        if done(x, y) { break 'outer; }
-    }
-}
-```
+**ラベル付き break:** ネストしたループからのラベル指定脱出（`'outer: for ... { break 'outer; }`）は現在サポートしていない。
 
 ## 3.10 コレクションリテラル
 

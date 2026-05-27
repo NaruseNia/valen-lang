@@ -22,7 +22,7 @@ class User(pub name: String, mut age: Int) {
 - 無修飾 = private field（class 内部のみ `self.name` で参照可、外部からは不可視）
 - `pub name: String` — public 読み取り専用 field
 - `pub mut age: Int` — public 可変 field
-- `internal` / `private` の個別指定は **Phase 1.5+**（MVP では `pub` のみ許可）
+- プライマリコンストラクタの引数に対する `internal` / `private` の個別指定は現在サポートしていない
 
 **method と associated function:**
 
@@ -45,7 +45,7 @@ data class Point(x: Float, y: Float);
 data class User(pub name: String, pub email: String);
 ```
 
-- 自動生成：`equals` / `hashCode` / `toString` / `copy`（MVP 必須）
+- 自動生成：`equals` / `hashCode` / `toString` / `copy`
 - **自動生成の対象は自身の primary constructor params のみ。** 親 class の state は含めない（Kotlin 同様）
 - `data class` は常に **final**
 - `open` / `abstract` / `sealed` を付与**できない**
@@ -162,16 +162,11 @@ impl ShowFmt for User {
 
 強制ではないため、コンパイルエラーにはしない（fmt / lint レベルで指摘する程度）。ただし、同一ファイルに `parse(s)` と `User::parse(s)` を並置するのは設計の赤信号。
 
-## 5.8 Phase 1.5 で実装済み
+## 5.8 制限
 
-- `sealed trait`（§7.5 参照）
-- `annotation class` 宣言構文／annotation 付与（§20 参照）
-- デフォルト引数（§4.3 参照）
-
-## 5.9 未実装（Phase 2+ 送り）
+以下は現在サポートしていない：
 
 - `init { ... }` ブロック
-- secondary constructor（`constructor(...) { ... }` 相当）
-- field override（`override val` 相当）
-- nested / inner class
-- primary constructor param の `internal` / `private` 個別指定
+- セカンダリコンストラクタ（`constructor(...) { ... }` 相当）
+- フィールドオーバーライド（`override val` 相当）
+- ネストクラス / inner class

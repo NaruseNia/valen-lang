@@ -69,7 +69,7 @@ impl Area for Shape {
 **禁止:**
 - foreign trait for foreign type（例：`impl java.util.List for java.lang.String` 不可）
 - typealias を介した所有権回避（`type MyList = java.util.List<Int>` に対する impl 不可）
-- blanket impl（`impl<T: Foo> Bar for T`）は MVP 全面禁止、std 限定
+- blanket impl（`impl<T: Foo> Bar for T`）はサポートしていない
 
 **一意性:**
 - 同一 trait/type 対に対する impl はグローバル一意
@@ -116,7 +116,7 @@ fn process(e: Expr) -> Int {
 **制約:**
 - 実装者は `class` と `data class` のみ（enum は不可）
 - 実装者の宣言は `impl SealedTrait for Type { ... }`（trait の一貫性を維持）
-- permit 範囲は同一コンパイル単位（将来的に module スコープへ移行）
+- permit 範囲は同一コンパイル単位
 - default method は非対応（通常 trait と同じ制約）
 - supertrait は非対応
 
@@ -177,7 +177,7 @@ pub class Point(pub x: Float, pub y: Float) derives(Eq) {}
 
 enum に `derives(Eq)` を付けると、**フィールドを持つ variant ごとに** `equals` メソッドが生成される。unit variant は singleton なので参照比較のみ。
 
-## 7.8 演算子オーバーロード（Phase 1.5 実装済み）
+## 7.8 演算子オーバーロード
 
 trait ベースの演算子オーバーロード。prelude に定義された演算子 trait を impl することで有効化する。
 

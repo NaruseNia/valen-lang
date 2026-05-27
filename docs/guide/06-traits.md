@@ -134,7 +134,7 @@ impl MyTrait for String {
 
 - **foreign trait for foreign type**: 両方が外部のモジュールで定義されている組み合わせ
 - **typealias を介した所有権回避**: `type MyList = java.util.List<Int>` に対する impl は不可
-- **blanket impl**: `impl<T: Foo> Bar for T` は MVP では全面禁止
+- **blanket impl**: `impl<T: Foo> Bar for T` はサポートしていない
 
 ## UFCS（Universal Function Call Syntax）
 

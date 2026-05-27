@@ -19,7 +19,7 @@ as safe unsafe ref annotation typealias type
 inline reified
 ```
 
-予約語（将来用）：`suspend async await yield`
+予約キーワード（識別子として使用不可）：`suspend async await yield`
 
 コンテキストキーワード（特定の位置でのみキーワード、他は識別子）：`data`（`data class` の位置でのみキーワード）、`reified`（ジェネリクスパラメータ位置でのみキーワード）
 
@@ -53,9 +53,9 @@ throw try catch finally extends implements
 
 ### 演算子
 
-`===` / `!==`（参照比較）は MVP で利用可能。§2.2 参照。
+`===` / `!==`（参照比較）を使用可能。§2.2 参照。
 
-**`@`** は annotation 用の予約 sigil（§20 参照）。MVP では Valen コード内で annotation を書けないため、`@` を識別子前に置くとパーサエラーとなる。
+**`@`** は annotation 用の予約 sigil（§20 参照）。現在 Valen コード内で annotation を書くことはサポートしていないため、`@` を識別子前に置くとパーサエラーとなる。
 
 **Valen 仕様で使わないキーワード:** `static` は導入しない。instance method と associated function の区別は `self` レシーバの有無のみで行う（§5.1 参照）。
 
@@ -97,7 +97,7 @@ let calc = f"1 + 2 = {1 + 2}";         // "1 + 2 = 3"
 
 エスケープ: `\{` / `\}` でリテラルの `{` / `}` を記述。
 
-**制限（MVP）:** 補間式内でブロック式 `{ ... }` やネストした f-string は使用不可。変数参照、フィールドアクセス、メソッドチェーン、二項演算などの単純な式を使用すること。
+**制限:** 補間式内でブロック式 `{ ... }` やネストした f-string は使用不可。変数参照、フィールドアクセス、メソッドチェーン、二項演算などの単純な式を使用すること。
 
 ## 1.4 識別子
 
