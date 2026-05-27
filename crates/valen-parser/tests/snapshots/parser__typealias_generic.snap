@@ -1,5 +1,6 @@
 ---
 source: crates/valen-parser/tests/parser.rs
+assertion_line: 455
 expression: "check(\"pub typealias Mapping<K, V> = java.util.Map<K, V>;\")"
 ---
 === AST ===
@@ -12,6 +13,7 @@ expression: "check(\"pub typealias Mapping<K, V> = java.util.Map<K, V>;\")"
                 GenericParam {
                     name: "K",
                     variance: Invariant,
+                    is_reified: false,
                     bounds: [],
                     span: Span {
                         start: 22,
@@ -24,6 +26,7 @@ expression: "check(\"pub typealias Mapping<K, V> = java.util.Map<K, V>;\")"
                 GenericParam {
                     name: "V",
                     variance: Invariant,
+                    is_reified: false,
                     bounds: [],
                     span: Span {
                         start: 25,

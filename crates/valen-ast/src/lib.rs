@@ -92,6 +92,7 @@ pub struct FnDecl {
     pub is_override: bool,
     pub is_abstract: bool,
     pub is_unsafe: bool,
+    pub is_inline: bool,
     pub span: Span,
 }
 
@@ -295,6 +296,7 @@ pub struct NewTypeDecl {
 pub struct GenericParam {
     pub name: SmolStr,
     pub variance: Variance,
+    pub is_reified: bool,
     pub bounds: Vec<Type>,
     pub span: Span,
 }

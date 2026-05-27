@@ -406,10 +406,12 @@ impl<'hir> TypeChecker<'hir> {
                         .define(c.name.clone(), Ty::Named(c.name.clone()), false);
                 }
                 valen_ast::Item::DataClass(dc) => {
+                    self.reject_reified_generics("data class", &dc.generics);
                     self.env
                         .define(dc.name.clone(), Ty::Named(dc.name.clone()), false);
                 }
                 valen_ast::Item::Enum(e) => {
+                    self.reject_reified_generics("enum", &e.generics);
                     self.env
                         .define(e.name.clone(), Ty::Named(e.name.clone()), false);
                 }
@@ -522,6 +524,30 @@ impl<'hir> TypeChecker<'hir> {
         self_ty: Option<&Ty>,
         def_id: Option<DefId>,
     ) {
+        for g in &f.generics {
+            if g.is_reified && !f.is_inline {
+                self.diags.error(
+                    DiagCode::TYPE_MISMATCH,
+                    g.span,
+                    SmolStr::from("`reified` type parameter is only allowed in `inline fn`"),
+                );
+            }
+        }
+
+        if f.is_inline {
+            if let Some(body) = &f.body {
+                if block_contains_return(body) {
+                    self.diags.error(
+                        DiagCode::TYPE_MISMATCH,
+                        f.span,
+                        SmolStr::from(
+                            "explicit `return` in `inline fn` is not yet supported; use a tail expression",
+                        ),
+                    );
+                }
+            }
+        }
+
         let Some(body) = &f.body else { return };
 
         let prev_type_params = self.type_params.clone();
@@ -602,7 +628,22 @@ impl<'hir> TypeChecker<'hir> {
         }
     }
 
+    fn reject_reified_generics(&mut self, owner: &str, generics: &[valen_ast::GenericParam]) {
+        for g in generics {
+            if g.is_reified {
+                self.diags.error(
+                    DiagCode::TYPE_MISMATCH,
+                    g.span,
+                    SmolStr::from(format!(
+                        "`reified` is not allowed on {owner} type parameters"
+                    )),
+                );
+            }
+        }
+    }
+
     fn check_class(&mut self, c: &valen_ast::ClassDecl) {
+        self.reject_reified_generics("class", &c.generics);
         let prev_type_params = std::mem::take(&mut self.type_params);
         let prev_bounds = std::mem::take(&mut self.type_param_bounds);
         let prev_self_ty = self.current_self_ty.take();
@@ -638,6 +679,7 @@ impl<'hir> TypeChecker<'hir> {
     }
 
     fn check_impl(&mut self, imp: &valen_ast::ImplBlock) {
+        self.reject_reified_generics("impl", &imp.generics);
         let prev_type_params = std::mem::take(&mut self.type_params);
         let prev_bounds = std::mem::take(&mut self.type_param_bounds);
         for g in &imp.generics {
@@ -677,6 +719,7 @@ impl<'hir> TypeChecker<'hir> {
     }
 
     fn check_trait(&mut self, t: &valen_ast::TraitDecl) {
+        self.reject_reified_generics("trait", &t.generics);
         let prev_type_params = std::mem::take(&mut self.type_params);
         for g in &t.generics {
             self.type_params.insert(g.name.clone());
@@ -984,6 +1027,7 @@ impl<'hir> TypeChecker<'hir> {
                                         span: path.span,
                                     }),
                                     args: vec![],
+                                    type_args: IndexMap::new(),
                                 },
                                 ty,
                                 span: path.span,
@@ -1415,10 +1459,19 @@ impl<'hir> TypeChecker<'hir> {
                 }
 
                 let ret = substitute_ty(ret_ty, &bindings);
+
+                let mut resolved_type_args = IndexMap::new();
+                if !bindings.is_empty() {
+                    for (name, ty) in &bindings {
+                        resolved_type_args.insert(name.clone(), ty.clone());
+                    }
+                }
+
                 TypedExpr {
                     kind: TypedExprKind::Call {
                         callee: Box::new(callee),
                         args,
+                        type_args: resolved_type_args,
                     },
                     ty: ret,
                     span: call.span,
@@ -1463,6 +1516,7 @@ impl<'hir> TypeChecker<'hir> {
                                             kind: TypedExprKind::Call {
                                                 callee: Box::new(callee),
                                                 args,
+                                                type_args: IndexMap::new(),
                                             },
                                             ty,
                                             span: call.span,
@@ -1513,6 +1567,7 @@ impl<'hir> TypeChecker<'hir> {
                     kind: TypedExprKind::Call {
                         callee: Box::new(callee),
                         args,
+                        type_args: IndexMap::new(),
                     },
                     ty: ctor_ty,
                     span: call.span,
@@ -1522,6 +1577,7 @@ impl<'hir> TypeChecker<'hir> {
                 kind: TypedExprKind::Call {
                     callee: Box::new(callee),
                     args,
+                    type_args: IndexMap::new(),
                 },
                 ty: Ty::Error,
                 span: call.span,
@@ -1536,6 +1592,7 @@ impl<'hir> TypeChecker<'hir> {
                     kind: TypedExprKind::Call {
                         callee: Box::new(callee),
                         args,
+                        type_args: IndexMap::new(),
                     },
                     ty: Ty::Error,
                     span: call.span,
@@ -1757,6 +1814,7 @@ impl<'hir> TypeChecker<'hir> {
             kind: TypedExprKind::Call {
                 callee: Box::new(callee.clone()),
                 args: args.to_vec(),
+                type_args: IndexMap::new(),
             },
             ty: ret_ty,
             span,
@@ -1867,6 +1925,7 @@ impl<'hir> TypeChecker<'hir> {
             kind: TypedExprKind::Call {
                 callee: Box::new(callee.clone()),
                 args: args.to_vec(),
+                type_args: IndexMap::new(),
             },
             ty: resolved_ret,
             span,
@@ -2899,6 +2958,7 @@ impl<'hir> TypeChecker<'hir> {
                         span: vs.span,
                     }),
                     args: vec![],
+                    type_args: IndexMap::new(),
                 },
                 ty,
                 span: vs.span,
@@ -2930,6 +2990,7 @@ impl<'hir> TypeChecker<'hir> {
             kind: TypedExprKind::Call {
                 callee: Box::new(callee),
                 args,
+                type_args: IndexMap::new(),
             },
             ty: Ty::Named(enum_name.clone()),
             span: vs.span,
@@ -3226,6 +3287,7 @@ impl<'hir> TypeChecker<'hir> {
                                 span,
                             }),
                             args: vec![],
+                            type_args: IndexMap::new(),
                         },
                         ty,
                         span,
@@ -4010,6 +4072,39 @@ fn collect_type_params_ordered(tys: &[Ty]) -> Vec<Ty> {
         collect_type_params_inner(ty, &mut seen);
     }
     seen.into_keys().map(Ty::TypeParam).collect()
+}
+
+fn block_contains_return(block: &valen_ast::Block) -> bool {
+    for stmt in &block.stmts {
+        match stmt {
+            valen_ast::Stmt::Expr(e) | valen_ast::Stmt::ExprSemi(e) if expr_contains_return(e) => {
+                return true;
+            }
+            valen_ast::Stmt::Let(l) if expr_contains_return(&l.init) => {
+                return true;
+            }
+            _ => {}
+        }
+    }
+    block
+        .tail
+        .as_ref()
+        .is_some_and(|tail| expr_contains_return(tail))
+}
+
+fn expr_contains_return(expr: &valen_ast::Expr) -> bool {
+    match expr {
+        valen_ast::Expr::Return(_) => true,
+        valen_ast::Expr::Block(b) => block_contains_return(b),
+        valen_ast::Expr::If(i) => {
+            block_contains_return(&i.then_branch)
+                || i.else_branch
+                    .as_ref()
+                    .is_some_and(|e| expr_contains_return(e))
+        }
+        valen_ast::Expr::Match(m) => m.arms.iter().any(|a| expr_contains_return(&a.body)),
+        _ => false,
+    }
 }
 
 fn collect_type_params_inner(ty: &Ty, seen: &mut IndexMap<SmolStr, ()>) {

@@ -1,5 +1,6 @@
 ---
 source: crates/valen-parser/tests/parser.rs
+assertion_line: 477
 expression: "check(\"fn f(x: Int) -> Long { x as Long }\")"
 ---
 === AST ===
@@ -152,6 +153,7 @@ expression: "check(\"fn f(x: Int) -> Long { x as Long }\")"
             is_override: false,
             is_abstract: false,
             is_unsafe: false,
+            is_inline: false,
             span: Span {
                 start: 0,
                 end: 34,

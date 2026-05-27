@@ -58,8 +58,38 @@ Valen の欠損表現は **`Option<T>` に一本化**。
 ## 2.4 ジェネリクス
 
 - `<T>` 形式、宣言時に `in`/`out` variance 指定可
-- erasure（JVM 互換）
-- `reified` 型パラメータは Phase 2（MVP は普通のジェネリクス）
+- 非 reified 型パラメータは erasure（JVM 互換）
+- `reified` 型パラメータは `inline fn` 内で使用可能（§4.8 参照）
+
+### reified 型パラメータ
+
+`reified T` はジェネリクスパラメータに付与する修飾子で、コールサイトで具体型に置換される。JVM の型消去を回避し、実行時に型情報を利用できる。
+
+**制約:**
+- `inline fn` 内でのみ使用可能（非 inline fn、class、trait、enum の型パラメータには使えない）
+- 同一関数内で reified と非 reified の型パラメータを混在可能
+
+**構文:**
+```valen
+inline fn <reified T> isInstance(value: Any) -> Bool {
+    value is T
+}
+
+inline fn <reified T, U> mixed(value: Any, other: U) -> Bool {
+    value is T  // T は reified → OK
+    // value is U はコンパイルエラー（U は非 reified）
+}
+```
+
+**reified T で許可される操作:**
+
+| 操作 | 構文 | JVM codegen |
+|------|------|-------------|
+| 型チェック | `value is T` | `instanceof ConcreteType` |
+| キャスト | `value as T` | `checkcast ConcreteType` |
+| クラス取得 | `T::class` | `ldc ConcreteType.class` |
+
+**Java interop:** Java 側からの呼び出し時は `reified` が無効になり、通常の型消去が適用される。
 
 ### 式位置での明示的型引数
 

@@ -172,7 +172,6 @@ Valen のジェネリクスは JVM の型消去（erasure）に従います。�
 
 - コンパイル時には型パラメータの情報でフル型チェックが行われます
 - 実行時には型パラメータの情報は消えます
-- `reified`（実行時に型情報を保持する）型パラメータは Phase 2 以降で導入予定です
 
 ```valen
 // コンパイル時: Box<Int> と Box<String> は別の型
@@ -182,7 +181,67 @@ let b: Box<String> = Box(value = "hello");
 // 実行時: 両方とも Box として扱われる（型パラメータは消去済み）
 ```
 
-Java 開発者の方へ: erasure の挙動は Java のジェネリクスと同じです。Kotlin の `reified` に慣れている方は注意してください。Valen の MVP ではまだ `reified` をサポートしていません。
+型消去を回避して実行時に型情報を使いたい場合は、次の「Reified 型パラメータ」を参照してください。
+
+## Reified 型パラメータ
+
+通常のジェネリクスでは型情報が実行時に消去されるため、`value is T` や `T::class` のような操作はできません。`reified` 型パラメータを使うと、コールサイトで具体型に置換され、実行時にも型情報を利用できます。
+
+### 基本構文
+
+`reified` は `inline fn` の型パラメータに指定します。`inline fn` はコールサイトに本体が展開される関数です。
+
+```valen
+inline fn <reified T> isInstance(value: Any) -> Bool {
+    value is T
+}
+
+let a = isInstance<String>("hello");  // true
+let b = isInstance<Int>("hello");     // false
+```
+
+`reified T` は **`inline fn` でのみ**使えます。通常の `fn` やクラスの型パラメータには指定できません。
+
+### reified T で可能な操作
+
+| 操作 | 構文 | 説明 |
+|------|------|------|
+| 型チェック | `value is T` | 値が `T` 型かどうかを判定 |
+| キャスト | `value as T` | 値を `T` 型にキャスト |
+| クラス取得 | `T::class` | `T` の `Class` オブジェクトを取得 |
+
+### 実用例
+
+JSON デシリアライズのようなユーティリティで型を引数として渡す場面に便利です。
+
+```valen
+inline fn <reified T> fromJson(json: String) -> T {
+    let cls = T::class;
+    // cls を使ってデシリアライズ処理
+    deserialize(json, cls) as T
+}
+
+let user = fromJson<User>(jsonStr);
+```
+
+複数の型パラメータがある場合、一部だけを `reified` にできます。
+
+```valen
+inline fn <reified T, U> checkAndMap(value: Any, f: fn(T) -> U) -> Option<U> {
+    if value is T {
+        Some(f(value as T))
+    } else {
+        None
+    }
+}
+```
+
+### 制約
+
+- `reified` は `inline fn` 内でのみ使用可能です。通常の `fn` に付けるとコンパイルエラーになります
+- クラス・trait・enum の型パラメータには `reified` を指定できません
+- `inline fn` の本体はコールサイトに展開されるため、大きな関数を `inline` にするとバイトコードが膨張する点に注意してください
+- Java から `inline fn` を呼び出す場合、`reified` は無効になります（[Java 相互運用](08-java-interop.md)を参照）
 
 ## Variance（変位指定）
 

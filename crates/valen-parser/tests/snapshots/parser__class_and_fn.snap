@@ -1,5 +1,6 @@
 ---
 source: crates/valen-parser/tests/parser.rs
+assertion_line: 102
 expression: "check(\"class Foo {}\\nfn main() {}\")"
 ---
 === AST ===
@@ -49,6 +50,7 @@ expression: "check(\"class Foo {}\\nfn main() {}\")"
             is_override: false,
             is_abstract: false,
             is_unsafe: false,
+            is_inline: false,
             span: Span {
                 start: 13,
                 end: 25,

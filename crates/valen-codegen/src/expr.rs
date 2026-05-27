@@ -4,7 +4,8 @@ use indexmap::IndexMap;
 use smol_str::SmolStr;
 use valen_ast::{BinaryOp, UnaryOp};
 use valen_hir::{
-    DefKind, Hir, PrimTy, Ty, TypedBody, TypedExpr, TypedExprKind, TypedStmt, TypedStringPart,
+    DefId, DefKind, FnDef, Hir, PrimTy, Ty, TypedBody, TypedExpr, TypedExprKind, TypedStmt,
+    TypedStringPart,
 };
 
 use crate::descriptor::tyref_to_jvm;
@@ -25,6 +26,7 @@ type ScopeUndo = Vec<(SmolStr, Option<(u16, JvmType)>)>;
 
 struct ExprLowering<'a> {
     hir: &'a Hir,
+    typed_bodies: &'a IndexMap<DefId, TypedBody>,
     ops: Vec<JvmOp>,
     locals: IndexMap<SmolStr, (u16, JvmType)>,
     next_slot: u16,
@@ -56,6 +58,7 @@ pub struct LowerBodyResult {
 }
 
 /// Lowers a typed method body into JVM bytecode operations.
+#[allow(clippy::too_many_arguments)]
 pub fn lower_body(
     body: &TypedBody,
     class_internal: &str,
@@ -64,9 +67,11 @@ pub fn lower_body(
     has_self: bool,
     pkg: Option<&[SmolStr]>,
     hir: &Hir,
+    typed_bodies: &IndexMap<DefId, TypedBody>,
 ) -> LowerBodyResult {
     let mut ctx = ExprLowering {
         hir,
+        typed_bodies,
         ops: Vec::new(),
         locals: IndexMap::new(),
         next_slot: 0,
@@ -466,8 +471,12 @@ impl<'a> ExprLowering<'a> {
                     });
                 }
             }
-            TypedExprKind::Call { callee, args } => {
-                self.lower_call(callee, args, &expr.ty);
+            TypedExprKind::Call {
+                callee,
+                args,
+                type_args,
+            } => {
+                self.lower_call(callee, args, type_args, &expr.ty);
             }
             TypedExprKind::MethodCall {
                 receiver,
@@ -687,7 +696,21 @@ impl<'a> ExprLowering<'a> {
         }
     }
 
-    fn lower_call(&mut self, callee: &TypedExpr, args: &[TypedExpr], result_ty: &Ty) {
+    fn lower_call(
+        &mut self,
+        callee: &TypedExpr,
+        args: &[TypedExpr],
+        type_args: &IndexMap<SmolStr, Ty>,
+        result_ty: &Ty,
+    ) {
+        if let TypedExprKind::LocalVar(name) = &callee.kind {
+            if !matches!(callee.ty, Ty::Fn(_, _))
+                && self.try_inline_call(name, args, type_args, result_ty)
+            {
+                return;
+            }
+        }
+
         let ret_ty = self.ty_to_jvm(result_ty);
         let param_tys: Vec<JvmType> = args.iter().map(|a| self.ty_to_jvm(&a.ty)).collect();
 
@@ -868,6 +891,157 @@ impl<'a> ExprLowering<'a> {
         }
     }
 
+    /// Attempts to inline a call to an `inline fn`. Returns true if inlined.
+    fn try_inline_call(
+        &mut self,
+        name: &str,
+        args: &[TypedExpr],
+        type_args: &IndexMap<SmolStr, Ty>,
+        _result_ty: &Ty,
+    ) -> bool {
+        let Some((def_id, fn_def)) = self.find_inline_fn(name) else {
+            return false;
+        };
+        let Some(body) = self.typed_bodies.get(&def_id) else {
+            return false;
+        };
+        let body = body.clone();
+        let params: Vec<(SmolStr, bool)> = fn_def
+            .params
+            .iter()
+            .filter(|p| !p.is_self)
+            .map(|p| (p.name.clone(), p.is_self))
+            .collect();
+        let type_args = type_args.clone();
+
+        self.push_scope();
+        for (i, (param_name, _)) in params.iter().enumerate() {
+            if let Some(arg) = args.get(i) {
+                self.lower_expr(arg);
+                let jvm_ty = self.ty_to_jvm(&arg.ty);
+                let slot = self.next_slot;
+                self.next_slot += jvm_ty.slot_count();
+                self.ops.push(JvmOp::StoreLocal(slot, jvm_ty.clone()));
+                self.scope_stack
+                    .last_mut()
+                    .unwrap()
+                    .push((param_name.clone(), self.locals.get(param_name).cloned()));
+                self.locals.insert(param_name.clone(), (slot, jvm_ty));
+            }
+        }
+
+        // Lower the inlined body, substituting reified types via instanceof/checkcast.
+        self.lower_inline_body(&body, &type_args);
+
+        self.pop_scope();
+        true
+    }
+
+    fn find_inline_fn(&self, name: &str) -> Option<(DefId, FnDef)> {
+        for &def_id in self.hir.lookup_by_name(name) {
+            if let Some(def) = self.hir.defs.get(&def_id) {
+                if let DefKind::Fn(fn_def) = &def.kind {
+                    if fn_def.is_inline {
+                        return Some((def_id, fn_def.clone()));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn lower_inline_body(&mut self, body: &TypedBody, type_args: &IndexMap<SmolStr, Ty>) {
+        for stmt in &body.stmts {
+            self.lower_inline_stmt(stmt, type_args);
+        }
+        if let Some(tail) = &body.tail {
+            self.lower_inline_expr(tail, type_args);
+        }
+    }
+
+    fn lower_inline_stmt(&mut self, stmt: &TypedStmt, type_args: &IndexMap<SmolStr, Ty>) {
+        match stmt {
+            TypedStmt::Let {
+                name,
+                ty,
+                init,
+                mutable: _,
+                ..
+            } => {
+                let resolved_ty = self.resolve_reified_ty(ty, type_args);
+                self.lower_inline_expr(init, type_args);
+                let jvm_ty = self.ty_to_jvm(&resolved_ty);
+                let slot = self.next_slot;
+                self.next_slot += jvm_ty.slot_count();
+                self.ops.push(JvmOp::StoreLocal(slot, jvm_ty.clone()));
+                self.scope_stack
+                    .last_mut()
+                    .unwrap()
+                    .push((name.clone(), self.locals.get(name).cloned()));
+                self.locals.insert(name.clone(), (slot, jvm_ty));
+            }
+            TypedStmt::Expr(e) | TypedStmt::ExprSemi(e) => {
+                self.lower_inline_expr(e, type_args);
+                if matches!(stmt, TypedStmt::ExprSemi(_)) {
+                    let jvm_ty = self.ty_to_jvm(&e.ty);
+                    if jvm_ty != JvmType::Void {
+                        self.ops.push(JvmOp::Pop);
+                    }
+                }
+            }
+            _ => {
+                self.lower_stmt(stmt);
+            }
+        }
+    }
+
+    fn lower_inline_expr(&mut self, expr: &TypedExpr, type_args: &IndexMap<SmolStr, Ty>) {
+        match &expr.kind {
+            TypedExprKind::Cast {
+                expr: inner,
+                target_ty,
+            } => {
+                let resolved = self.resolve_reified_ty(target_ty, type_args);
+                self.lower_inline_expr(inner, type_args);
+                if let Ty::Named(n) = &resolved {
+                    let internal = crate::descriptor::resolve_type_internal_name(
+                        n,
+                        self.pkg,
+                        &self.hir.imports,
+                    );
+                    self.ops.push(JvmOp::Checkcast(internal));
+                }
+            }
+            _ => {
+                self.lower_expr(expr);
+            }
+        }
+    }
+
+    fn resolve_reified_ty(&self, ty: &Ty, type_args: &IndexMap<SmolStr, Ty>) -> Ty {
+        match ty {
+            Ty::TypeParam(name) => type_args.get(name).cloned().unwrap_or_else(|| ty.clone()),
+            Ty::Generic(n, args) => Ty::Generic(
+                n.clone(),
+                args.iter()
+                    .map(|t| self.resolve_reified_ty(t, type_args))
+                    .collect(),
+            ),
+            Ty::Nullable(inner) => {
+                Ty::Nullable(Box::new(self.resolve_reified_ty(inner, type_args)))
+            }
+            Ty::Fn(params, ret) => Ty::Fn(
+                params
+                    .iter()
+                    .map(|t| self.resolve_reified_ty(t, type_args))
+                    .collect(),
+                Box::new(self.resolve_reified_ty(ret, type_args)),
+            ),
+            Ty::RefMut(inner) => Ty::RefMut(Box::new(self.resolve_reified_ty(inner, type_args))),
+            _ => ty.clone(),
+        }
+    }
+
     /// Lowers a lambda expression into an `invokedynamic` call site and a synthetic method.
     ///
     /// The lambda body is compiled into a `private static synthetic` method, and an
@@ -919,6 +1093,7 @@ impl<'a> ExprLowering<'a> {
                 false,
                 self.pkg,
                 self.hir,
+                self.typed_bodies,
             );
             // Hoist any nested lambdas up.
             // Nested lambda bootstrap indices are offset by the current bootstrap table size.

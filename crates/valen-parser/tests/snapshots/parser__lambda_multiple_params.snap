@@ -1,5 +1,6 @@
 ---
 source: crates/valen-parser/tests/parser.rs
+assertion_line: 423
 expression: "check(\"fn f() { let add = |a: Int, b: Int| -> Int { a }; }\")"
 ---
 === AST ===
@@ -194,6 +195,7 @@ expression: "check(\"fn f() { let add = |a: Int, b: Int| -> Int { a }; }\")"
             is_override: false,
             is_abstract: false,
             is_unsafe: false,
+            is_inline: false,
             span: Span {
                 start: 0,
                 end: 51,

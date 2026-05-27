@@ -1,5 +1,6 @@
 ---
 source: crates/valen-parser/tests/parser.rs
+assertion_line: 492
 expression: "check(\"fn main() {\n    let x: Option<Int> = Some(42);\n    if let Some(v) = x {\n        v\n    }\n    let y = 1;\n}\")"
 ---
 === AST ===
@@ -305,6 +306,7 @@ expression: "check(\"fn main() {\n    let x: Option<Int> = Some(42);\n    if let
             is_override: false,
             is_abstract: false,
             is_unsafe: false,
+            is_inline: false,
             span: Span {
                 start: 0,
                 end: 104,

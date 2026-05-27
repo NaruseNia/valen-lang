@@ -90,6 +90,8 @@ pub fn class_with_method(
                 is_open: false,
                 is_override: false,
                 is_abstract: false,
+                is_inline: false,
+                reified_params: vec![],
             }),
             vis: Vis::Pub,
             span: span(),

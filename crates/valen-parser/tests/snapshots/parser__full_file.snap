@@ -1,5 +1,6 @@
 ---
 source: crates/valen-parser/tests/parser.rs
+assertion_line: 377
 expression: "check(\"package com.example;\\nimport java.util.List;\\n\\npub fn main() { let x: Int = 42; x }\")"
 ---
 === AST ===
@@ -139,6 +140,7 @@ expression: "check(\"package com.example;\\nimport java.util.List;\\n\\npub fn m
             is_override: false,
             is_abstract: false,
             is_unsafe: false,
+            is_inline: false,
             span: Span {
                 start: 45,
                 end: 81,

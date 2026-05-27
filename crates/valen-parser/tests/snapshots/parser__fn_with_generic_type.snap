@@ -1,5 +1,6 @@
 ---
 source: crates/valen-parser/tests/parser.rs
+assertion_line: 124
 expression: "check(\"fn first(xs: List<Int>) -> Option<Int> { xs }\")"
 ---
 === AST ===
@@ -167,6 +168,7 @@ expression: "check(\"fn first(xs: List<Int>) -> Option<Int> { xs }\")"
             is_override: false,
             is_abstract: false,
             is_unsafe: false,
+            is_inline: false,
             span: Span {
                 start: 0,
                 end: 45,
