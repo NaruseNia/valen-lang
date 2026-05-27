@@ -107,7 +107,7 @@ valenfmt src/main.vln
 ## Documentation
 
 - [Language Specification](docs/LANGUAGE_SPEC.md) — formal language reference
-- [User Guide](docs/guide/) — tutorial-style introduction
+- [User Guide](https://narusenia.github.io/valen-docs/) — tutorial-style introduction
 - [Compiler Architecture](docs/guide/09-compiler-architecture.md) — internals for contributors
 
 ## License
