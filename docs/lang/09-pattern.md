@@ -1,6 +1,6 @@
 # 9. パターンマッチ
 
-## 9.1 フルセット
+## 9.1 パターンの種類
 
 ```valen
 match value {
@@ -8,12 +8,28 @@ match value {
     1..=9 => "small",                     // 範囲
     10 | 20 | 30 => "round",              // or パターン
     n if n < 0 => "negative",             // ガード
-    Shape::Circle(r) => f"circle r={r}",  // 構造分解
+    Shape::Circle(r) => f"circle r={r}",  // 構造分解（enum variant / data class）
     Shape::Rect(w, h) => f"rect {w}x{h}", // 複数フィールド
-    p @ User(name = "admin", ..) => admin_action(p),  // @束縛 + rest
+    .Some(v) => f"shorthand {v}",         // variant shorthand
+    p @ User(name: "admin", ..) => admin_action(p),  // @束縛 + rest
     _ => "other",
 }
 ```
+
+### 対応するパターン一覧
+
+| パターン | 構文例 | AST ノード |
+|----------|--------|-----------|
+| ワイルドカード | `_` | `Pattern::Wildcard` |
+| リテラル | `0`, `"hello"`, `true`, `'a'`, `3.14f`, `1L` | `Pattern::Literal` |
+| 変数束縛 | `x`, `mut x` | `Pattern::Binding` |
+| パス | `Shape::Circle`, `Option::None` | `Pattern::Path` |
+| 構造分解 | `Shape::Circle(r)`, `Some(v)` | `Pattern::Struct` |
+| 範囲 | `1..10`, `0..=255` | `Pattern::Range` |
+| or | `A \| B \| C` | `Pattern::Or` |
+| @束縛 | `p @ Some(v)` | `Pattern::At` |
+| variant shorthand | `.None`, `.Some(v)` | `Pattern::VariantShorthand` |
+| タプル | *(将来予約)* | `Pattern::Tuple` |
 
 ### 9.1.1 or パターンの束縛一貫性
 
@@ -45,6 +61,8 @@ match n {
 }
 ```
 
+> **実装状況:** パーサーも exhaustiveness checker もこの一貫性検証を行わない（未実装）。将来のセマンティックチェックパスで検証予定。現時点では不一致な束縛を書いてもコンパイルエラーにならない。
+
 ### 9.1.2 match guard
 
 `match` arm は pattern の後に `if` 条件を置ける。guard は pattern が一致し、束縛変数が導入された後に評価される。
@@ -58,7 +76,7 @@ match user {
 
 guard 式の型は `Bool` でなければならない。guard 内では、その arm の pattern で束縛された名前を参照できる。
 
-guard 付き arm は exhaustive check 上、**無条件に網羅したとは扱わない**。guard が実行時に `false` になりうるためである。
+guard 付き arm は exhaustive check 上、**無条件に網羅したとは扱わない**。guard が実行時に `false` になりうるためである。exhaustiveness checker は guard 付き arm をスキップする（正しい動作）。
 
 ```valen
 match n {
@@ -81,54 +99,117 @@ match n {
 }
 ```
 
-## 9.1.3 let-else
+### 9.1.3 variant shorthand パターン
 
-`let-else` is a refutable pattern binding that diverges when the pattern does not match. The else block **must** diverge (`return`, `break`, `continue`, or `panic`).
+`.Variant` / `.Variant(fields)` 形式でコンテキストから enum 型を推論し、`EnumName::Variant` のフルパスを省略できる。
+
+```valen
+enum Color { Red, Green, Blue }
+
+fn name(c: Color) -> String {
+    match c {
+        .Red => "red",
+        .Green => "green",
+        .Blue => "blue",
+    }
+}
+```
+
+フィールド付き variant:
+
+```valen
+enum Shape { Circle(r: Float), Rect(w: Float, h: Float), Point }
+
+match shape {
+    .Circle(r) => f"circle r={r}",
+    .Rect(w, h) => f"rect {w}x{h}",
+    .Point => "point",
+}
+```
+
+`..`（rest）も使用可能:
+
+```valen
+match shape {
+    .Circle(..) => "circle",
+    _ => "other",
+}
+```
+
+variant shorthand は名前が大文字で始まる識別子に対してのみパース（`.` の直後の識別子が `[A-Z]` 始まり）。exhaustiveness checker も `VariantShorthand` パターンを正しく認識する。
+
+### 9.1.4 タプルパターン（将来予約）
+
+`Pattern::Tuple` は AST に定義されているがパーサーにパースロジックはない。現在は使用不可。将来のタプル型サポートに向けて予約されている。
+
+## 9.1.5 let-else
+
+`let-else` は refutable pattern binding で、パターンが一致しない場合 else ブロックで発散する。else ブロックは**必ず発散**（`return`, `break`, `continue`, `panic`）しなければならない。
 
 ```valen
 let Some(health) = world.getComponent(entity, "Health") else { return; };
 let Ok(data) = readFile(path) else { panic("read failed"); };
 ```
 
-The bound variables (`health`, `data`) are available in the enclosing scope after the `let-else` statement. The else block's type must be `Nothing` (the bottom type).
+束縛された変数（`health`, `data`）は `let-else` 文以降の囲みスコープで使用可能。else ブロックの型は `Nothing`（bottom type）でなければならない。
 
-This is syntactic sugar for early-return patterns, avoiding deeply nested `match` blocks:
+これは早期リターンパターンの糖衣構文で、深い `match` ネストを回避する:
 
 ```valen
-// Without let-else:
+// let-else なし:
 let health = match world.getComponent(entity, "Health") {
     Option::Some(h) => h,
     Option::None => return,
 };
 
-// With let-else:
+// let-else あり:
 let Option::Some(health) = world.getComponent(entity, "Health") else { return; };
 ```
 
-The pattern in `let-else` is always refutable (e.g. `Some(x)`, `Ok(v)`, `Color::Blue(n)`). Using an irrefutable pattern is permitted but unusual.
+`let-else` のパターンは常に refutable（例: `Some(x)`, `Ok(v)`, `Color::Blue(n)`）。irrefutable パターンの使用は許可されるが通常ではない。
 
-## 9.2 exhaustive check
-
-- Valen `enum` / `sealed class` / `sealed trait` hierarchy：**厳密 exhaustive**（非網羅はコンパイルエラー）
-- Java 型：**`@valen.Closed` アノテーション付きのみ exhaustive**、他は常に open-world
+## 9.2 範囲パターン
 
 ```valen
-// Java 側定義（ライブラリ作者が @valen.Closed を付与）
-@Closed
-sealed interface Color permits Red, Blue, Green
+match n {
+    0..10 => "single digit",     // 排他的（0 <= n < 10）
+    10..=99 => "double digit",   // 包含的（10 <= n <= 99）
+    _ => "large",
+}
+```
 
+### 実装上の制限
+
+- **開始リテラル**: `IntLit`, `LongLit` を受け付ける（パーサーが `IntLit` / `LongLit` で範囲パターンへ分岐）
+- **終了リテラル**: `IntLit` のみ受け付ける。`LongLit` を終了値に書くとパースに失敗する（`parse_range_pattern()` が終了側で `IntLit` のみチェック）
+- `Float`, `Double`, `Char`, `String` などの範囲パターンは未サポート
+
+## 9.3 exhaustive check
+
+### 9.3.1 対象型
+
+| 対象 | 網羅性チェック |
+|------|--------------|
+| Valen `enum` | 全 variant の網羅を要求 |
+| `sealed class` | 全サブクラスの網羅を要求 |
+| `sealed trait` | 全 implementor の網羅を要求 |
+| `Bool` | `true` と `false` 両方の網羅を要求 |
+| `Int`, `String` 等 | 網羅性チェックなし |
+
+### 9.3.2 Java 型との連携
+
+- Java `sealed` 単独では exhaustive 扱いにしない
+- `@valen.Closed` アノテーション付きの Java sealed hierarchy のみ closed-world として exhaustive check を有効化
+- `@valen.Closed` 不在の Java hierarchy は open-world → wildcard arm (`_`) が必須
+
+```valen
+// @valen.Closed 付き Java sealed interface
 match color {
     Color.Red => ...,
     Color.Blue => ...,
     Color.Green => ...,  // 網羅しないとコンパイルエラー
 }
-```
 
-## 9.3 `@valen.Closed` 不在時の動作
-
-**Java `sealed` 単独では exhaustive 扱いにしない**。`@valen.Closed` の付与がない Java hierarchy は open-world として扱い、`match` では wildcard arm (`_`) を **必ず要求する**。
-
-```valen
 // @valen.Closed なし — wildcard 必須
 match javaSealed {
     Foo.A => ...,
@@ -137,9 +218,34 @@ match javaSealed {
 }
 ```
 
-理由: Valen 自身が定義した closed world はコンパイラが完全に把握できるが、Java 定義の closed world は classpath 変動・tooling 差異があり、同じ厳密さを保証できない。annotation による明示 opt-in を要求することで、classpath で permit が増えたときに silently non-exhaustive 化する事故を防ぐ。
-
 詳細は [20. アノテーション](20-annotations.md) を参照。
+
+### 9.3.3 既知の制限
+
+exhaustiveness checker は**生の AST 上で動作**し、scrutinee の型をローカル変数のアノテーションから再推論する。以下のケースでは型推論が効かず、exhaustiveness check がサイレントにスキップされる:
+
+- 関数の戻り値（`match getColor() { ... }`）
+- メソッドチェーン（`match obj.method().field { ... }`）
+- 複雑な式（`match if cond { a } else { b } { ... }`）
+
+**パラメータの型アノテーション**と**`let` 束縛の型アノテーション**からのみ scrutinee 型を推論できる。
+
+```valen
+fn process(c: Color) {
+    match c { ... }  // ✓ パラメータ型アノテーションから Color を推論
+}
+
+fn process2() {
+    let c: Color = getColor();
+    match c { ... }  // ✓ let 型アノテーションから Color を推論
+}
+
+fn process3() {
+    match getColor() { ... }  // ✗ 型推論できず、check スキップ
+}
+```
+
+> **設計ノート (#025):** 将来的には型チェック済み HIR（`TypedExpr`）を消費する形にリファクタリングし、すべての scrutinee 型で正確な exhaustiveness check を行う予定。
 
 ## 9.4 if let / while let
 

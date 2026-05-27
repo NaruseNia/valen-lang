@@ -10,9 +10,9 @@ import java.util.List;
 ```
 
 - Java 風、ファイル先頭に package 宣言
-- **package 宣言は必須。** 省略した `.vln` ファイルはコンパイルエラー
 - ファイルシステム階層と一致（Java と同様）
-- **package は source 階層と名前空間のみ**。所有権・可視性単位としては使わない（それは `module` の責務、§10.2）
+- **package 宣言は推奨だが、省略してもコンパイルエラーにはならない。** パーサーは package 宣言なしのファイルを受け付け、resolver もエラーを出さない。テスト等では省略されることが多い
+- package は source 階層と名前空間を定義する。`internal` 可視性の境界判定にも使用される（§10.3）
 
 ### import 構文
 
@@ -26,18 +26,20 @@ import java.util.concurrent.ConcurrentHashMap as CMap;  // alias
 
 選択インポート（`import foo.{A, B}`）とグロブインポート（`import foo.*`）は現在サポートしていない。
 
-## 10.2 module
+## 10.2 module（設計済み・未実装）
 
-`module` は **ビルドターゲット内の意味的所有単位**。orphan rule / `sealed permit` 範囲 / `internal` 可視性はすべて module ID に従う。
+> **注意:** 本セクションは言語設計ドキュメントである。module システムは設計済みだが、コンパイラに実装されていない。`valenc` CLI に `--module` フラグは存在せず、Gradle plugin もまだ存在しない。現在の `internal` 可視性は module ID ではなく package パスの比較で制御されている（§10.3 参照）。
+
+`module` は **ビルドターゲット内の意味的所有単位**。orphan rule / `sealed permit` 範囲 / `internal` 可視性はすべて module ID に従う（将来実装時）。
 
 **module はビルドツール駆動で決まる** — Valen ソース内に `module` 宣言は**書かない**。
 
 | ビルドモード | module ID の決定方法 |
 |---|---|
 | Gradle plugin | Gradle subproject 名 = 1 module |
-| `valenc` CLI 単体 | `valenc --module <name> src/*.vln` |
+| `valenc` CLI 単体 | `valenc --module <name> src/*.vln`（未実装） |
 
-**module の基本ルール:**
+**module の基本ルール（設計意図）:**
 
 - 同一 module ID に属するソースファイルは複数あってよい（ファイル境界 ≠ module 境界）
 - 異なる module は同一 Gradle build / classpath に共存できるが、所有権は別
@@ -57,13 +59,30 @@ import java.util.concurrent.ConcurrentHashMap as CMap;  // alias
 
 ## 10.3 可視性修飾子
 
-| 修飾子 | 意味 |
-|--------|------|
-| `pub` | 公開（どこからでも見える） |
-| `internal` | 同一モジュール内 |
-| `private` | declaration-private（クラス内・トップレベル内、Kotlin 流） |
+| 修飾子 | 意味 | デフォルト |
+|--------|------|-----------|
+| `pub` | 公開（どこからでも見える） | |
+| `internal` | 同一パッケージ内（暫定実装） | ✓ |
+| `private` | declaration-private（クラス内・トップレベル内、Kotlin 流） | |
 
-デフォルトは `internal`。`internal` の範囲は §10.2 の module に従う。
+明示指定がない場合のデフォルトは `internal`。パーサーの `parse_visibility()` は `pub` / `internal` / `private` キーワードがなければ `Visibility::Internal` を返す。
+
+### `internal` の現在の実装
+
+module システムが未実装のため、`internal` 可視性は**パッケージパスの比較**で判定される:
+
+```
+check_visibility_from_package():
+  def_package == accessor_package → 許可
+  どちらかが None → 拒否
+  パッケージパスが異なる → 拒否
+```
+
+- 同一パッケージ内のファイル間では `internal` メンバにアクセス可能
+- 異なるパッケージ間ではアクセス不可
+- パッケージ宣言なしのファイル同士は互いにアクセス可能（両方 `None`）
+
+> **将来:** module システム実装後は、`internal` の境界が package パスから module ID に変更される予定。
 
 ## 10.4 スコープ演算子
 

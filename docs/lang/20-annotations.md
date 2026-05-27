@@ -22,15 +22,21 @@ annotation class Serializable  // マーカー annotation（パラメータな�
 annotation class JsonName(pub name: String)
 ```
 
-**構文:** `annotation class Name(params)` — `annotation` は予約キーワード。
+**構文:** `annotation class Name(params)` — `annotation` は予約キーワード。パーサーは `annotation class` の連続トークンを `AnnotationClassDecl` として認識する。
 
-**パラメータ値:** リテラルのみ（String, Int, Float, Bool, Long, Double, Char）。
+**パラメータ:** 各パラメータは `visibility name: Type` 形式。可視性修飾子付き。
 
-**retention:** デフォルト RUNTIME。`@Retention(RUNTIME)` + `@Target(...)` が自動 emit される。
+**パラメータの型:** 型パーサーが受理する任意の型を書けるが、意味的にはリテラル型（String, Int, Float, Bool, Long, Double, Char）が前提。
 
-**@Target 指定:** `@Target("type")` / `@Target("type", "field", "method")` で制限可能。未指定時は TYPE + FIELD + METHOD。
+**@Target 指定:** `@Target("type")` / `@Target("type", "field", "method")` で制限可能。パーサーが `@Target` アノテーションの引数を読み取り、resolver が `AnnotationClassDef.targets` フィールドに格納する。
 
-**JVM ABI:** `@interface`（ACC_INTERFACE | ACC_ABSTRACT | ACC_ANNOTATION）として emit。
+> **実装状況（@Target 検証）:** `targets` は HIR に保存されるが、**アノテーション適用先の妥当性検証は未実装**。例えばフィールド専用アノテーションをクラスに付けてもコンパイルエラーにならない。
+
+**@Retention:** 仕様上のデフォルトは RUNTIME retention。
+
+> **実装状況（@Retention）:** retention の解析・保存・JVM バイトコード反映はすべて未実装。
+
+**JVM ABI:** `@interface`（ACC_INTERFACE | ACC_ABSTRACT | ACC_ANNOTATION）として emit する設計。
 
 ## 20.2.1 annotation 適用
 
@@ -45,11 +51,15 @@ pub name: String
 data class User(pub name: String);
 ```
 
-**適用対象:** トップレベル宣言（class, data class, enum, trait, fn）+ フィールド / ctor パラメータ。
+**適用対象:** トップレベル宣言（class, data class, enum, trait, fn）+ コンストラクタパラメータ（`CtorParam`）+ フィールド（`FieldDecl`）。
 
-**引数構文:** named 引数基本（`key = value`）。パラメータが1つのみの場合は名前省略可（`@Foo("bar")`）。
+パーサーは `@Name(args)` 形式をパースし、各宣言の `annotations: Vec<Annotation>` フィールドに格納する。
 
-**Java annotation:** import した Java annotation も `@Foo(...)` で適用可能。パラメータ検証なし（信頼ベース emit）。
+**引数構文:** named 引数基本（`key = value`）。パラメータが1つのみの場合は名前省略可（`@Foo("bar")`）。引数の値はリテラルのみ（`parse_literal()` で解析: Int, Long, Float, Double, String, Char, Bool）。
+
+**Java annotation の適用について:**
+
+> **実装状況:** パーサーは Valen で定義された annotation class の宣言と、Valen コード上での `@Foo(...)` 適用構文をパースする。import した Java annotation を `@Foo(...)` で適用する構文は同一だが、**パラメータの型検証は行わない**（信頼ベース）。Java annotation 定義自体の読み込み・解決は classpath 連携が必要で、現時点では行われていない。
 
 ## 20.3 `@valen.Closed`
 
@@ -68,7 +78,7 @@ Java sealed hierarchy を Valen から exhaustive match 可能にする唯一の
 
 それ以外（enum / interface / class）への付与は未定義。
 
-**効果:** Valen コンパイラは `@valen.Closed` 付きの Java sealed hierarchy を closed-world として扱い、`match` で exhaustive check を有効化する。
+**効果:** Valen コンパイラは `@valen.Closed` 付きの Java sealed hierarchy を closed-world として扱い、`match` で exhaustive check を有効化する。`has_valen_closed` フラグと `permitted_subclasses` リストを HIR の `foreign_types` に格納し、exhaustiveness checker がこれを参照する。
 
 ```java
 // Java 側定義（ライブラリ作者）
@@ -106,7 +116,3 @@ match color {
 ```
 
 **設計意図:** Valen が自分で定義した closed world（`enum` / `sealed class`）は compiler が完全に把握しているので exhaustive check を厳密にできる。Java 定義の closed world は classpath 変動・tooling 差異があるため、ライブラリ作者の明示 opt-in を要求する。
-
-## 20.5 Java annotation の扱い
-
-Valen コード側から Java annotation を直接付与することは現在サポートしていない。Java ライブラリ側で annotation を付ける必要がある場合は、Java ソースを直接編集する。

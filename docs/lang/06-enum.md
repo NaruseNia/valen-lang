@@ -66,7 +66,67 @@ scrutinee の型から enum を推論する。
 2. 期待される型がない場合、スコープ内のすべての enum から variant 名で検索する（あいまいな場合はエラー）
 3. 推論に失敗した場合は `EnumName::Variant` の完全修飾形を使う必要がある
 
-## 6.4 enum と sealed class の使い分け
+## 6.4 derives 句
+
+enum は `derives(...)` 句で payload variant に対するメソッド自動生成を宣言できる。
+
+```valen
+enum Shape derives(Eq, Hash, Display, Clone) {
+    Circle(r: Float),
+    Rect(w: Float, h: Float),
+    Point,
+}
+```
+
+**構文:** `derives(Trait1, Trait2, ...)` — enum 名（とジェネリクスパラメータ）の後、本体 `{` の前に置く。
+
+**利用可能な derive:**
+
+| derive    | 生成メソッド | 適用先 |
+|-----------|------------|--------|
+| `Eq`      | `equals(Object) -> Boolean` | payload variant のみ |
+| `Hash`    | `hashCode() -> Int` | payload variant のみ |
+| `Display` | `toString() -> String` | payload variant のみ |
+| `Clone`   | `copy(...) -> Self` | payload variant のみ |
+
+payload なし variant（singleton）には derive は適用されない（元々 singleton のため identity equals で十分）。
+
+derive の生成ロジックは data class と共通（`data_class_methods` モジュール）。
+
+## 6.5 enum の method
+
+enum は inherent impl ブロックで method を持つことができる。
+
+```valen
+enum Shape {
+    Circle(r: Float),
+    Rect(w: Float, h: Float),
+    Point,
+}
+
+impl Shape {
+    fn describe(self) -> String {
+        match self {
+            .Circle(r) => f"circle with radius {r}",
+            .Rect(w, h) => f"rect {w}x{h}",
+            .Point => "point",
+        }
+    }
+
+    fn is_circle(self) -> Boolean {
+        match self {
+            .Circle(_) => true,
+            _ => false,
+        }
+    }
+}
+```
+
+- `impl EnumName { ... }` で inherent method を定義
+- `impl Trait for EnumName { ... }` で trait 実装
+- method は sealed interface 側に emit されるため、全 variant で利用可能
+
+## 6.6 enum と sealed class の使い分け
 
 **操作で区別する**（「表現したいもの」ではなく「許される操作」で切る）。
 
@@ -74,7 +134,7 @@ scrutinee の型から enum を推論する。
 |---|---|---|
 | 位置づけ | ADT、**data の和** | closed OOP hierarchy、**振る舞いの階層** |
 | variant / subtype の素性 | payload-holding data container | 独自 state / method / trait impl を持てる |
-| 独自 method | **持てない**（trait impl 経由のみ） | 持てる |
+| 独自 method | inherent impl で追加可 | class body / inherent impl で追加可 |
 | 継承関係 | なし（flat） | 親-子の階層を作れる |
 | 可視性差分 | variant ごとの差分 **不可** | 各 subtype で個別 |
 
@@ -83,21 +143,25 @@ scrutinee の型から enum を推論する。
 - **データの和を表す** → `enum`
 - **振る舞いの階層を表す** → `sealed class`
 
-`enum` は variant 自体を拡張しない純粋な識別付き和型、`sealed class` は OOP 階層の閉じた形。両方で書ける場面に迷ったら `enum` を先に試し、variant ごとに独自 method / state が必要になった時点で `sealed class` を検討する。
+`enum` は variant 自体を拡張しない純粋な識別付き和型、`sealed class` は OOP 階層の閉じた形。両方で書ける場面に迷ったら `enum` を先に試し、variant ごとに独自 state が必要になった時点で `sealed class` を検討する。
 
-## 6.5 Java bytecode 表現
+## 6.7 Java bytecode 表現
 
 Valen enum は以下のように bytecode に emit される。
 
 ```java
-// Shape.valen → Shape.class
+// Shape.valen → Shape.class + Shape$Circle.class + Shape$Rect.class + Shape$Point.class
+// 各 variant は独立した top-level .class ファイルとして出力される
+
+// sealed interface（enum 本体）
 public sealed interface Shape permits Shape$Circle, Shape$Rect, Shape$Point {}
 
-public static final record Shape$Circle(double r) implements Shape {}
-public static final record Shape$Rect(double w, double h) implements Shape {}
+// payload あり variant → record（java.lang.Record を継承）
+public final record Shape$Circle(float r) implements Shape {}
+public final record Shape$Rect(float w, float h) implements Shape {}
 
-// payload なし variant は singleton
-public static final class Shape$Point implements Shape {
+// payload なし variant → singleton class
+public final class Shape$Point implements Shape {
     public static final Shape$Point INSTANCE = new Shape$Point();
     private Shape$Point() {}
 }
@@ -105,32 +169,39 @@ public static final class Shape$Point implements Shape {
 
 **設計決定:**
 
-- payload あり variant → `record`
-- payload なし variant → `singleton class`（allocation 節約）
+- enum 本体 → `sealed interface` + `PermittedSubclasses` 属性
+- payload あり variant → `record`（`java.lang.Record` 継承）、各フィールドは `private final`、public getter 自動生成
+- payload なし variant → `singleton class`（allocation 節約、`INSTANCE` static field）
+- variant class は `static` nested class **ではなく**、独立した top-level class として emit（`$` はバイナリ名の慣習に従うが class 構造は独立）
 - Valen ABI と Java surface ABI は分離管理
+- `derives(...)` 指定時、payload variant に対して `equals` / `hashCode` / `toString` / `copy` が追加生成される
+- inherent impl / trait impl の method は sealed interface 側に emit
 
-## 6.6 Java ABI 凍結条件（MVP）
+**型マッピング:** Valen の `Float` は JVM の `float`（32bit）に対応。`Double` が JVM の `double`（64bit）に対応。
+
+## 6.8 Java ABI 凍結条件（MVP）
 
 以下は MVP 凍結ルール、将来変更しない。
 
-### 6.6.1 binary naming
+### 6.8.1 binary naming
 
 - variant の Java binary name は **`EnumName$VariantName`**（`$` 区切り）
 - Java inner class 風の記法を踏襲、Kotlin sealed hierarchy と互換性が高い
 - Java reflection で `Class.forName("com.example.Shape$Circle")` と読める
+- variant class は独立した top-level `.class` ファイルとして出力される
 
-### 6.6.2 serializer
+### 6.8.2 serializer
 
 - **Valen は serializer を提供しない**
 - JSON / XML 等の serialization を必要とする場合は、利用者側で Jackson / Gson / その他を設定する責任を持つ
 - Valen が特定ライブラリに lock-in しない方針
 
-### 6.6.3 reflection
+### 6.8.3 reflection
 
 - 各 variant は通常の Java class（record または singleton class）として反射から見える
 - 特別な reflection helper や registry は提供しない
 
-### 6.6.4 trait impl の Java surface 露出
+### 6.8.4 trait impl の Java surface 露出
 
 **可視性と連動する。**
 
@@ -142,7 +213,7 @@ public static final class Shape$Point implements Shape {
 
 これにより Java 側ユーザは Valen 公開 trait だけを安定 API として扱える。
 
-### 6.6.5 互換性ポリシー
+### 6.8.5 互換性ポリシー
 
 trait を追加したときの semver 影響：
 

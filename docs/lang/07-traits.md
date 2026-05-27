@@ -12,6 +12,9 @@ trait Display {
 }
 ```
 
+> **実装メモ: trait メソッドの可視性**
+> パーサは trait 内のメソッドをすべて `Visibility::Pub` としてハードコードする。trait メソッドに可視性修飾子を付けても無視される。
+
 ## 7.2 impl
 
 `impl` は trait 実装と inherent impl（型固有メソッド追加）の2形式をサポートする。
@@ -43,6 +46,9 @@ impl Area for Shape {
 }
 ```
 
+> **実装メモ: impl メソッドの可視性**
+> パーサは impl ブロック内でメソッドの可視性（`pub` / `internal` / `private`）をパースするが、リゾルバが impl メソッドを HIR に登録する際にすべて `Vis::Pub` に強制する。impl メソッドは事実上常に public。
+
 ## 7.3 レシーバ
 
 - 明示 `self`（`fn f(self)`）
@@ -53,18 +59,12 @@ impl Area for Shape {
 
 `impl Trait for Type` を許可する条件：
 
-- `Trait` が現在の **module** で定義されている
-- **または** `Type` の outermost nominal type constructor が現在の **module** に所有されている
+- `Trait` が現在の **コンパイル単位** で定義されている
+- **または** `Type` の outermost nominal type constructor が現在の **コンパイル単位** に所有されている
 
-**所有単位は module** — package / module / compile unit の三者同一視は行わない。
+**所有単位はコンパイル単位**（HIR の `local_defs`）。coherence チェッカは HIR 内に定義されている型・trait 名を「ローカル」と判定し、prelude 注入された合成型は除外する。import 名のみに存在する名前は「外部」扱い。
 
 **stdlib 例外:** `valen.core` および `valen.std.*` パッケージからの impl は、foreign trait を foreign type に実装できる（Java コレクション連携用）。ユーザーコードには適用されない。
-
-- `package` は source 階層と名前空間（§10.1）
-- `module` はビルドターゲット内の意味的所有単位（§10.2）。orphan rule / `sealed permit` 範囲 / `internal` 可視性はすべて module ID に従う
-- `compile unit` は物理的な単位で、仕様には現れない（実装側で決まる）
-
-詳細は [§10.2 module](10-modules.md) を参照。
 
 **禁止:**
 - foreign trait for foreign type（例：`impl java.util.List for java.lang.String` 不可）
@@ -85,7 +85,26 @@ impl Area for Shape {
 - trait method の候補が複数で曖昧になる場合は UFCS `Trait::foo(value, args)` で解決
 - 詳細なメソッド解決規則は [§5.6](05-classes.md) を参照
 
-## 7.5 sealed trait
+## 7.5 default method
+
+trait メソッドにデフォルト実装（本体）を持たせることができる。impl 側でそのメソッドを実装しなくてもコンパイルエラーにならない。
+
+```valen
+trait Greet {
+    fn greet(self) -> String { "hello" }
+}
+
+class Dog {}
+
+// greet を省略しても OK — デフォルト実装が使われる
+impl Greet for Dog {}
+```
+
+- パーサは trait メソッドに `{ body }` があればデフォルトメソッドとしてパースする
+- coherence チェッカは `has_body == true` のメソッドが impl に欠けている場合、missing-method エラーをスキップする
+- impl 側で同名メソッドを定義すればオーバーライドとなる（シグネチャ一致が検証される）
+
+## 7.6 sealed trait
 
 `sealed trait` は trait の実装集合を閉じ、exhaustive match を許す。
 
@@ -117,21 +136,20 @@ fn process(e: Expr) -> Int {
 - 実装者は `class` と `data class` のみ（enum は不可）
 - 実装者の宣言は `impl SealedTrait for Type { ... }`（trait の一貫性を維持）
 - permit 範囲は同一コンパイル単位
-- default method は非対応（通常 trait と同じ制約）
-- supertrait は非対応
+- supertrait は非対応（§7.10 参照）
 
 **JVM ABI:** sealed interface（`ACC_INTERFACE | ACC_ABSTRACT` + `PermittedSubclasses` attribute）として emit。
 
 **exhaustive check:** enum / sealed class と同様に厳密 exhaustive。実装者が1つでも不足するとコンパイルエラー。wildcard `_` で回避可能。
 
-## 7.6 Associated Type
+## 7.7 Associated Type
 
 trait 内で `type Name;` と宣言すると、impl 側で具体型を決定する associated type を定義できる。
 
 ```valen
 trait Container {
     type Item;
-    fn get(self, index: Int) -> Self::Item;
+    fn get(self, index: Int) -> Self;  // 注: Self::Item は未実装（§7.7.1）
 }
 
 impl Container for IntList {
@@ -140,11 +158,23 @@ impl Container for IntList {
 }
 ```
 
-- `Self::Output` のように `Self::` で参照
-- impl ごとに一意に解決される
 - trait 定義側でデフォルト型を指定可能: `type Item = Int;`
 
-## 7.7 derives（自動 trait 実装）
+### 7.7.1 `Self::AssocType` 参照構文（未実装）
+
+仕様上は `Self::Output` のように `Self::` で associated type を参照する想定だが、**現在のパーサは `Self::Item` をタイプパスとして解析しない**。型パスのセグメント区切りは `.`（ドット）であり、`::` は値パスのバリアントアクセスのみで使用される。
+
+**回避策:** stdlib の演算子 trait（`Add<Rhs>` 等）では、`Self::Output` の代わりに `Self` を戻り値型として使用している。
+
+```valen
+// stdlib の実際の定義
+pub trait Add<Rhs> {
+    type Output;
+    fn add(self, rhs: Rhs) -> Self;  // Self::Output ではなく Self
+}
+```
+
+## 7.8 derives（自動 trait 実装）
 
 `derives(Trait1, Trait2)` 節を型宣言に付けると、指定した trait の実装がフィールド構造から自動生成される。
 
@@ -177,7 +207,7 @@ pub class Point(pub x: Float, pub y: Float) derives(Eq) {}
 
 enum に `derives(Eq)` を付けると、**フィールドを持つ variant ごとに** `equals` メソッドが生成される。unit variant は singleton なので参照比較のみ。
 
-## 7.8 演算子オーバーロード
+## 7.9 演算子オーバーロード
 
 trait ベースの演算子オーバーロード。prelude に定義された演算子 trait を impl することで有効化する。
 
@@ -185,13 +215,13 @@ trait ベースの演算子オーバーロード。prelude に定義された演
 
 | 演算子 | trait | メソッド |
 |--------|-------|---------|
-| `+` | `Add<Rhs>` | `fn add(self, rhs: Rhs) -> Self::Output` |
-| `-` | `Sub<Rhs>` | `fn sub(self, rhs: Rhs) -> Self::Output` |
-| `*` | `Mul<Rhs>` | `fn mul(self, rhs: Rhs) -> Self::Output` |
-| `/` | `Div<Rhs>` | `fn div(self, rhs: Rhs) -> Self::Output` |
-| `%` | `Rem<Rhs>` | `fn rem(self, rhs: Rhs) -> Self::Output` |
+| `+` | `Add<Rhs>` | `fn add(self, rhs: Rhs) -> Self` |
+| `-` | `Sub<Rhs>` | `fn sub(self, rhs: Rhs) -> Self` |
+| `*` | `Mul<Rhs>` | `fn mul(self, rhs: Rhs) -> Self` |
+| `/` | `Div<Rhs>` | `fn div(self, rhs: Rhs) -> Self` |
+| `%` | `Rem<Rhs>` | `fn rem(self, rhs: Rhs) -> Self` |
 
-各 trait は `type Output` associated type を持つ。
+各 trait は `type Output` associated type を宣言しているが、`Self::Output` 参照が未実装のため（§7.7.1）、メソッドの戻り値型は `Self` となっている。
 
 ```valen
 impl Add<Vec2> for Vec2 {
@@ -206,8 +236,8 @@ impl Add<Vec2> for Vec2 {
 
 | 演算子 | trait | メソッド |
 |--------|-------|---------|
-| `-x` | `Neg` | `fn neg(self) -> Self::Output` |
-| `!x` | `Not` | `fn not(self) -> Self::Output` |
+| `-x` | `Neg` | `fn neg(self) -> Self` |
+| `!x` | `Not` | `fn not(self) -> Self` |
 
 ### 比較演算子
 
@@ -231,15 +261,22 @@ impl Add<Vec2> for Vec2 {
 
 `Int`、`Float` 等のプリミティブ型の演算子は組み込みで直接処理される（`iadd` / `fadd` 等）。プリミティブ型に対して演算子 trait を impl する必要はない。
 
-## 7.8 交差制約（Intersection Constraints）
+## 7.10 交差制約（Intersection Constraints）
 
 `+` 構文で複数の trait bound を同時に要求できる。
 
 ```valen
 fn process<T: System + EventHandler>(system: T, world: World) -> Unit { ... }
-pub trait Queryable: Component + Eq { ... }
 ```
 
 型パラメータ `T` に対して、`T: A + B` と宣言すると:
 - `T` 上で `A` と `B` 両方のメソッドが呼び出し可能
 - 呼び出し側で `T` に代入される具体型は `A` と `B` 両方を impl していなければコンパイルエラー
+
+### 7.10.1 supertrait（未実装）
+
+仕様上は `pub trait Queryable: Component + Eq { ... }` のように trait 宣言に supertrait 制約を記述する構文を想定しているが、**現在の実装では非対応**。
+
+- AST の `TraitDecl` に `supertypes` フィールドが存在しない
+- パーサは trait 宣言の `:` 以降の supertrait リストをパースしない
+- supertrait 相当の効果は、使用側の型パラメータに `T: Queryable + Component + Eq` と明示的に列挙することで代替可能

@@ -5,15 +5,18 @@
 | 機構 | 用途 |
 |------|------|
 | `Option<T>` | 値の欠如専用 |
-| `Result<T, E>` | 回復可能失敗（`E: Error` 制約あり） |
+| `Result<T, E>` | 回復可能失敗 |
 | `panic` | 契約違反・到達不能・処理継続不能の停止機構 |
 | Exception | FFI 境界の異常のみ |
 
 **Valen 内で `throw` 文は禁止**。ドメイン失敗は Option / Result で表現、異常停止は `panic!` を使う。
 
+> **実装メモ: `Result<T, E>` の `E` に制約はない。**
+> stdlib の `core.vln` は `pub enum Result<T, E>` と定義しており、`E` に `Error` trait bound を課していない。型チェッカもこの制約を強制しない。将来的に `E: Error` 制約を導入する可能性はあるが、現時点では任意の型を `E` に使用できる。
+
 ## 8.2 Error trait
 
-`valen.core` に標準 `Error` trait を定義する。`Result<T, E>` の `E` は `Error` を実装しなければならない。
+`valen.core` に標準 `Error` trait を定義する。
 
 ```valen
 trait Error {
@@ -21,7 +24,7 @@ trait Error {
 }
 ```
 
-ユーザ定義エラー型は `Error` を実装する：
+ユーザ定義エラー型は `Error` を実装できる：
 
 ```valen
 enum AppError {
@@ -42,9 +45,11 @@ impl Error for AppError {
 ## 8.3 `?` 演算子
 
 - `Result<T, E>` 上で使用（`Ok(v) → v`、`Err(e) → early return Err(e)`）
-- **`?` は E 型が同一の場合のみ伝播する。** 異なるエラー型間の自動変換は行わない。`map_err` で明示変換する
 - `Option<T>` 上は **戻り値が `Option<U>` の関数内のみ**で使える
 - `Option → Result` 暗黙昇格は禁止
+
+> **実装メモ: `?` のエラー型検証。**
+> 型チェッカは `?` の対象が `Result<T, E>` または `Option<T>` であること、および関数の戻り値型が同じラッパー型（`Result<..>` / `Option<..>`）であることのみを検証する。**`E` 型の同一性チェックは行わない**。異なるエラー型間で `?` を使用してもコンパイルエラーにならないが、意味的に正しいコードを書くために `map_err` による明示変換を推奨する。
 
 ```valen
 fn find_user(id: Int) -> Result<User, DbError> {
@@ -52,7 +57,7 @@ fn find_user(id: Int) -> Result<User, DbError> {
     Ok(User::from_row(row))
 }
 
-// 異なるエラー型は map_err で変換
+// 異なるエラー型は map_err で変換を推奨
 fn load(path: String) -> Result<Data, AppError> {
     let content = read_file(path)
         .map_err(|e| AppError::IoFailed(e.message()))?;
@@ -70,13 +75,36 @@ fn first_char(s: String) -> Option<Char> {
 
 **自動ラップなし、明示変換**。
 
-`safe { ... }` ブロック方式を必須とする：
+`safe { ... }` ブロック方式を使用する：
 
 ```valen
 fn read_safe(path: String) -> Result<String, JavaException> {
     safe { java.nio.file.Files.readString(java.nio.file.Paths.get(path)) }
 }
 ```
+
+`safe { expr }` は `Result<T, JavaException>` を返す（`T` はブロック本体の型）。
+
+### `safe expr` 短縮構文
+
+`safe { expr }` の短縮形。ブレースなしで1式を `safe` コンテキストに置ける。結果は `Result<T, JavaException>`。
+
+```valen
+let r = safe file.readString();  // Result<String, JavaException>
+```
+
+パーサは `safe expr` を `safe { expr }` と等価なブロックに展開する。
+
+### `safe? expr` 合体構文
+
+`safe { expr }?` と等価。`Result` を `?` で早期 return し、`T` を返す。
+
+```valen
+let s: String = safe? file.readString();
+// ↑ safe { file.readString() }? と同じ
+```
+
+パーサは `safe?` トークン列を検出すると、内部で `Safe` ノードを `Try` ノードで包む AST を生成する。
 
 ### Java null の扱い
 
@@ -133,26 +161,7 @@ let v = unsafe { rawAccess(ptr) };
 2. **Java exception 無視** — Java メソッド呼び出しの例外を catch せず素通り
 3. **non-nullable null** — `let x: String = unsafe { null };`
 
-## 8.6 `safe` 短縮構文 / `safe?` 合体構文
-
-### `safe expr`
-
-`safe { expr }` の短縮形。結果は `Result<T?, JavaException>`。
-
-```valen
-let r = safe file.readString();  // Result<String?, JavaException>
-```
-
-### `safe? expr`
-
-`safe { expr }?` と等価。`Result` を `?` で早期 return し、`T?` を返す。
-
-```valen
-let s: String? = safe? file.readString();
-// ↑ safe { file.readString() }? と同じ
-```
-
-## 8.7 `as` キャスト式
+## 8.6 `as` キャスト式
 
 `expr as Type` で型キャストを行う。安全性は変換の種類で決まる。
 
@@ -167,16 +176,18 @@ let x: Long = 42 as Long;
 let pos: Position = unsafe { obj as Position };
 ```
 
-## 8.8 Java メソッド呼び出しモード
+## 8.7 Java メソッド呼び出しモード
 
-Java メソッド呼び出しは `safe` か `unsafe` で囲む必要がある。素呼び出しはコンパイルエラー。
+Java メソッド呼び出しは `safe` か `unsafe` で囲むことが推奨される。
 
 | 記法 | 戻り値型 | 例外処理 | null 処理 |
 |------|---------|---------|----------|
 | `safe { expr }` / `safe expr` | `Result<T?, JavaException>` | `Err` にラップ | `T?`（nullable） |
 | `safe? expr` | `T?` | 早期 return | `T?`（nullable） |
 | `unsafe { expr }` / `unsafe expr` | `T`（non-nullable） | 素通り（crash） | NPE リスク |
-| 素呼び出し | **コンパイルエラー** | — | — |
+
+> **実装メモ: 素呼び出しの扱い。**
+> 仕様上は `safe` / `unsafe` なしの Java メソッド呼び出し（素呼び出し）をコンパイルエラーとする想定だが、**現在の実装ではこの制約を強制していない**。素呼び出しもコンパイルが通る。将来的にエラーとして拒否する予定。
 
 **例外:** Java コンストラクタ呼び出しは `safe`/`unsafe` 不要。コンストラクタは必ず non-null を返し、例外発生時はそもそもオブジェクトが生成されないため。
 
