@@ -11,7 +11,7 @@ fn add(a: Int, b: Int) -> Int {
 - トップレベル関数可
 - 返り値が `Unit` なら `-> Unit` 省略可
 
-## 4.2 名前付き引数（MVP）
+## 4.2 名前付き引数
 
 ```valen
 fn greet(msg: String, count: Int) -> String { /* ... */ }
@@ -19,7 +19,7 @@ fn greet(msg: String, count: Int) -> String { /* ... */ }
 greet(msg = "hi", count = 3);
 ```
 
-## 4.3 デフォルト引数（Phase 1.5 実装済み）
+## 4.3 デフォルト引数
 
 ```valen
 fn greet(msg: String = "hi", count: Int = 1) -> String { /* ... */ }
@@ -127,7 +127,7 @@ fn main() {
 }
 ```
 
-non-local return（ラムダ内の `return` が呼び出し元関数から脱出する動作）は将来対応予定。
+non-local return（ラムダ内の `return` が呼び出し元関数から脱出する動作）は現在サポートしていない。tail 式を使用すること。
 
 ### 制約
 

@@ -11,7 +11,7 @@
 
 `::` / `.` と並ぶ意味のある prefix 記号として `@` を予約する。
 
-## 20.2 annotation class 宣言（Phase 1.5 実装済み）
+## 20.2 annotation class 宣言
 
 ```valen
 annotation class Deprecated(pub message: String)
@@ -109,6 +109,4 @@ match color {
 
 ## 20.5 Java annotation の扱い
 
-MVP では、Valen コード側から Java annotation を付与することはできない。Java ライブラリ側で annotation を付ける必要がある場合は、Java ソースを直接編集する。
-
-Phase 1.5+ で Valen コードからの Java annotation 付与をサポートする予定。
+Valen コード側から Java annotation を直接付与することは現在サポートしていない。Java ライブラリ側で annotation を付ける必要がある場合は、Java ソースを直接編集する。

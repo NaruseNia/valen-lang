@@ -1,8 +1,8 @@
 # 18. 今後の仕様課題
 
-## 実装時に詰める項目
+## 未解決の仕様課題
 
-1. ~~**enum bytecode ABI の実験検証**~~ → **解決済み（Phase 0 spike）** `docs/enum-abi-report.md` 参照
+1. ~~**enum bytecode ABI の実験検証**~~ → **解決済み** `docs/enum-abi-report.md` 参照
 2. **coherence 仕様補則**
    - generic nominal type の所有判定例（`Vec<Foo>` の所有は `Vec` 側か `Foo` 側か、両方か）
    - Gradle subproject 跨ぎの module 境界運用ルール
@@ -24,7 +24,7 @@
    - 継承した method の候補扱い
    - named arg を含む適用可能性
 
-### 高
+### 優先度高
 
 7. **module identity**
    - 現状：`Gradle subproject 名 = 1 module`（§10.2）
@@ -36,17 +36,15 @@
    - 穴：bytecode レベルで「interface を implements しない」「metadata で隠す」「static helper に lower」のどれかが未記述
    - 方針候補：「`internal/private trait` は JVM 公開 interface としては emit せず、Valen 専用 metadata + bridge/lowered dispatch で表現する」を §6.5.4 に追記
 
-### 解決済み（中）
+### 解決済み
 
 9. ~~**`data class` superclass 継承時の自動生成動作**~~ → **解決:** 自身の primary constructor params のみ対象。親の state は含めない（§5.2）
 10. **`@valen.Closed` の annotation 契約詳細**
     - 現状：§20.3 で target を Java sealed interface / sealed class と書いているのみ
-    - 不足：`@Target(TYPE)` / `@Retention(CLASS)` / 配布形態（classpath に `valen-runtime.jar` として置くか、コンパイラ組み込みか）
+    - 未定：`@Target(TYPE)` / `@Retention(CLASS)` / 配布形態（classpath に `valen-runtime.jar` として置くか、コンパイラ組み込みか）
     - 方針候補：`@Target(TYPE) @Retention(CLASS)` を §20.3 に明記、配布は `valen-runtime.jar` を標準
 
-### 解決済み（低）
-
-11. ~~**§9.2 Java 例のコードフェンス**~~ — 修正対象のみ（細部品質）
+11. ~~**§9.2 Java 例のコードフェンス**~~ — **解決済み**（細部品質修正）
 
 ## grill-me 4巡目で新規確定した仕様（2026-05-11）
 

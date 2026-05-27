@@ -70,7 +70,7 @@ fn first_char(s: String) -> Option<Char> {
 
 **自動ラップなし、明示変換**。
 
-MVP では `safe { ... }` ブロック方式を必須とする：
+`safe { ... }` ブロック方式を必須とする：
 
 ```valen
 fn read_safe(path: String) -> Result<String, JavaException> {

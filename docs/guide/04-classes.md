@@ -235,7 +235,7 @@ class Dog(pub name: String) : Animal(name) {
 }
 ```
 
-**注意:** `super` は class の親メソッドのみに使えます。trait の default method を呼び出したい場合は UFCS（`Trait::method(self)`）を使います。
+**注意:** `super` は class の親メソッドのみに使えます。trait メソッドを明示的に呼び出したい場合は UFCS（`Trait::method(self)`）を使います。
 
 ## sealed class
 

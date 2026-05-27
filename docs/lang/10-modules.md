@@ -16,8 +16,6 @@ import java.util.List;
 
 ### import 構文
 
-**MVP:**
-
 ```valen
 import java.util.List;                    // 単一型 import
 import java.util.concurrent.ConcurrentHashMap as CMap;  // alias
@@ -26,15 +24,7 @@ import java.util.concurrent.ConcurrentHashMap as CMap;  // alias
 - `import path.to.Type;` — 単一型の import
 - `import path.to.Type as Alias;` — alias 付き import
 
-**Phase 1.5+:**
-
-```valen
-// selective import
-import java.util.{List, Map, Set};
-
-// glob import
-import java.util.*;
-```
+選択インポート（`import foo.{A, B}`）とグロブインポート（`import foo.*`）は現在サポートしていない。
 
 ## 10.2 module
 
@@ -73,7 +63,7 @@ import java.util.*;
 | `internal` | 同一モジュール内 |
 | `private` | declaration-private（クラス内・トップレベル内、Kotlin 流） |
 
-デフォルトは `internal`（MVP）。`internal` の範囲は §10.2 の module に従う。
+デフォルトは `internal`。`internal` の範囲は §10.2 の module に従う。
 
 ## 10.4 スコープ演算子
 

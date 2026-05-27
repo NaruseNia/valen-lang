@@ -173,4 +173,4 @@ while let Some(entity) = iter.next() {
 }
 ```
 
-**制限（MVP）:** ガード条件 (`if let P = e && cond`) は非対応（Phase 3）。
+**制限:** ガード条件（`if let P = e && cond`）は現在サポートしていない。
