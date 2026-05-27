@@ -704,7 +704,9 @@ impl<'a> ExprLowering<'a> {
         result_ty: &Ty,
     ) {
         if let TypedExprKind::LocalVar(name) = &callee.kind {
-            if self.try_inline_call(name, args, type_args, result_ty) {
+            if !matches!(callee.ty, Ty::Fn(_, _))
+                && self.try_inline_call(name, args, type_args, result_ty)
+            {
                 return;
             }
         }
@@ -1019,6 +1021,23 @@ impl<'a> ExprLowering<'a> {
     fn resolve_reified_ty(&self, ty: &Ty, type_args: &IndexMap<SmolStr, Ty>) -> Ty {
         match ty {
             Ty::TypeParam(name) => type_args.get(name).cloned().unwrap_or_else(|| ty.clone()),
+            Ty::Generic(n, args) => Ty::Generic(
+                n.clone(),
+                args.iter()
+                    .map(|t| self.resolve_reified_ty(t, type_args))
+                    .collect(),
+            ),
+            Ty::Nullable(inner) => {
+                Ty::Nullable(Box::new(self.resolve_reified_ty(inner, type_args)))
+            }
+            Ty::Fn(params, ret) => Ty::Fn(
+                params
+                    .iter()
+                    .map(|t| self.resolve_reified_ty(t, type_args))
+                    .collect(),
+                Box::new(self.resolve_reified_ty(ret, type_args)),
+            ),
+            Ty::RefMut(inner) => Ty::RefMut(Box::new(self.resolve_reified_ty(inner, type_args))),
             _ => ty.clone(),
         }
     }
