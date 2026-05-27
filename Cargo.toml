@@ -44,6 +44,7 @@ logos = "0.16"
 async-lsp = { version = "0.2", features = ["omni-trait", "tokio", "stdio", "tracing", "client-monitor"] }
 tower = "0.5"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "io-util"] }
+tokio-util = { version = "0.7", features = ["compat"] }
 futures = "0.3"
 lsp-types = "0.97"
 # JVM bytecode emit (Phase 0 選定: ristretto_classfile — write API + Java 21-25 + sealed/record attrs)

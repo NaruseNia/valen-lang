@@ -1,0 +1,89 @@
+name: Release (test)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Build target (or 'all')"
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - x86_64-unknown-linux-gnu
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+          - x86_64-pc-windows-msvc
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: build / ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            archive: tar.gz
+          - target: x86_64-apple-darwin
+            runner: macos-latest
+            archive: tar.gz
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+            archive: tar.gz
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            archive: zip
+        exclude:
+          - target: ${{ inputs.target != 'all' && inputs.target != 'x86_64-unknown-linux-gnu' && 'x86_64-unknown-linux-gnu' || 'NONE' }}
+          - target: ${{ inputs.target != 'all' && inputs.target != 'x86_64-apple-darwin' && 'x86_64-apple-darwin' || 'NONE' }}
+          - target: ${{ inputs.target != 'all' && inputs.target != 'aarch64-apple-darwin' && 'aarch64-apple-darwin' || 'NONE' }}
+          - target: ${{ inputs.target != 'all' && inputs.target != 'x86_64-pc-windows-msvc' && 'x86_64-pc-windows-msvc' || 'NONE' }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-${{ matrix.target }}
+
+      - name: Build release binaries
+        run: cargo build --release --target ${{ matrix.target }} --bin valenc --bin valen-lsp
+
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          STAGING="valen-test-${{ matrix.target }}"
+          mkdir -p "${STAGING}"
+          cp "target/${{ matrix.target }}/release/valenc" "${STAGING}/"
+          cp "target/${{ matrix.target }}/release/valen-lsp" "${STAGING}/"
+          tar czf "${STAGING}.tar.gz" "${STAGING}"
+
+      - name: Package (zip)
+        if: matrix.archive == 'zip'
+        shell: bash
+        run: |
+          STAGING="valen-test-${{ matrix.target }}"
+          mkdir -p "${STAGING}"
+          cp "target/${{ matrix.target }}/release/valenc.exe" "${STAGING}/"
+          cp "target/${{ matrix.target }}/release/valen-lsp.exe" "${STAGING}/"
+          7z a "${STAGING}.zip" "${STAGING}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: valen-test-${{ matrix.target }}
+          path: valen-test-*.${{ matrix.archive }}
