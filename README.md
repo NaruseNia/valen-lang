@@ -54,29 +54,61 @@ fn main() {
 
 ## Features
 
-- **Algebraic data types and exhaustive match** — `enum` is a Rust-style ADT; `match` is the full Rust set (destructuring, guards, ranges, or-patterns, `@` bindings, exhaustiveness check).
-- **Coherent failure model** — `Option` for absence, `Result` for recoverable failure, `Exception` for FFI boundary errors, `panic` for contract violation. Each role is distinct, and `?` performs early return.
-- **Trait-based abstraction** — strict orphan rule, globally unique `(trait, type)` pairs, blanket impls disallowed in the MVP.
-- **Seamless Java / Kotlin interop** — `import java.util.List;`, explicit conversion for Java exceptions, compatibility with Java sealed hierarchies.
-- **Modern syntax** — `fn`, `let` / `let mut`, `match`, `::` for enum variants and associated functions, `.` for member access.
-- **JVM 21 baseline, 25 opt-in** — new features such as Valhalla value types are gated behind `--target 25`.
+- **Algebraic data types and exhaustive match** — `enum` is a Rust-style ADT; `match` supports destructuring, guards, ranges, or-patterns, `@` bindings, and exhaustiveness checking.
+- **Coherent failure model** — `Option` for absence, `Result` for recoverable failure, `Exception` for FFI boundary, `panic` for contract violation. `?` performs early return.
+- **Trait-based abstraction** — strict orphan rule, globally unique `(trait, type)` pairs, sealed traits, operator overloading via traits.
+- **Seamless Java interop** — `import java.util.List;`, `safe { }` for Java exception boundaries, classpath-aware compilation.
+- **Inline functions and reified generics** — `inline fn` with `reified` type parameters for runtime type access without reflection.
+- **Modern syntax** — `fn`, `let` / `let mut`, `match`, `::` for enum variants, `.` for member access, `f"string interpolation"`.
+- **JVM 21 baseline, 25 opt-in** — Valhalla value types gated behind `--target 25`.
+- **Tooling** — LSP server (`valen-lsp`) with completions, hover, go-to-definition, diagnostics, and semantic highlighting. Code formatter (`valenfmt`).
 
-## Status
+## Install
 
-In design. See [docs/LANGUAGE_SPEC.md](docs/LANGUAGE_SPEC.md) and [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
-
-## Build (future)
+### Script (Linux / macOS)
 
 ```sh
-# valenc (compiler, Rust implementation)
-cargo build --release --bin valenc
-
-# Gradle plugin (Kotlin implementation)
-./gradlew :valen-gradle-plugin:build
-
-# Minimal LSP
-cargo build --release --bin valen-lsp
+curl -fsSL https://raw.githubusercontent.com/NaruseNia/valen-lang/main/install.sh | bash
 ```
+
+This installs `valenc` and `valen-lsp` to `~/.valen/bin`. Add it to your PATH:
+
+```sh
+export PATH="$HOME/.valen/bin:$PATH"
+```
+
+### From source
+
+```sh
+cargo install --path crates/valenc
+cargo install --path crates/valen-lsp
+```
+
+### GitHub Release
+
+Download pre-built binaries from [Releases](https://github.com/NaruseNia/valen-lang/releases). Available for Linux x64, macOS x64/arm64, and Windows x64.
+
+## Usage
+
+```sh
+# Compile .vln files to .class
+valenc compile src/main.vln -o out/
+
+# Type check only (no codegen)
+valenc check src/main.vln
+
+# Run with Java
+java -cp out/ com.example.Main
+
+# Format source files
+valenfmt src/main.vln
+```
+
+## Documentation
+
+- [Language Specification](docs/LANGUAGE_SPEC.md) — formal language reference
+- [User Guide](docs/guide/) — tutorial-style introduction
+- [Compiler Architecture](docs/guide/09-compiler-architecture.md) — internals for contributors
 
 ## License
 
