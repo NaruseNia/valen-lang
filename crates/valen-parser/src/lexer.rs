@@ -89,6 +89,10 @@ enum RawTok {
     Unsafe,
     #[token("ref")]
     Ref,
+    #[token("inline")]
+    Inline,
+    #[token("reified")]
+    Reified,
     #[token("suspend")]
     Suspend,
     #[token("async")]
@@ -573,6 +577,8 @@ fn map_token(raw: RawTok) -> TokenKind {
         RawTok::Safe => TokenKind::Safe,
         RawTok::Unsafe => TokenKind::Unsafe,
         RawTok::Ref => TokenKind::Ref,
+        RawTok::Inline => TokenKind::Inline,
+        RawTok::Reified => TokenKind::Reified,
         RawTok::Suspend => TokenKind::Suspend,
         RawTok::Async => TokenKind::Async,
         RawTok::Await => TokenKind::Await,

@@ -98,11 +98,25 @@ impl Parser {
             TokenKind::Annotation => self
                 .parse_annotation_class(annotations, vis, start)
                 .map(Item::AnnotationClass),
-            TokenKind::Unsafe => {
+            TokenKind::Inline => {
                 self.bump();
                 let mut f = self.parse_fn_decl(annotations, vis, start, false, false, false)?;
-                f.is_unsafe = true;
+                f.is_inline = true;
                 Some(Item::Fn(f))
+            }
+            TokenKind::Unsafe => {
+                self.bump();
+                if self.at(&TokenKind::Inline) {
+                    self.bump();
+                    let mut f = self.parse_fn_decl(annotations, vis, start, false, false, false)?;
+                    f.is_unsafe = true;
+                    f.is_inline = true;
+                    Some(Item::Fn(f))
+                } else {
+                    let mut f = self.parse_fn_decl(annotations, vis, start, false, false, false)?;
+                    f.is_unsafe = true;
+                    Some(Item::Fn(f))
+                }
             }
             TokenKind::Fn => self
                 .parse_fn_decl(annotations, vis, start, false, false, false)
@@ -329,6 +343,7 @@ impl Parser {
             is_override,
             is_abstract,
             is_unsafe: false,
+            is_inline: false,
             span,
         })
     }
@@ -613,6 +628,7 @@ impl Parser {
                 }
             }
             let start = self.peek_span();
+            let is_reified = self.eat(&TokenKind::Reified).is_some();
             // Check for variance annotation: `in T` (contravariant) or `out T` (covariant)
             let variance = if self.at(&TokenKind::In) {
                 self.bump();
@@ -635,6 +651,7 @@ impl Parser {
             params.push(GenericParam {
                 name,
                 variance,
+                is_reified,
                 bounds,
                 span: start.merge(end),
             });
@@ -654,11 +671,13 @@ impl Parser {
                 | TokenKind::Open
                 | TokenKind::Override
                 | TokenKind::Abstract
-                | TokenKind::Unsafe => {
+                | TokenKind::Unsafe
+                | TokenKind::Inline => {
                     let mut is_unsafe = false;
                     let mut is_open = false;
                     let mut is_override = false;
                     let mut is_abstract = false;
+                    let mut is_inline = false;
                     loop {
                         match self.peek() {
                             TokenKind::Unsafe => {
@@ -677,6 +696,10 @@ impl Parser {
                                 is_abstract = true;
                                 self.bump();
                             }
+                            TokenKind::Inline => {
+                                is_inline = true;
+                                self.bump();
+                            }
                             _ => break,
                         }
                     }
@@ -689,6 +712,7 @@ impl Parser {
                         is_abstract,
                     )?;
                     method.is_unsafe = is_unsafe;
+                    method.is_inline = is_inline;
                     members.push(ClassMember::Method(method));
                 }
                 _ => {
@@ -862,6 +886,7 @@ impl Parser {
                 is_override: false,
                 is_abstract,
                 is_unsafe: false,
+                is_inline: false,
                 span: item_start.merge(end),
             }));
         }
@@ -943,8 +968,10 @@ impl Parser {
                 }));
                 continue;
             }
-            let fn_decl =
+            let is_inline = self.eat(&TokenKind::Inline).is_some();
+            let mut fn_decl =
                 self.parse_fn_decl(item_annotations, vis, item_start, false, false, false)?;
+            fn_decl.is_inline = is_inline;
             items.push(ImplItem::Fn(fn_decl));
         }
         let end = self.expect(TokenKind::RBrace)?;
@@ -2769,6 +2796,8 @@ fn describe_token(kind: &TokenKind) -> &'static str {
         TokenKind::Safe => "`safe`",
         TokenKind::Unsafe => "`unsafe`",
         TokenKind::Ref => "`ref`",
+        TokenKind::Inline => "`inline`",
+        TokenKind::Reified => "`reified`",
         TokenKind::Annotation => "`annotation`",
         // Reserved keywords
         TokenKind::Suspend => "`suspend`",

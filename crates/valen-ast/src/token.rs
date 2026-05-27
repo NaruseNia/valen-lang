@@ -56,6 +56,8 @@ pub enum TokenKind {
     Safe,
     Unsafe,
     Ref,
+    Inline,
+    Reified,
     Annotation,
     // Reserved for future
     Suspend,
