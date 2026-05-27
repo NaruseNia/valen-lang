@@ -522,6 +522,16 @@ impl<'hir> TypeChecker<'hir> {
         self_ty: Option<&Ty>,
         def_id: Option<DefId>,
     ) {
+        for g in &f.generics {
+            if g.is_reified && !f.is_inline {
+                self.diags.error(
+                    DiagCode::TYPE_MISMATCH,
+                    g.span,
+                    SmolStr::from("`reified` type parameter is only allowed in `inline fn`"),
+                );
+            }
+        }
+
         let Some(body) = &f.body else { return };
 
         let prev_type_params = self.type_params.clone();
@@ -984,6 +994,7 @@ impl<'hir> TypeChecker<'hir> {
                                         span: path.span,
                                     }),
                                     args: vec![],
+                                    type_args: IndexMap::new(),
                                 },
                                 ty,
                                 span: path.span,
@@ -1415,10 +1426,22 @@ impl<'hir> TypeChecker<'hir> {
                 }
 
                 let ret = substitute_ty(ret_ty, &bindings);
+
+                let mut resolved_type_args = IndexMap::new();
+                if !call.generics.is_empty() || !bindings.is_empty() {
+                    for (name, ty) in &bindings {
+                        resolved_type_args.insert(name.clone(), ty.clone());
+                    }
+                    for (generic, ast_ty) in call.generics.iter().enumerate() {
+                        let _ = (generic, ast_ty);
+                    }
+                }
+
                 TypedExpr {
                     kind: TypedExprKind::Call {
                         callee: Box::new(callee),
                         args,
+                        type_args: resolved_type_args,
                     },
                     ty: ret,
                     span: call.span,
@@ -1463,6 +1486,7 @@ impl<'hir> TypeChecker<'hir> {
                                             kind: TypedExprKind::Call {
                                                 callee: Box::new(callee),
                                                 args,
+                                                type_args: IndexMap::new(),
                                             },
                                             ty,
                                             span: call.span,
@@ -1513,6 +1537,7 @@ impl<'hir> TypeChecker<'hir> {
                     kind: TypedExprKind::Call {
                         callee: Box::new(callee),
                         args,
+                        type_args: IndexMap::new(),
                     },
                     ty: ctor_ty,
                     span: call.span,
@@ -1522,6 +1547,7 @@ impl<'hir> TypeChecker<'hir> {
                 kind: TypedExprKind::Call {
                     callee: Box::new(callee),
                     args,
+                    type_args: IndexMap::new(),
                 },
                 ty: Ty::Error,
                 span: call.span,
@@ -1536,6 +1562,7 @@ impl<'hir> TypeChecker<'hir> {
                     kind: TypedExprKind::Call {
                         callee: Box::new(callee),
                         args,
+                        type_args: IndexMap::new(),
                     },
                     ty: Ty::Error,
                     span: call.span,
@@ -1757,6 +1784,7 @@ impl<'hir> TypeChecker<'hir> {
             kind: TypedExprKind::Call {
                 callee: Box::new(callee.clone()),
                 args: args.to_vec(),
+                type_args: IndexMap::new(),
             },
             ty: ret_ty,
             span,
@@ -1867,6 +1895,7 @@ impl<'hir> TypeChecker<'hir> {
             kind: TypedExprKind::Call {
                 callee: Box::new(callee.clone()),
                 args: args.to_vec(),
+                type_args: IndexMap::new(),
             },
             ty: resolved_ret,
             span,
@@ -2899,6 +2928,7 @@ impl<'hir> TypeChecker<'hir> {
                         span: vs.span,
                     }),
                     args: vec![],
+                    type_args: IndexMap::new(),
                 },
                 ty,
                 span: vs.span,
@@ -2930,6 +2960,7 @@ impl<'hir> TypeChecker<'hir> {
             kind: TypedExprKind::Call {
                 callee: Box::new(callee),
                 args,
+                type_args: IndexMap::new(),
             },
             ty: Ty::Named(enum_name.clone()),
             span: vs.span,
@@ -3226,6 +3257,7 @@ impl<'hir> TypeChecker<'hir> {
                                 span,
                             }),
                             args: vec![],
+                            type_args: IndexMap::new(),
                         },
                         ty,
                         span,

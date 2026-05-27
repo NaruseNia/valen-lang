@@ -2627,6 +2627,8 @@ fn classify_token(kind: &TokenKind) -> Option<u32> {
         | TokenKind::As
         | TokenKind::Safe
         | TokenKind::Unsafe
+        | TokenKind::Inline
+        | TokenKind::Reified
         | TokenKind::Ref
         | TokenKind::Suspend
         | TokenKind::Async
@@ -2879,7 +2881,7 @@ fn collect_hints_from_expr(
         TypedExprKind::Loop { body } => {
             collect_hints_from_body(body, doc, range, hints);
         }
-        TypedExprKind::Call { callee, args } => {
+        TypedExprKind::Call { callee, args, .. } => {
             collect_hints_from_expr(callee, doc, range, hints);
             // Issue #037: Emit parameter name hints for call arguments.
             if let Some(hir) = doc.hir.as_ref() {
@@ -3193,7 +3195,7 @@ fn find_expr_in_expr<'a>(expr: &'a TypedExpr, offset: u32, best: &mut Option<&'a
         TypedExprKind::Lambda { body, .. } => {
             find_expr_in_expr(body, offset, best);
         }
-        TypedExprKind::Call { callee, args } => {
+        TypedExprKind::Call { callee, args, .. } => {
             find_expr_in_expr(callee, offset, best);
             for a in args {
                 find_expr_in_expr(a, offset, best);
@@ -3517,6 +3519,7 @@ const EXPR_KEYWORDS: &[&str] = &[
     "private",
     "typealias",
     "annotation",
+    "inline",
 ];
 
 // ---------------------------------------------------------------------------

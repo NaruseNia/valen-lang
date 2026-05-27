@@ -326,6 +326,8 @@ fn substitute_fn_def(f: &FnDef, subst: &[(SmolStr, TyRef)]) -> FnDef {
         is_open: f.is_open,
         is_override: f.is_override,
         is_abstract: f.is_abstract,
+        is_inline: f.is_inline,
+        reified_params: f.reified_params.clone(),
     }
 }
 

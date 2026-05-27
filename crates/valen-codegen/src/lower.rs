@@ -109,7 +109,12 @@ pub fn lower_hir(
     // Generate synthetic class for top-level functions (#020)
     if !top_level_fns.is_empty() {
         let pkg = hir.package.as_deref();
-        classes.push(lower_top_level_functions(hir, &top_level_fns, pkg));
+        classes.push(lower_top_level_functions(
+            hir,
+            &top_level_fns,
+            pkg,
+            typed_bodies,
+        ));
     }
 
     // TODO(#070): Synthetic helper classes (ListIterator and 6 ref wrapper classes) are
@@ -132,6 +137,7 @@ fn lower_top_level_functions(
     hir: &Hir,
     fns: &[(&Def, &FnDef, Option<&TypedBody>)],
     pkg: Option<&[SmolStr]>,
+    typed_bodies: &IndexMap<DefId, TypedBody>,
 ) -> JvmClass {
     let class_name = {
         let base = "Main";
@@ -182,6 +188,7 @@ fn lower_top_level_functions(
                 false,
                 pkg,
                 hir,
+                typed_bodies,
             );
             synthetic_lambdas = result.synthetic_lambdas;
             bootstrap_methods = result.bootstrap_methods;
@@ -608,7 +615,8 @@ fn lower_class(
         if let Some(method_def) = hir.defs.get(&mid) {
             if let DefKind::Fn(fn_def) = &method_def.kind {
                 let body = typed_bodies.get(&mid);
-                let result = lower_method(hir, method_def, fn_def, body, &internal, pkg);
+                let result =
+                    lower_method(hir, method_def, fn_def, body, &internal, pkg, typed_bodies);
                 methods.push(result.method);
                 all_synthetic_lambdas.extend(result.synthetic_lambdas);
                 all_bootstrap_methods.extend(result.bootstrap_methods);
@@ -623,7 +631,15 @@ fn lower_class(
                 if let Some(method_def) = hir.defs.get(&mid) {
                     if let DefKind::Fn(fn_def) = &method_def.kind {
                         let body = typed_bodies.get(&mid);
-                        let result = lower_method(hir, method_def, fn_def, body, &internal, pkg);
+                        let result = lower_method(
+                            hir,
+                            method_def,
+                            fn_def,
+                            body,
+                            &internal,
+                            pkg,
+                            typed_bodies,
+                        );
                         methods.push(result.method);
                         all_synthetic_lambdas.extend(result.synthetic_lambdas);
                         all_bootstrap_methods.extend(result.bootstrap_methods);
@@ -644,7 +660,8 @@ fn lower_class(
             if let Some(method_def) = hir.defs.get(&mid) {
                 if let DefKind::Fn(fn_def) = &method_def.kind {
                     let body = typed_bodies.get(&mid);
-                    let result = lower_method(hir, method_def, fn_def, body, &internal, pkg);
+                    let result =
+                        lower_method(hir, method_def, fn_def, body, &internal, pkg, typed_bodies);
                     methods.push(result.method);
                     all_synthetic_lambdas.extend(result.synthetic_lambdas);
                     all_bootstrap_methods.extend(result.bootstrap_methods);
@@ -880,7 +897,15 @@ fn lower_data_class(
                 if let Some(method_def) = hir.defs.get(&mid) {
                     if let DefKind::Fn(fn_def) = &method_def.kind {
                         let body = typed_bodies.get(&mid);
-                        let result = lower_method(hir, method_def, fn_def, body, &internal, pkg);
+                        let result = lower_method(
+                            hir,
+                            method_def,
+                            fn_def,
+                            body,
+                            &internal,
+                            pkg,
+                            typed_bodies,
+                        );
                         methods.push(result.method);
                         all_synthetic_lambdas.extend(result.synthetic_lambdas);
                         all_bootstrap_methods.extend(result.bootstrap_methods);
@@ -901,7 +926,8 @@ fn lower_data_class(
                         continue;
                     }
                     let body = typed_bodies.get(&mid);
-                    let result = lower_method(hir, method_def, fn_def, body, &internal, pkg);
+                    let result =
+                        lower_method(hir, method_def, fn_def, body, &internal, pkg, typed_bodies);
                     methods.push(result.method);
                     all_synthetic_lambdas.extend(result.synthetic_lambdas);
                     all_bootstrap_methods.extend(result.bootstrap_methods);
@@ -1037,6 +1063,7 @@ fn lower_method(
     typed_body: Option<&TypedBody>,
     class_internal: &str,
     pkg: Option<&[SmolStr]>,
+    typed_bodies: &IndexMap<DefId, TypedBody>,
 ) -> LowerMethodResult {
     let params: Vec<JvmType> = fn_def
         .params
@@ -1073,6 +1100,7 @@ fn lower_method(
             has_self,
             pkg,
             hir,
+            typed_bodies,
         );
         synthetic_lambdas = result.synthetic_lambdas;
         bootstrap_methods = result.bootstrap_methods;
@@ -1221,8 +1249,15 @@ fn lower_enum(
                 if let Some(method_def) = hir.defs.get(&mid) {
                     if let DefKind::Fn(fn_def) = &method_def.kind {
                         let body = typed_bodies.get(&mid);
-                        let result =
-                            lower_method(hir, method_def, fn_def, body, &enum_internal, pkg);
+                        let result = lower_method(
+                            hir,
+                            method_def,
+                            fn_def,
+                            body,
+                            &enum_internal,
+                            pkg,
+                            typed_bodies,
+                        );
                         methods.push(result.method);
                         all_synthetic_lambdas.extend(result.synthetic_lambdas);
                         all_bootstrap_methods.extend(result.bootstrap_methods);
@@ -1243,7 +1278,15 @@ fn lower_enum(
                         continue;
                     }
                     let body = typed_bodies.get(&mid);
-                    let result = lower_method(hir, method_def, fn_def, body, &enum_internal, pkg);
+                    let result = lower_method(
+                        hir,
+                        method_def,
+                        fn_def,
+                        body,
+                        &enum_internal,
+                        pkg,
+                        typed_bodies,
+                    );
                     methods.push(result.method);
                     all_synthetic_lambdas.extend(result.synthetic_lambdas);
                     all_bootstrap_methods.extend(result.bootstrap_methods);
@@ -1755,6 +1798,8 @@ mod tests {
                     is_open: false,
                     is_override: false,
                     is_abstract: false,
+                    is_inline: false,
+                    reified_params: vec![],
                 }),
                 vis: Vis::Pub,
                 span: valen_ast::Span {
@@ -1833,6 +1878,8 @@ mod tests {
                     is_open: false,
                     is_override: false,
                     is_abstract: false,
+                    is_inline: false,
+                    reified_params: vec![],
                 }),
                 vis: Vis::Pub,
                 span: valen_ast::Span {

@@ -270,6 +270,10 @@ pub struct FnDef {
     pub is_override: bool,
     /// `true` when declared as `abstract fn`.
     pub is_abstract: bool,
+    /// `true` when declared as `inline fn`.
+    pub is_inline: bool,
+    /// Names of type parameters marked `reified`.
+    pub reified_params: Vec<SmolStr>,
 }
 
 /// A function parameter definition.
@@ -721,6 +725,8 @@ pub enum TypedExprKind {
     Call {
         callee: Box<TypedExpr>,
         args: Vec<TypedExpr>,
+        /// Resolved type arguments for generic calls (populated for inline/reified fns).
+        type_args: IndexMap<SmolStr, Ty>,
     },
     MethodCall {
         receiver: Box<TypedExpr>,

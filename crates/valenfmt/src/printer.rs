@@ -227,6 +227,9 @@ impl<'a> Printer<'a> {
         if f.is_override {
             self.w("override ");
         }
+        if f.is_inline {
+            self.w("inline ");
+        }
         self.w("fn ");
         self.w(&f.name);
         self.print_generics(&f.generics);
@@ -615,6 +618,9 @@ impl<'a> Printer<'a> {
         for (i, g) in generics.iter().enumerate() {
             if i > 0 {
                 self.w(", ");
+            }
+            if g.is_reified {
+                self.w("reified ");
             }
             match g.variance {
                 Variance::Covariant => self.w("out "),

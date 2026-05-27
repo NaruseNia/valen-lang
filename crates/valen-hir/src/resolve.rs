@@ -642,6 +642,12 @@ impl Resolver {
                 (g.name.clone(), bounds)
             })
             .collect();
+        let reified_params = f
+            .generics
+            .iter()
+            .filter(|g| g.is_reified)
+            .map(|g| g.name.clone())
+            .collect();
         FnDef {
             params,
             return_ty: f
@@ -654,6 +660,8 @@ impl Resolver {
             is_open: f.is_open,
             is_override: f.is_override,
             is_abstract: f.is_abstract,
+            is_inline: f.is_inline,
+            reified_params,
         }
     }
 
