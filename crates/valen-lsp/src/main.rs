@@ -30,10 +30,13 @@ async fn main() -> anyhow::Result<()> {
     );
 
     #[cfg(not(unix))]
-    let (stdin, stdout) = (
-        tokio::io::BufReader::new(tokio::io::stdin()),
-        tokio::io::stdout(),
-    );
+    let (stdin, stdout) = {
+        use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
+        (
+            tokio::io::BufReader::new(tokio::io::stdin()).compat(),
+            tokio::io::stdout().compat_write(),
+        )
+    };
 
     server.run_buffered(stdin, stdout).await?;
 
