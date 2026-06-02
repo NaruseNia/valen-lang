@@ -335,6 +335,8 @@ pub enum Type {
     Tuple(Vec<Type>, Span),
     /// `ref mut T` — mutable reference type.
     RefMut { inner: Box<Type>, span: Span },
+    /// `Self::TypeName` — associated type access on Self.
+    SelfAssoc { name: SmolStr, span: Span },
 }
 
 /// A dot-separated type path (e.g. `java.util.List<String>`).
@@ -541,6 +543,7 @@ impl Type {
             Type::Fn(f) => f.span,
             Type::Tuple(_, span) => *span,
             Type::RefMut { span, .. } => *span,
+            Type::SelfAssoc { span, .. } => *span,
         }
     }
 }
@@ -1068,6 +1071,7 @@ impl std::fmt::Display for Type {
                 write!(f, ")")
             }
             Type::RefMut { inner, .. } => write!(f, "ref mut {inner}"),
+            Type::SelfAssoc { name, .. } => write!(f, "Self::{name}"),
         }
     }
 }

@@ -449,7 +449,25 @@ impl Parser {
             }));
         }
 
-        let name = self.expect_ident()?;
+        // `Self::AssocType` — associated type access
+        if self.at(&TokenKind::SelfKw) && self.lookahead(1) == &TokenKind::DoubleColon {
+            self.bump(); // Self
+            self.bump(); // ::
+            let assoc_name = self.expect_ident()?;
+            let end = self.prev_span();
+            return Some(Type::SelfAssoc {
+                name: assoc_name,
+                span: start.merge(end),
+            });
+        }
+
+        // `Self` as a type
+        let name = if self.at(&TokenKind::SelfKw) {
+            self.bump();
+            SmolStr::from("Self")
+        } else {
+            self.expect_ident()?
+        };
         let mut segments = vec![self.parse_type_path_segment(name, start)?];
 
         while self.eat(&TokenKind::Dot).is_some() {

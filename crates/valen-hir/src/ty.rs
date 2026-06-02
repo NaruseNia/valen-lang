@@ -521,7 +521,36 @@ impl<'hir> TypeChecker<'hir> {
                 Ty::RefMut(Box::new(self.resolve_ast_type(inner)))
             }
             valen_ast::Type::Tuple(..) => Ty::Error,
+            valen_ast::Type::SelfAssoc { name, .. } => {
+                self.resolve_self_assoc_type(name).unwrap_or(Ty::Error)
+            }
         }
+    }
+
+    fn resolve_self_assoc_type(&self, name: &str) -> Option<Ty> {
+        let self_ty = self.current_self_ty.as_ref()?;
+        let self_name = match self_ty {
+            Ty::Named(n) => n.as_str(),
+            Ty::Generic(n, _) => n.as_str(),
+            _ => return None,
+        };
+        for def in self.hir.defs.values() {
+            if let DefKind::Impl(ref idef) = def.kind {
+                let target = match &idef.target {
+                    TyRef::Named(n) => n.as_str(),
+                    TyRef::Generic(n, _) => n.as_str(),
+                    _ => continue,
+                };
+                if target == self_name {
+                    for (aname, aty) in &idef.associated_types {
+                        if aname == name {
+                            return Some(tyref_to_ty(aty));
+                        }
+                    }
+                }
+            }
+        }
+        None
     }
 
     // -- function / class / impl --------------------------------------------

@@ -990,6 +990,9 @@ fn lower_type_ref_with_params(ty: &valen_ast::Type, type_params: &[SmolStr]) -> 
             TyRef::RefMut(Box::new(lower_type_ref_with_params(inner, type_params)))
         }
         valen_ast::Type::Tuple(..) => TyRef::Error,
+        valen_ast::Type::SelfAssoc { name, .. } => {
+            TyRef::Unresolved(SmolStr::from(format!("Self::{name}")))
+        }
     }
 }
 

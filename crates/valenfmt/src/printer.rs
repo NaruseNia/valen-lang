@@ -673,6 +673,10 @@ impl<'a> Printer<'a> {
                 }
                 self.w(")");
             }
+            Type::SelfAssoc { name, .. } => {
+                self.w("Self::");
+                self.w(name);
+            }
         }
     }
 
