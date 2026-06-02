@@ -551,6 +551,7 @@ impl<'hir> TypeChecker<'hir> {
             Ty::Generic(n, _) => n.as_str(),
             _ => return None,
         };
+        // Search impl blocks for associated type assignment
         for def in self.hir.defs.values() {
             if let DefKind::Impl(ref idef) = def.kind {
                 let target = match &idef.target {
@@ -562,6 +563,18 @@ impl<'hir> TypeChecker<'hir> {
                     for (aname, aty) in &idef.associated_types {
                         if aname == name {
                             return Some(tyref_to_ty(aty));
+                        }
+                    }
+                }
+            }
+        }
+        // Fall back to trait default associated types
+        for def in self.hir.defs.values() {
+            if let DefKind::Trait(ref tdef) = def.kind {
+                for assoc in &tdef.associated_types {
+                    if assoc.name == name {
+                        if let Some(ref default_ty) = assoc.default {
+                            return Some(tyref_to_ty(default_ty));
                         }
                     }
                 }
@@ -1038,7 +1051,7 @@ impl<'hir> TypeChecker<'hir> {
                 }
                 TypedExpr {
                     kind: TypedExprKind::NullLit,
-                    ty: Ty::Nullable(Box::new(Ty::Named(SmolStr::from("Nothing")))),
+                    ty: Ty::Nullable(Box::new(Ty::nothing())),
                     span: *span,
                 }
             }
@@ -4162,6 +4175,27 @@ fn is_java_assignable(actual: &Ty, expected: &Ty) -> bool {
     if let (Ty::Named(a_name), Ty::Generic(e_name, _)) = (actual, expected) {
         if a_name == e_name {
             return true;
+        }
+    }
+    // Any named/generic type is assignable to Any (java.lang.Object)
+    if matches!(expected, Ty::Named(n) if n == "Any" || n == "Object") {
+        return matches!(
+            actual,
+            Ty::Named(_) | Ty::Generic(_, _) | Ty::Prim(PrimTy::String)
+        );
+    }
+    // Common Java subclass relationships
+    if let (Ty::Named(a), Ty::Named(e)) = (actual, expected) {
+        let known_supers: &[(&str, &[&str])] = &[
+            ("String", &["CharSequence", "Comparable", "Serializable"]),
+            ("ArrayList", &["List", "Collection", "Iterable"]),
+            ("HashMap", &["Map"]),
+            ("HashSet", &["Set", "Collection", "Iterable"]),
+        ];
+        for &(sub, supers) in known_supers {
+            if a == sub && supers.contains(&e.as_str()) {
+                return true;
+            }
         }
     }
     false

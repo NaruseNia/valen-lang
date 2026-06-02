@@ -1028,6 +1028,30 @@ impl<'a> ExprLowering<'a> {
                     self.ops.push(JvmOp::Checkcast(internal));
                 }
             }
+            TypedExprKind::ClassOf(type_name) => {
+                let resolved = if let Some(concrete) = type_args.get(type_name.as_str()) {
+                    match concrete {
+                        Ty::Named(n) => n.to_string(),
+                        Ty::Generic(n, _) => n.to_string(),
+                        _ => type_name.to_string(),
+                    }
+                } else {
+                    type_name.to_string()
+                };
+                let jvm_name = crate::descriptor::resolve_type_internal_name(
+                    &resolved,
+                    self.pkg,
+                    &self.hir.imports,
+                )
+                .replace('/', ".");
+                self.ops.push(JvmOp::PushString(jvm_name));
+                self.ops.push(JvmOp::InvokeStatic {
+                    owner: "java/lang/Class".to_string(),
+                    name: "forName".to_string(),
+                    params: vec![JvmType::Object("java/lang/String".to_string())],
+                    ret: JvmType::Object("java/lang/Class".to_string()),
+                });
+            }
             _ => {
                 self.lower_expr(expr);
             }
