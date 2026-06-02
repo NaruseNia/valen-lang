@@ -1741,13 +1741,22 @@ impl Parser {
             // Turbofish: `Foo::<Int, String>` -- after `::`, `<` starts generic args.
             if self.at(&TokenKind::Lt) || self.at(&TokenKind::Shr) {
                 let generics = self.parse_turbofish_args()?;
-                // Attach generics to the last segment.
                 if let Some(last) = segments.last_mut() {
                     let gen_end = self.prev_span();
                     last.generics = generics;
                     last.span = last.span.merge(gen_end);
                 }
                 continue;
+            }
+            // `T::class` — Class object access
+            if self.peek_is_ident_matching("class") {
+                let end = self.peek_span();
+                self.bump();
+                let type_name = segments.last().map(|s| s.name.clone()).unwrap_or_default();
+                return Some(Expr::ClassOf(valen_ast::ClassOfExpr {
+                    type_name,
+                    span: start.merge(end),
+                }));
             }
             let seg_span = self.peek_span();
             let seg_name = self.expect_ident()?;
@@ -2722,6 +2731,7 @@ fn expr_span(expr: &Expr) -> Span {
         Expr::Cast(c) => c.span,
         Expr::Deref(d) => d.span,
         Expr::RefMutCreate(r) => r.span,
+        Expr::ClassOf(c) => c.span,
     }
 }
 

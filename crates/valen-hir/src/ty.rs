@@ -158,6 +158,7 @@ struct TypeChecker<'hir> {
     in_unsafe: bool,
     type_params: IndexSet<SmolStr>,
     type_param_bounds: IndexMap<SmolStr, Vec<SmolStr>>,
+    reified_params: IndexSet<SmolStr>,
     /// The concrete type that `Self` resolves to in the current class/impl context.
     current_self_ty: Option<Ty>,
     /// Package of the item currently being type-checked (for visibility).
@@ -178,6 +179,7 @@ impl<'hir> TypeChecker<'hir> {
             in_unsafe: false,
             type_params: IndexSet::new(),
             type_param_bounds: IndexMap::new(),
+            reified_params: IndexSet::new(),
         }
     }
 
@@ -589,8 +591,12 @@ impl<'hir> TypeChecker<'hir> {
 
         let prev_type_params = self.type_params.clone();
         let prev_bounds = self.type_param_bounds.clone();
+        let prev_reified = self.reified_params.clone();
         for g in &f.generics {
             self.type_params.insert(g.name.clone());
+            if g.is_reified {
+                self.reified_params.insert(g.name.clone());
+            }
             let bounds: Vec<SmolStr> = g
                 .bounds
                 .iter()
@@ -659,6 +665,7 @@ impl<'hir> TypeChecker<'hir> {
         self.in_unsafe = prev_unsafe;
         self.type_params = prev_type_params;
         self.type_param_bounds = prev_bounds;
+        self.reified_params = prev_reified;
 
         if let Some(id) = def_id {
             self.bodies.insert(id, typed_body);
@@ -943,6 +950,7 @@ impl<'hir> TypeChecker<'hir> {
             valen_ast::Expr::Cast(c) => self.synth_cast(c),
             valen_ast::Expr::Deref(d) => self.synth_deref(d),
             valen_ast::Expr::RefMutCreate(r) => self.synth_ref_mut_create(r, expected),
+            valen_ast::Expr::ClassOf(c) => self.synth_class_of(c),
         }
     }
 
@@ -3885,6 +3893,24 @@ impl<'hir> TypeChecker<'hir> {
             kind: TypedExprKind::Unsafe(body),
             ty,
             span: u.span,
+        }
+    }
+
+    fn synth_class_of(&mut self, c: &valen_ast::ClassOfExpr) -> TypedExpr {
+        if !self.reified_params.contains(&c.type_name) {
+            self.diags.error(
+                DiagCode::TYPE_MISMATCH,
+                c.span,
+                SmolStr::from(format!(
+                    "`{}::class` requires `{}` to be a reified type parameter",
+                    c.type_name, c.type_name
+                )),
+            );
+        }
+        TypedExpr {
+            kind: TypedExprKind::ClassOf(c.type_name.clone()),
+            ty: Ty::Named(SmolStr::from("Class")),
+            span: c.span,
         }
     }
 

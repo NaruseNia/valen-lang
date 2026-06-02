@@ -456,6 +456,15 @@ pub enum Expr {
     Deref(DerefExpr),
     /// `ref mut expr` — create a mutable reference.
     RefMutCreate(RefMutExpr),
+    /// `T::class` — get the Class object of a type (reified type parameters only).
+    ClassOf(ClassOfExpr),
+}
+
+/// `T::class` expression — gets the `java.lang.Class` for a type.
+#[derive(Debug, Clone)]
+pub struct ClassOfExpr {
+    pub type_name: SmolStr,
+    pub span: Span,
 }
 
 /// Literal value (integer, float, string, etc.).
@@ -530,6 +539,7 @@ impl Expr {
             Expr::Cast(c) => c.span,
             Expr::Deref(d) => d.span,
             Expr::RefMutCreate(r) => r.span,
+            Expr::ClassOf(c) => c.span,
         }
     }
 }

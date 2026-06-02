@@ -863,6 +863,10 @@ impl<'a> Printer<'a> {
                 }
                 self.w("}");
             }
+            Expr::ClassOf(c) => {
+                self.w(&c.type_name);
+                self.w("::class");
+            }
         }
     }
 
