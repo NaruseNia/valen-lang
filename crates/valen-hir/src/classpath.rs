@@ -291,12 +291,23 @@ fn extract_class_info(cf: &ClassFile, internal_name: &str) -> ForeignClassInfo {
     }
 
     let sam_method = if is_interface {
+        let object_methods = ["equals", "hashCode", "toString"];
         let abstract_methods: Vec<_> = cf
             .methods
             .iter()
             .filter(|m| {
-                m.access_flags.contains(MethodAccessFlags::ABSTRACT)
-                    && !m.access_flags.contains(MethodAccessFlags::STATIC)
+                if !m.access_flags.contains(MethodAccessFlags::ABSTRACT)
+                    || m.access_flags.contains(MethodAccessFlags::STATIC)
+                {
+                    return false;
+                }
+                let name = cf
+                    .constant_pool
+                    .try_get_utf8(m.name_index)
+                    .ok()
+                    .and_then(|s| s.as_str().map(|s| s.to_string()))
+                    .unwrap_or_default();
+                !object_methods.contains(&name.as_str())
             })
             .collect();
         if abstract_methods.len() == 1 {

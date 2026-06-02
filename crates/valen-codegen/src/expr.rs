@@ -1144,16 +1144,22 @@ impl<'a> ExprLowering<'a> {
         let (func_iface, sam_name, erased_sam_desc, specialized_sam_desc) =
             if let Some(sam) = sam_target {
                 let obj = "Ljava/lang/Object;";
+                let is_void = matches!(return_type, JvmType::Void);
                 let erased_params: String = (0..param_types.len())
                     .map(|_| obj.to_string())
                     .collect::<String>();
-                let erased = format!("({erased_params}){obj}");
+                let erased_ret = if is_void { "V" } else { obj };
+                let erased = format!("({erased_params}){erased_ret}");
                 let specialized_params: String = param_types
                     .iter()
                     .map(|t| self.boxed_descriptor(t))
                     .collect::<String>();
-                let sr = self.boxed_descriptor(&return_type);
-                let specialized = format!("({specialized_params}){sr}");
+                let specialized_ret = if is_void {
+                    "V".to_string()
+                } else {
+                    self.boxed_descriptor(&return_type)
+                };
+                let specialized = format!("({specialized_params}){specialized_ret}");
                 (
                     sam.interface.clone(),
                     sam.method_name.clone(),
