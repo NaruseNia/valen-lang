@@ -8,8 +8,8 @@ use crate::data_class_methods;
 use crate::descriptor::{class_internal_name, tyref_to_jvm};
 use crate::jvm_const::*;
 use crate::jvm_ir::{
-    JvmBootstrapMethod, JvmClass, JvmClassAccess, JvmField, JvmFieldAccess, JvmMethod,
-    JvmMethodAccess, JvmMethodBody, JvmOp, JvmType, SyntheticLambda,
+    BootstrapArg, JvmBootstrapMethod, JvmClass, JvmClassAccess, JvmField, JvmFieldAccess,
+    JvmMethod, JvmMethodAccess, JvmMethodBody, JvmOp, JvmType, SyntheticLambda,
 };
 use crate::JvmVersion;
 
@@ -123,6 +123,11 @@ pub fn lower_hir(
     // HIR lowering and only emit the classes that are actually referenced.
     classes.push(generate_list_iterator_class(version));
     classes.extend(generate_ref_wrapper_classes(version));
+
+    let needed_arities = collect_function_n_arities(&classes);
+    for arity in needed_arities {
+        classes.push(generate_function_n_interface(arity, version));
+    }
 
     classes
 }
@@ -1595,6 +1600,86 @@ fn generate_ref_wrapper_classes(version: JvmVersion) -> Vec<JvmClass> {
             }
         })
         .collect()
+}
+
+/// Scan all classes for `invokedynamic` bootstrap methods referencing `valen/core/FunctionN`
+/// and return the set of arities that need generated interfaces.
+fn collect_function_n_arities(classes: &[JvmClass]) -> Vec<usize> {
+    let mut arities = std::collections::BTreeSet::new();
+    for class in classes {
+        for bsm in &class.bootstrap_methods {
+            for arg in &bsm.arguments {
+                if let BootstrapArg::MethodHandle { owner, .. } = arg {
+                    if let Some(rest) = owner.strip_prefix("valen/core/Function") {
+                        if let Ok(n) = rest.parse::<usize>() {
+                            if (3..=22).contains(&n) {
+                                arities.insert(n);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for method in class.methods.iter().chain(class.synthetic_methods.iter()) {
+            if let Some(ref body) = method.body {
+                for op in &body.ops {
+                    if let JvmOp::InvokeDynamic { descriptor, .. } = op {
+                        if let Some(rest) = descriptor
+                            .rsplit('L')
+                            .next()
+                            .and_then(|s| s.strip_suffix(';'))
+                            .and_then(|s| s.strip_prefix("valen/core/Function"))
+                        {
+                            if let Ok(n) = rest.parse::<usize>() {
+                                if (3..=22).contains(&n) {
+                                    arities.insert(n);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    arities.into_iter().collect()
+}
+
+/// Generate a `valen/core/FunctionN` interface with a single abstract `apply` method.
+fn generate_function_n_interface(arity: usize, version: JvmVersion) -> JvmClass {
+    let params: Vec<JvmType> = (0..arity)
+        .map(|_| JvmType::Object("java/lang/Object".to_string()))
+        .collect();
+
+    JvmClass {
+        version,
+        access: JvmClassAccess {
+            is_public: true,
+            is_abstract: true,
+            is_interface: true,
+            ..Default::default()
+        },
+        name: format!("valen/core/Function{arity}"),
+        super_class: "java/lang/Object".to_string(),
+        interfaces: vec![],
+        fields: vec![],
+        methods: vec![JvmMethod {
+            access: JvmMethodAccess {
+                is_public: true,
+                is_abstract: true,
+                ..Default::default()
+            },
+            name: "apply".to_string(),
+            params,
+            return_type: JvmType::Object("java/lang/Object".to_string()),
+            body: None,
+        }],
+        source_file: None,
+        permitted_subclasses: vec![],
+        is_record: false,
+        bootstrap_methods: vec![],
+        synthetic_methods: vec![],
+        annotations: vec![],
+    }
 }
 
 #[cfg(test)]

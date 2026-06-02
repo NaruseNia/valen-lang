@@ -85,6 +85,14 @@ pub fn validate_entry_point(hir: &Hir) -> Diagnostics {
 // Type environment (scoped)
 // ---------------------------------------------------------------------------
 
+/// Result of resolving a foreign (Java) method — carries return type and parameter types.
+struct ForeignMethodResolved {
+    return_ty: Ty,
+    param_tys: Vec<Ty>,
+    #[allow(dead_code)]
+    is_static: bool,
+}
+
 #[derive(Debug, Clone)]
 struct VarBinding {
     ty: Ty,
@@ -968,6 +976,20 @@ impl<'hir> TypeChecker<'hir> {
                 ty: Ty::unit(),
                 span: *span,
             },
+            valen_ast::Literal::Null(span) => {
+                if !self.in_unsafe {
+                    self.diags.error(
+                        DiagCode::UNSAFE_CONTEXT_REQUIRED,
+                        *span,
+                        SmolStr::from("`null` can only be used inside an `unsafe` block"),
+                    );
+                }
+                TypedExpr {
+                    kind: TypedExprKind::NullLit,
+                    ty: Ty::Nullable(Box::new(Ty::Named(SmolStr::from("Nothing")))),
+                    span: *span,
+                }
+            }
         }
     }
 
@@ -2113,7 +2135,7 @@ impl<'hir> TypeChecker<'hir> {
                     );
                 }
                 crate::MethodResolution::NotFound => {
-                    if let Some(foreign_result) =
+                    if let Some(resolved) =
                         self.resolve_foreign_method_with_generics(tn, &mc.method, &generic_args)
                     {
                         return TypedExpr {
@@ -2122,7 +2144,7 @@ impl<'hir> TypeChecker<'hir> {
                                 method: mc.method.clone(),
                                 args,
                             },
-                            ty: foreign_result,
+                            ty: resolved.return_ty,
                             span: mc.span,
                         };
                     }
@@ -2171,15 +2193,45 @@ impl<'hir> TypeChecker<'hir> {
                 span: mc.span,
             };
         } else if let Some(type_name) = self.ty_name(&receiver.ty) {
-            if let Some(foreign_result) = self.resolve_foreign_method(&type_name, &mc.method, &args)
-            {
+            if let Some(resolved) = self.resolve_foreign_method(&type_name, &mc.method, &args) {
+                if resolved.param_tys.len() != args.len() {
+                    self.diags.error(
+                        DiagCode::ARG_COUNT_MISMATCH,
+                        mc.span,
+                        SmolStr::from(format!(
+                            "`{}.{}` expects {} argument(s), found {}",
+                            type_name,
+                            mc.method,
+                            resolved.param_tys.len(),
+                            args.len()
+                        )),
+                    );
+                } else {
+                    for (arg, expected) in args.iter().zip(resolved.param_tys.iter()) {
+                        if !arg.ty.is_error()
+                            && !expected.is_error()
+                            && arg.ty != *expected
+                            && !is_subtype(&arg.ty, expected)
+                            && !is_java_assignable(&arg.ty, expected)
+                        {
+                            self.diags.error(
+                                DiagCode::TYPE_MISMATCH,
+                                arg.span,
+                                SmolStr::from(format!(
+                                    "expected `{}`, found `{}`",
+                                    expected, arg.ty
+                                )),
+                            );
+                        }
+                    }
+                }
                 return TypedExpr {
                     kind: TypedExprKind::MethodCall {
                         receiver: Box::new(receiver),
                         method: mc.method.clone(),
                         args,
                     },
-                    ty: foreign_result,
+                    ty: resolved.return_ty,
                     span: mc.span,
                 };
             }
@@ -2415,7 +2467,7 @@ impl<'hir> TypeChecker<'hir> {
         type_name: &str,
         method_name: &str,
         _args: &[TypedExpr],
-    ) -> Option<Ty> {
+    ) -> Option<ForeignMethodResolved> {
         self.resolve_foreign_method_with_generics(type_name, method_name, &[])
     }
 
@@ -2424,7 +2476,7 @@ impl<'hir> TypeChecker<'hir> {
         type_name: &str,
         method_name: &str,
         generic_args: &[Ty],
-    ) -> Option<Ty> {
+    ) -> Option<ForeignMethodResolved> {
         let info = self.hir.foreign_types.get(type_name)?;
         let matching: Vec<_> = info
             .methods
@@ -2433,7 +2485,9 @@ impl<'hir> TypeChecker<'hir> {
             .collect();
         let m = matching.first()?;
 
-        if let Some(generic_ret) = &m.generic_return_ty {
+        let param_tys: Vec<Ty> = m.params.iter().map(tyref_to_ty).collect();
+
+        let return_ty = if let Some(generic_ret) = &m.generic_return_ty {
             if generic_args.len() == info.type_params.len() && !info.type_params.is_empty() {
                 let mut bindings = IndexMap::new();
                 for (param, arg) in info.type_params.iter().zip(generic_args.iter()) {
@@ -2442,12 +2496,22 @@ impl<'hir> TypeChecker<'hir> {
                 let ret = tyref_to_ty_generic(generic_ret);
                 let substituted = substitute_ty(&ret, &bindings);
                 if !substituted.has_type_params() {
-                    return Some(nullable_if_reference(&substituted));
+                    nullable_if_reference(&substituted)
+                } else {
+                    tyref_to_ty(&m.return_ty)
                 }
+            } else {
+                tyref_to_ty(&m.return_ty)
             }
-        }
+        } else {
+            tyref_to_ty(&m.return_ty)
+        };
 
-        Some(tyref_to_ty(&m.return_ty))
+        Some(ForeignMethodResolved {
+            return_ty,
+            param_tys,
+            is_static: m.is_static,
+        })
     }
 
     fn resolve_foreign_ctor(&self, type_name: &str) -> Option<Ty> {
@@ -3990,6 +4054,45 @@ fn is_subtype(sub: &Ty, sup: &Ty) -> bool {
     false
 }
 
+/// Check Java-level type compatibility beyond Valen subtyping.
+fn is_java_assignable(actual: &Ty, expected: &Ty) -> bool {
+    // Numeric widening: Int → Long, Int → Double, Float → Double, etc.
+    if let (Ty::Prim(a), Ty::Prim(e)) = (actual, expected) {
+        use crate::PrimTy::*;
+        return matches!(
+            (a, e),
+            (Int, Long)
+                | (Int, Float)
+                | (Int, Double)
+                | (Long, Float)
+                | (Long, Double)
+                | (Float, Double)
+                | (Byte, Short)
+                | (Byte, Int)
+                | (Byte, Long)
+                | (Short, Int)
+                | (Short, Long)
+        );
+    }
+    // Lambda (Fn) type is assignable to any object type (SAM conversion handled at codegen)
+    if matches!(actual, Ty::Fn(_, _)) && matches!(expected, Ty::Named(_) | Ty::Generic(_, _)) {
+        return true;
+    }
+    // Generic types with same name are loosely compatible (Java erasure)
+    if let (Ty::Generic(a_name, _), Ty::Generic(e_name, _)) = (actual, expected) {
+        if a_name == e_name {
+            return true;
+        }
+    }
+    // Named type assignable to generic with same name (raw vs parameterized)
+    if let (Ty::Named(a_name), Ty::Generic(e_name, _)) = (actual, expected) {
+        if a_name == e_name {
+            return true;
+        }
+    }
+    false
+}
+
 fn infer_type_bindings(param_tys: &[Ty], args: &[TypedExpr]) -> IndexMap<SmolStr, Ty> {
     let mut bindings = IndexMap::new();
     for (param_ty, arg) in param_tys.iter().zip(args.iter()) {
@@ -5140,5 +5243,17 @@ mod tests {
             "#,
         );
         assert_no_errors(&r);
+    }
+
+    #[test]
+    fn null_in_unsafe_is_ok() {
+        let r = check_source("fn main() { unsafe { let x = null; } }");
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn null_outside_unsafe_is_error() {
+        let r = check_source("fn main() { let x = null; }");
+        assert_has_error(&r, DiagCode::UNSAFE_CONTEXT_REQUIRED);
     }
 }

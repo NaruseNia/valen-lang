@@ -717,6 +717,7 @@ pub enum TypedExprKind {
     StringLit(SmolStr),
     BoolLit(bool),
     UnitLit,
+    NullLit,
     LocalVar(SmolStr),
     FieldAccess {
         receiver: Box<TypedExpr>,

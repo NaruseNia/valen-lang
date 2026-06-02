@@ -535,16 +535,17 @@ let parse = |s: String| -> Int {
 };
 ```
 
-### ラムダのアリティ制限
+### ラムダのアリティ
 
-コード生成は `java.util.function` の標準関数型インターフェースにマップするため、パラメータ数は最大 2 に制限される。
+パラメータ数 0〜2 は `java.util.function` の標準インターフェースにマップされ、3〜22 はコンパイラが自動生成する `valen/core/FunctionN` インターフェースを使用する。
 
 | パラメータ数 | JVM 関数型 |
 |-------------|-----------|
 | 0 | `java.util.function.Supplier<R>` |
 | 1 | `java.util.function.Function<T, R>` |
 | 2 | `java.util.function.BiFunction<T, U, R>` |
+| 3〜22 | `valen.core.FunctionN<A, B, ..., R>`（コンパイラ生成） |
 
-3 つ以上のパラメータを持つラムダはコンパイルエラーとなる。
+23 パラメータ以上はコンパイルエラー。
 
 詳細は §4.6 参照。

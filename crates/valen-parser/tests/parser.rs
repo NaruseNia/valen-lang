@@ -530,3 +530,8 @@ fn abstract_method_with_body() {
 }"
     ));
 }
+
+#[test]
+fn null_literal() {
+    assert_snapshot!(check("fn main() { unsafe { null } }"));
+}

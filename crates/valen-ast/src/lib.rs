@@ -471,6 +471,8 @@ pub enum Literal {
     Bool(bool, Span),
     /// The unit literal `()`.
     Unit(Span),
+    /// The `null` literal — only valid inside `unsafe` blocks.
+    Null(Span),
 }
 
 impl Literal {
@@ -484,7 +486,8 @@ impl Literal {
             | Literal::Char(_, s)
             | Literal::String(_, s)
             | Literal::Bool(_, s)
-            | Literal::Unit(s) => *s,
+            | Literal::Unit(s)
+            | Literal::Null(s) => *s,
         }
     }
 }
@@ -969,6 +972,7 @@ impl std::fmt::Display for Literal {
             Literal::String(s, _) => write!(f, "\"{s}\""),
             Literal::Bool(b, _) => write!(f, "{b}"),
             Literal::Unit(_) => write!(f, "()"),
+            Literal::Null(_) => write!(f, "null"),
         }
     }
 }
