@@ -505,3 +505,36 @@ impl Dog {
         "Dog should have type_methods entry"
     );
 }
+
+#[test]
+fn map_literal_has_generic_type() {
+    let src = r#"
+pub fn test() {
+    let mapss = #{ "a": "aaa" };
+    let list = [1, 2, 3];
+}
+"#;
+    let (doc, diags) = analyze_document_test(src, FileId(0));
+    // Print any diagnostics for debugging
+    for d in &diags {
+        eprintln!("  diag: {}", d.message);
+    }
+    let bodies = doc.bodies.as_ref().expect("should have typed bodies");
+    for (_, body) in bodies.iter() {
+        for stmt in &body.stmts {
+            if let valen_hir::TypedStmt::Let { name, ty, .. } = stmt {
+                if name == "mapss" {
+                    let s = format!("{ty}");
+                    assert!(
+                        s.contains('<'),
+                        "mapss should be Map<String, String>, got: {s}"
+                    );
+                }
+                if name == "list" {
+                    let s = format!("{ty}");
+                    assert!(s.contains('<'), "list should be List<Int>, got: {s}");
+                }
+            }
+        }
+    }
+}
