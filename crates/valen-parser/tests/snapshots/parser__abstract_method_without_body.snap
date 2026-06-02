@@ -1,0 +1,151 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"abstract class Shape {\n    abstract fn area() -> Float;\n    fn name() -> String { \\\"shape\\\" }\n}\")"
+---
+=== AST ===
+[
+    Class(
+        ClassDecl {
+            annotations: [],
+            visibility: Internal,
+            kind: Abstract,
+            name: "Shape",
+            generics: [],
+            ctor_params: [],
+            supertypes: [],
+            derives: [],
+            body: [
+                Method(
+                    FnDecl {
+                        annotations: [],
+                        visibility: Internal,
+                        name: "area",
+                        generics: [],
+                        params: [],
+                        return_type: Some(
+                            Path(
+                                TypePath {
+                                    segments: [
+                                        TypePathSegment {
+                                            name: "Float",
+                                            generics: [],
+                                            span: Span {
+                                                start: 49,
+                                                end: 54,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
+                                        },
+                                    ],
+                                    span: Span {
+                                        start: 49,
+                                        end: 54,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                            ),
+                        ),
+                        body: None,
+                        is_open: false,
+                        is_override: false,
+                        is_abstract: true,
+                        is_unsafe: false,
+                        is_inline: false,
+                        span: Span {
+                            start: 27,
+                            end: 55,
+                            file_id: FileId(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+                Method(
+                    FnDecl {
+                        annotations: [],
+                        visibility: Internal,
+                        name: "name",
+                        generics: [],
+                        params: [],
+                        return_type: Some(
+                            Path(
+                                TypePath {
+                                    segments: [
+                                        TypePathSegment {
+                                            name: "String",
+                                            generics: [],
+                                            span: Span {
+                                                start: 73,
+                                                end: 79,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
+                                        },
+                                    ],
+                                    span: Span {
+                                        start: 73,
+                                        end: 79,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                            ),
+                        ),
+                        body: Some(
+                            Block {
+                                stmts: [],
+                                tail: Some(
+                                    Literal(
+                                        String(
+                                            "shape",
+                                            Span {
+                                                start: 82,
+                                                end: 89,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                ),
+                                span: Span {
+                                    start: 80,
+                                    end: 91,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                        is_open: false,
+                        is_override: false,
+                        is_abstract: false,
+                        is_unsafe: false,
+                        is_inline: false,
+                        span: Span {
+                            start: 60,
+                            end: 91,
+                            file_id: FileId(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+            ],
+            span: Span {
+                start: 0,
+                end: 93,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

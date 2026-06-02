@@ -1,0 +1,103 @@
+---
+source: crates/valen-parser/tests/parser.rs
+expression: "check(\"abstract class Shape {\n    abstract fn area() -> Float { 0.0 }\n}\")"
+---
+=== AST ===
+[
+    Class(
+        ClassDecl {
+            annotations: [],
+            visibility: Internal,
+            kind: Abstract,
+            name: "Shape",
+            generics: [],
+            ctor_params: [],
+            supertypes: [],
+            derives: [],
+            body: [
+                Method(
+                    FnDecl {
+                        annotations: [],
+                        visibility: Internal,
+                        name: "area",
+                        generics: [],
+                        params: [],
+                        return_type: Some(
+                            Path(
+                                TypePath {
+                                    segments: [
+                                        TypePathSegment {
+                                            name: "Float",
+                                            generics: [],
+                                            span: Span {
+                                                start: 49,
+                                                end: 54,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
+                                        },
+                                    ],
+                                    span: Span {
+                                        start: 49,
+                                        end: 54,
+                                        file_id: FileId(
+                                            0,
+                                        ),
+                                    },
+                                },
+                            ),
+                        ),
+                        body: Some(
+                            Block {
+                                stmts: [],
+                                tail: Some(
+                                    Literal(
+                                        Double(
+                                            0.0,
+                                            Span {
+                                                start: 57,
+                                                end: 60,
+                                                file_id: FileId(
+                                                    0,
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                ),
+                                span: Span {
+                                    start: 55,
+                                    end: 62,
+                                    file_id: FileId(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                        is_open: false,
+                        is_override: false,
+                        is_abstract: true,
+                        is_unsafe: false,
+                        is_inline: false,
+                        span: Span {
+                            start: 27,
+                            end: 62,
+                            file_id: FileId(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+            ],
+            span: Span {
+                start: 0,
+                end: 64,
+                file_id: FileId(
+                    0,
+                ),
+            },
+        },
+    ),
+]
+=== diagnostics ===
+(none)

@@ -118,7 +118,7 @@ class Dog(pub name: String) : Animal(name) {
 }
 
 abstract class Shape {
-    abstract fn area(self) -> Float { /* placeholder */ }
+    abstract fn area(self) -> Float;
 }
 ```
 
@@ -128,9 +128,9 @@ abstract class Shape {
 - `override fn` 必須：親 method / trait default method を上書きするときは `override fn` を書く、付け忘れはコンパイルエラー
 - override 対象：「同一シグネチャを親 method または trait requirement として充足する」場合に限る
 
-**abstract method の既知の制限:**
+**abstract method:**
 
-AST は `body: Option<Block>` として bodyless method を表現可能だが、**現在のパーサーは全 method に body を要求する**。`abstract fn area(self) -> Float` のような本体なし宣言はパースエラーになる。abstract method を定義する場合は、仮の body（placeholder）を付ける必要がある。将来のパーサー改善で `;` 終端の bodyless method をサポート予定。
+`abstract fn` は `;` で終端し body を持たない。body を付けるとコンパイルエラー (`ABSTRACT_METHOD_HAS_BODY`)。非 abstract method に body がない場合もエラー (`NON_ABSTRACT_MISSING_BODY`)。
 
 **super 呼び出し:**
 
@@ -236,5 +236,4 @@ impl ShowFmt for User {
 - フィールドオーバーライド（`override val` 相当）
 - ネストクラス / inner class
 - class body 内のフィールド宣言（コンストラクタパラメータのみ）
-- abstract method の bodyless 宣言（パーサーが body を要求する）
 - data class の supertype 継承の codegen（HIR lowering で情報が失われる）

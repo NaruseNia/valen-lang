@@ -329,8 +329,15 @@ impl Parser {
             None
         };
 
-        let body = self.parse_block()?;
-        let span = start.merge(body.span);
+        let (body, end_span) = if is_abstract && !self.at(&TokenKind::LBrace) {
+            let semi = self.expect(TokenKind::Semi)?;
+            (None, semi)
+        } else {
+            let b = self.parse_block()?;
+            let s = b.span;
+            (Some(b), s)
+        };
+        let span = start.merge(end_span);
         Some(FnDecl {
             annotations,
             visibility,
@@ -338,7 +345,7 @@ impl Parser {
             generics,
             params,
             return_type,
-            body: Some(body),
+            body,
             is_open,
             is_override,
             is_abstract,

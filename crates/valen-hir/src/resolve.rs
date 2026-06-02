@@ -688,6 +688,29 @@ impl Resolver {
             })
             .collect();
 
+        for (_id, _name, _span, class_def) in &class_entries {
+            for mid in &class_def.methods {
+                if let Some(mdef) = self.hir.defs.get(mid) {
+                    if let DefKind::Fn(ref fd) = mdef.kind {
+                        if fd.is_abstract && fd.has_body {
+                            self.diagnostics.error(
+                                DiagCode::ABSTRACT_METHOD_HAS_BODY,
+                                mdef.span,
+                                format!("abstract method `{}` must not have a body", mdef.name),
+                            );
+                        }
+                        if !fd.is_abstract && !fd.has_body {
+                            self.diagnostics.error(
+                                DiagCode::NON_ABSTRACT_MISSING_BODY,
+                                mdef.span,
+                                format!("non-abstract method `{}` must have a body", mdef.name),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         for (_id, name, span, class_def) in &class_entries {
             if let Some(ref super_ty) = class_def.superclass {
                 let super_name = match super_ty {
@@ -1208,6 +1231,44 @@ mod tests {
         assert!(
             !r.hir.trait_impls.iter().any(|e| e.target_name == "Vec2"),
             "inherent impl should not appear in trait_impls"
+        );
+    }
+
+    #[test]
+    fn abstract_method_without_body() {
+        let r = resolve_source("abstract class Shape {\n    abstract fn area() -> Float;\n}");
+        assert!(
+            !r.diagnostics.has_errors(),
+            "should accept abstract method without body"
+        );
+        let method = r.hir.defs.values().find(|d| d.name == "area").unwrap();
+        if let DefKind::Fn(f) = &method.kind {
+            assert!(f.is_abstract);
+            assert!(!f.has_body);
+        } else {
+            panic!("expected FnDef");
+        }
+    }
+
+    #[test]
+    fn abstract_method_with_body_is_error() {
+        let r =
+            resolve_source("abstract class Shape {\n    abstract fn area() -> Float { 0.0 }\n}");
+        assert!(
+            r.diagnostics.has_errors(),
+            "abstract method with body should produce an error"
+        );
+    }
+
+    #[test]
+    fn non_abstract_method_without_body_is_error() {
+        let parsed = parse(
+            "abstract class Shape {\n    fn area() -> Float;\n}",
+            FileId(0),
+        );
+        assert!(
+            parsed.diagnostics.has_errors(),
+            "non-abstract method without body should be a parse error"
         );
     }
 }
