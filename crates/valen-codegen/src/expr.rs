@@ -3692,8 +3692,14 @@ impl<'a> ExprLowering<'a> {
         let end_label = self.alloc_label();
 
         let result_jvm = self.ty_to_jvm(result_ty);
+        // Result<Option<T>, JavaException> → extract T from Option<T>
         let inner_jvm = match result_ty {
-            Ty::Generic(_, args) if !args.is_empty() => self.ty_to_jvm(&args[0]),
+            Ty::Generic(_, args) if !args.is_empty() => match &args[0] {
+                Ty::Generic(_, inner_args) if !inner_args.is_empty() => {
+                    self.ty_to_jvm(&inner_args[0])
+                }
+                other => self.ty_to_jvm(other),
+            },
             _ => JvmType::Object(JVM_OBJECT.to_string()),
         };
         let obj = JvmType::Object(JVM_OBJECT.to_string());
@@ -3709,12 +3715,29 @@ impl<'a> ExprLowering<'a> {
         self.lower_body(body);
         self.pop_scope();
 
-        // Box primitive body value for erasure-safe storage in Ok(Object)
+        // Wrap body value in Option.Some, then Result.Ok:
+        //   Ok(Some(value))  or  Ok(None) for null
         if matches!(inner_jvm, JvmType::Void) {
             self.ops.push(JvmOp::PushNull);
         } else {
             self.emit_box(&inner_jvm);
         }
+
+        // Wrap in Option.Some(value)
+        let raw_slot = self.next_slot;
+        self.next_slot += 1;
+        self.ops.push(JvmOp::StoreLocal(raw_slot, obj.clone()));
+        self.ops
+            .push(JvmOp::New("valen/core/Option$Some".to_string()));
+        self.ops.push(JvmOp::Dup);
+        self.ops.push(JvmOp::LoadLocal(raw_slot, obj.clone()));
+        self.ops.push(JvmOp::InvokeSpecial {
+            owner: "valen/core/Option$Some".to_string(),
+            name: INIT.to_string(),
+            params: vec![obj.clone()],
+            ret: JvmType::Void,
+        });
+
         let val_slot = self.next_slot;
         self.next_slot += 1;
         self.ops.push(JvmOp::StoreLocal(val_slot, obj.clone()));
