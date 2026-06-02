@@ -982,7 +982,17 @@ fn lower_type_ref_with_params(ty: &valen_ast::Type, type_params: &[SmolStr]) -> 
                 .map(|s| s.name.as_str())
                 .collect::<Vec<_>>()
                 .join(".");
-            TyRef::Named(SmolStr::from(full))
+            let last_seg = tp.segments.last().unwrap();
+            if !last_seg.generics.is_empty() {
+                let args = last_seg
+                    .generics
+                    .iter()
+                    .map(|g| lower_type_ref_with_params(g, type_params))
+                    .collect();
+                TyRef::Generic(SmolStr::from(full), args)
+            } else {
+                TyRef::Named(SmolStr::from(full))
+            }
         }
         valen_ast::Type::Nullable { inner, .. } => {
             TyRef::Nullable(Box::new(lower_type_ref_with_params(inner, type_params)))
