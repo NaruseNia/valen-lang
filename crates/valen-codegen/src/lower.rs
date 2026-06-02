@@ -1707,6 +1707,7 @@ mod tests {
                     superclass: None,
                     trait_impls: vec![],
                     methods: vec![],
+                    generic_variances: vec![],
                 }),
                 vis,
                 span: valen_ast::Span {
@@ -1907,6 +1908,7 @@ mod tests {
                     superclass: None,
                     trait_impls: vec![],
                     methods: vec![method_id],
+                    generic_variances: vec![],
                 }),
                 vis: Vis::Pub,
                 span: valen_ast::Span {
@@ -1987,6 +1989,7 @@ mod tests {
                     superclass: None,
                     trait_impls: vec![TyRef::Named("Greeter".into())],
                     methods: vec![],
+                    generic_variances: vec![],
                 }),
                 vis: Vis::Pub,
                 span: valen_ast::Span {
