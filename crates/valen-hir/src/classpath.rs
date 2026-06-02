@@ -290,6 +290,53 @@ fn extract_class_info(cf: &ClassFile, internal_name: &str) -> ForeignClassInfo {
         }
     }
 
+    let sam_method = if is_interface {
+        let object_methods = ["equals", "hashCode", "toString"];
+        let abstract_methods: Vec<_> = cf
+            .methods
+            .iter()
+            .filter(|m| {
+                if !m.access_flags.contains(MethodAccessFlags::ABSTRACT)
+                    || m.access_flags.contains(MethodAccessFlags::STATIC)
+                {
+                    return false;
+                }
+                let name = cf
+                    .constant_pool
+                    .try_get_utf8(m.name_index)
+                    .ok()
+                    .and_then(|s| s.as_str().map(|s| s.to_string()))
+                    .unwrap_or_default();
+                !object_methods.contains(&name.as_str())
+            })
+            .collect();
+        if abstract_methods.len() == 1 {
+            let m = abstract_methods[0];
+            let sam_name = cf
+                .constant_pool
+                .try_get_utf8(m.name_index)
+                .ok()
+                .and_then(|s| s.as_str().map(|s| s.to_string()))
+                .unwrap_or_default();
+            let sam_desc = cf
+                .constant_pool
+                .try_get_utf8(m.descriptor_index)
+                .ok()
+                .and_then(|s| s.as_str().map(|s| s.to_string()))
+                .unwrap_or_default();
+            let (sam_params, _) = parse_method_descriptor(&sam_desc);
+            Some(crate::SamMethodInfo {
+                name: SmolStr::from(sam_name),
+                param_count: sam_params.len(),
+                descriptor: sam_desc,
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     ForeignClassInfo {
         internal_name: internal_name.to_string(),
         methods,
@@ -301,6 +348,7 @@ fn extract_class_info(cf: &ClassFile, internal_name: &str) -> ForeignClassInfo {
         has_valen_closed,
         type_params,
         is_interface,
+        sam_method,
     }
 }
 

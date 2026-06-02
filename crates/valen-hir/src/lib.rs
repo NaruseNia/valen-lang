@@ -778,6 +778,8 @@ pub enum TypedExprKind {
     Lambda {
         params: Vec<(SmolStr, Ty)>,
         body: Box<TypedExpr>,
+        /// SAM target for functional interface conversion (e.g. `java/lang/Runnable`).
+        sam_target: Option<SamTarget>,
     },
     Range {
         start: Option<Box<TypedExpr>>,
@@ -872,6 +874,27 @@ pub struct ForeignClassInfo {
     pub type_params: Vec<SmolStr>,
     /// Whether this is a Java interface (requires `invokeinterface` instead of `invokevirtual`).
     pub is_interface: bool,
+    /// The single abstract method if this is a functional interface (SAM conversion target).
+    pub sam_method: Option<SamMethodInfo>,
+}
+
+/// Single Abstract Method info for functional interface SAM conversion.
+#[derive(Debug, Clone)]
+pub struct SamMethodInfo {
+    pub name: SmolStr,
+    pub param_count: usize,
+    pub descriptor: String,
+}
+
+/// SAM conversion target for lambda expressions passed to Java functional interfaces.
+#[derive(Debug, Clone)]
+pub struct SamTarget {
+    /// JVM internal name of the interface (e.g. `java/lang/Runnable`).
+    pub interface: String,
+    /// SAM method name (e.g. `run`).
+    pub method_name: String,
+    /// SAM method descriptor (e.g. `()V`).
+    pub method_descriptor: String,
 }
 
 /// A method on a foreign Java class.

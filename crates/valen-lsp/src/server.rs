@@ -2806,7 +2806,7 @@ fn collect_hints_from_expr(
     hints: &mut Vec<InlayHint>,
 ) {
     match &expr.kind {
-        TypedExprKind::Lambda { params, body } => {
+        TypedExprKind::Lambda { params, body, .. } => {
             // Emit type hints for lambda params that lack an explicit annotation.
             let lam_text =
                 &doc.text[expr.span.start as usize..(expr.span.end as usize).min(doc.text.len())];

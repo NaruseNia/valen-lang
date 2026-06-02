@@ -632,8 +632,12 @@ impl<'a> ExprLowering<'a> {
             TypedExprKind::For { var, iter, body } => {
                 self.lower_for(var, iter, body);
             }
-            TypedExprKind::Lambda { params, body } => {
-                self.lower_lambda(params, body, &expr.ty);
+            TypedExprKind::Lambda {
+                params,
+                body,
+                sam_target,
+            } => {
+                self.lower_lambda(params, body, &expr.ty, sam_target.as_ref());
             }
             TypedExprKind::Range {
                 start,
@@ -1059,7 +1063,13 @@ impl<'a> ExprLowering<'a> {
     /// The lambda body is compiled into a `private static synthetic` method, and an
     /// `invokedynamic` instruction referencing `LambdaMetafactory.metafactory` is emitted
     /// at the call site to create a functional interface proxy.
-    fn lower_lambda(&mut self, params: &[(SmolStr, Ty)], body: &TypedExpr, _lambda_ty: &Ty) {
+    fn lower_lambda(
+        &mut self,
+        params: &[(SmolStr, Ty)],
+        body: &TypedExpr,
+        _lambda_ty: &Ty,
+        sam_target: Option<&valen_hir::SamTarget>,
+    ) {
         if params.len() > 22 {
             eprintln!(
                 "[codegen] error: lambda with {} parameters exceeds arity limit (max 22). \
@@ -1131,9 +1141,34 @@ impl<'a> ExprLowering<'a> {
             body: synth_body,
         });
 
-        // Determine the functional interface based on arity.
         let (func_iface, sam_name, erased_sam_desc, specialized_sam_desc) =
-            self.lambda_functional_interface(&param_types, &return_type);
+            if let Some(sam) = sam_target {
+                let obj = "Ljava/lang/Object;";
+                let is_void = matches!(return_type, JvmType::Void);
+                let erased_params: String = (0..param_types.len())
+                    .map(|_| obj.to_string())
+                    .collect::<String>();
+                let erased_ret = if is_void { "V" } else { obj };
+                let erased = format!("({erased_params}){erased_ret}");
+                let specialized_params: String = param_types
+                    .iter()
+                    .map(|t| self.boxed_descriptor(t))
+                    .collect::<String>();
+                let specialized_ret = if is_void {
+                    "V".to_string()
+                } else {
+                    self.boxed_descriptor(&return_type)
+                };
+                let specialized = format!("({specialized_params}){specialized_ret}");
+                (
+                    sam.interface.clone(),
+                    sam.method_name.clone(),
+                    erased,
+                    specialized,
+                )
+            } else {
+                self.lambda_functional_interface(&param_types, &return_type)
+            };
 
         // Build the implementation method descriptor (uses actual primitive types).
         let impl_descriptor = crate::descriptor::jvm_method_descriptor(&param_types, &return_type);
