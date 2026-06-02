@@ -154,13 +154,16 @@ let y: String? = null;  // ERROR: null outside unsafe
 
 ### Variance 注釈（`in`/`out`）
 
-**構文上は受理されるが、現在の型チェッカでは意味的効果なし。** パーサが `Variance::Covariant`（`out`）/ `Variance::Contravariant`（`in`）として解析し保持するが、型チェック時に variance 制約の検証は行われない。将来のフェーズで強制する予定。
+`out T`（共変）は戻り値型にのみ出現可能、`in T`（反変）はパラメータ型にのみ出現可能。違反はコンパイルエラー `VARIANCE_VIOLATION`。
 
 ```valen
-// 構文上は有効だが、variance は現在強制されない
-class Box<out T>(val value: T) {}
+class Box<out T>(val value: T) {
+    fn get(self) -> T { self.value }     // OK: out T in return position
+    // fn set(self, v: T) {}             // ERROR: out T in parameter position
+}
 trait Consumer<in T> {
-    fn accept(self, item: T) -> Unit;
+    fn accept(self, item: T) -> Unit;    // OK: in T in parameter position
+    // fn produce(self) -> T;            // ERROR: in T in return position
 }
 ```
 
