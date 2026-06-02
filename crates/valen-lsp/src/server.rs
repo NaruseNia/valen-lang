@@ -3448,7 +3448,11 @@ fn collect_vars_from_expr(expr: &TypedExpr, offset: u32, vars: &mut Vec<(String,
             collect_vars_from_body(body, offset, vars);
         }
         TypedExprKind::For { var, iter, body } => {
-            // The iteration variable is in scope inside the body
+            // Extract element type from iterable (List<T> → T, Range<T> → T)
+            let elem_ty = match &iter.ty {
+                Ty::Generic(_, args) if !args.is_empty() => args[0].clone(),
+                other => other.clone(),
+            };
             if body.stmts.first().is_some_and(|s| match s {
                 TypedStmt::Let { span, .. } | TypedStmt::LetElse { span, .. } => {
                     span.start <= offset
@@ -3456,7 +3460,7 @@ fn collect_vars_from_expr(expr: &TypedExpr, offset: u32, vars: &mut Vec<(String,
                 TypedStmt::Expr(e) | TypedStmt::ExprSemi(e) => e.span.start <= offset,
             }) || body.tail.as_ref().is_some_and(|t| t.span.start <= offset)
             {
-                vars.push((var.to_string(), iter.ty.clone()));
+                vars.push((var.to_string(), elem_ty));
             }
             collect_vars_from_body(body, offset, vars);
         }
@@ -3471,7 +3475,12 @@ fn collect_vars_from_expr(expr: &TypedExpr, offset: u32, vars: &mut Vec<(String,
                 collect_vars_from_expr(&arm.body, offset, vars);
             }
         }
-        TypedExprKind::Lambda { body, .. } => {
+        TypedExprKind::Lambda { params, body, .. } => {
+            if offset >= expr.span.start && offset <= expr.span.end {
+                for (name, ty) in params {
+                    vars.push((name.to_string(), ty.clone()));
+                }
+            }
             collect_vars_from_expr(body, offset, vars);
         }
         _ => {}
@@ -3651,6 +3660,7 @@ impl LanguageServer for ServerState {
     fn did_close(&mut self, params: DidCloseTextDocumentParams) -> Self::NotifyResult {
         let uri = params.text_document.uri;
         self.documents.remove(&uri);
+        self.run_cross_file_analysis();
         self.client
             .publish_diagnostics(PublishDiagnosticsParams {
                 uri,
