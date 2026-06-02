@@ -511,3 +511,22 @@ fn while_let_no_trailing_semi() {
 }"
     ));
 }
+
+#[test]
+fn abstract_method_without_body() {
+    assert_snapshot!(check(
+        "abstract class Shape {
+    abstract fn area() -> Float;
+    fn name() -> String { \"shape\" }
+}"
+    ));
+}
+
+#[test]
+fn abstract_method_with_body() {
+    assert_snapshot!(check(
+        "abstract class Shape {
+    abstract fn area() -> Float { 0.0 }
+}"
+    ));
+}
