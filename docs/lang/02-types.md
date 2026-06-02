@@ -133,7 +133,14 @@ fn example() -> Option<Int> {
 
 ### `null` リテラル
 
-`null` リテラルは存在しない。JVM null は Nullable 型と Java interop 経由でのみ扱う。
+`null` リテラルは `unsafe` ブロック内でのみ使用可能。型は `Nothing?`（nullable bottom type）で、任意の `T?` に代入できる。通常の Valen コードでは `null` は使えず、値の不在は `Option<T>` で表現する。
+
+```valen
+unsafe {
+    let x: String? = null;  // OK
+}
+let y: String? = null;  // ERROR: null outside unsafe
+```
 
 ### `T!`（プラットフォーム型）
 
