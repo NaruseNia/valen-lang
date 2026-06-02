@@ -78,19 +78,19 @@ fn first_char(s: String) -> Option<Char> {
 `safe { ... }` ブロック方式を使用する：
 
 ```valen
-fn read_safe(path: String) -> Result<String, JavaException> {
+fn read_safe(path: String) -> Result<Option<String>, JavaException> {
     safe { java.nio.file.Files.readString(java.nio.file.Paths.get(path)) }
 }
 ```
 
-`safe { expr }` は `Result<T, JavaException>` を返す（`T` はブロック本体の型）。
+`safe { expr }` は `Result<Option<T>, JavaException>` を返す。Java メソッドの戻り値は null の可能性があるため `Option<T>` でラップされる。例外発生時は `Err(JavaException)`。
 
 ### `safe expr` 短縮構文
 
-`safe { expr }` の短縮形。ブレースなしで1式を `safe` コンテキストに置ける。結果は `Result<T, JavaException>`。
+`safe { expr }` の短縮形。ブレースなしで1式を `safe` コンテキストに置ける。結果は `Result<Option<T>, JavaException>`。
 
 ```valen
-let r = safe file.readString();  // Result<String, JavaException>
+let r = safe file.readString();  // Result<Option<String>, JavaException>
 ```
 
 パーサは `safe expr` を `safe { expr }` と等価なブロックに展開する。
