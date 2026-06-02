@@ -529,6 +529,21 @@ impl<'hir> TypeChecker<'hir> {
         }
     }
 
+    fn resolve_sam_target(&self, expected: Option<&Ty>) -> Option<crate::SamTarget> {
+        let type_name = match expected {
+            Some(Ty::Named(n)) => n.as_str(),
+            Some(Ty::Generic(n, _)) => n.as_str(),
+            _ => return None,
+        };
+        let info = self.hir.foreign_types.get(type_name)?;
+        let sam = info.sam_method.as_ref()?;
+        Some(crate::SamTarget {
+            interface: info.internal_name.clone(),
+            method_name: sam.name.to_string(),
+            method_descriptor: sam.descriptor.clone(),
+        })
+    }
+
     fn resolve_self_assoc_type(&self, name: &str) -> Option<Ty> {
         let self_ty = self.current_self_ty.as_ref()?;
         let self_name = match self_ty {
@@ -3757,10 +3772,13 @@ impl<'hir> TypeChecker<'hir> {
             Box::new(ret_ty),
         );
 
+        let sam_target = self.resolve_sam_target(expected);
+
         TypedExpr {
             kind: TypedExprKind::Lambda {
                 params,
                 body: Box::new(body),
+                sam_target,
             },
             ty: fn_ty,
             span: lam.span,
@@ -4864,6 +4882,7 @@ mod tests {
                 has_valen_closed: false,
                 type_params: vec![],
                 is_interface: false,
+                sam_method: None,
             },
         );
         let r = type_check(&resolved.hir, &parsed.items);
