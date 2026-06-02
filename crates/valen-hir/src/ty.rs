@@ -1247,7 +1247,9 @@ impl<'hir> TypeChecker<'hir> {
                 Ty::Error
             }
             BinaryOp::Eq | BinaryOp::Ne => {
-                if lhs == rhs {
+                let is_null_cmp = matches!(lhs, Ty::Nullable(inner) if **inner == Ty::nothing())
+                    || matches!(rhs, Ty::Nullable(inner) if **inner == Ty::nothing());
+                if lhs == rhs || is_subtype(lhs, rhs) || is_subtype(rhs, lhs) || is_null_cmp {
                     Ty::Prim(PrimTy::Bool)
                 } else {
                     self.diags.error(
@@ -4137,6 +4139,16 @@ fn is_subtype(sub: &Ty, sup: &Ty) -> bool {
     // Nothing is subtype of everything
     if *sub == Ty::nothing() {
         return true;
+    }
+    // Nothing? (null literal type) is subtype of any T?
+    if let Ty::Nullable(sub_inner) = sub {
+        if **sub_inner == Ty::nothing() {
+            return matches!(sup, Ty::Nullable(_));
+        }
+        // Nullable covariance: T? <: U? if T <: U
+        if let Ty::Nullable(sup_inner) = sup {
+            return is_subtype(sub_inner, sup_inner);
+        }
     }
     false
 }
