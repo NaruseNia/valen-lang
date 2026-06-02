@@ -176,6 +176,7 @@ impl Resolver {
                     superclass: None,
                     trait_impls: vec![],
                     methods: vec![],
+                    generic_variances: vec![],
                 }),
                 vis: Vis::Pub,
                 span: valen_ast::Span::DUMMY,
@@ -372,6 +373,11 @@ impl Resolver {
                             .map(|t| lower_type_ref_with_params(t, &type_params))
                             .collect(),
                         methods: method_ids,
+                        generic_variances: c
+                            .generics
+                            .iter()
+                            .map(|g| (g.name.clone(), g.variance))
+                            .collect(),
                     }),
                     vis: lower_vis(c.visibility),
                     span: c.span,
@@ -711,6 +717,50 @@ impl Resolver {
             }
         }
 
+        for (_id, _name, _span, class_def) in &class_entries {
+            for (param_name, variance) in &class_def.generic_variances {
+                if *variance == valen_ast::Variance::Invariant {
+                    continue;
+                }
+                for mid in &class_def.methods {
+                    if let Some(mdef) = self.hir.defs.get(mid) {
+                        if let DefKind::Fn(ref fd) = mdef.kind {
+                            if *variance == valen_ast::Variance::Covariant {
+                                for p in &fd.params {
+                                    if !p.is_self && tyref_contains_name(&p.ty, param_name) {
+                                        self.diagnostics.error(
+                                            DiagCode::VARIANCE_VIOLATION,
+                                            mdef.span,
+                                            format!(
+                                                "covariant type parameter `{param_name}` \
+                                                 cannot appear in parameter position of `{}`",
+                                                mdef.name
+                                            ),
+                                        );
+                                    }
+                                }
+                            }
+                            if *variance == valen_ast::Variance::Contravariant {
+                                if let Some(ref ret) = fd.return_ty {
+                                    if tyref_contains_name(ret, param_name) {
+                                        self.diagnostics.error(
+                                            DiagCode::VARIANCE_VIOLATION,
+                                            mdef.span,
+                                            format!(
+                                                "contravariant type parameter `{param_name}` \
+                                                 cannot appear in return type of `{}`",
+                                                mdef.name
+                                            ),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         for (_id, name, span, class_def) in &class_entries {
             if let Some(ref super_ty) = class_def.superclass {
                 let super_name = match super_ty {
@@ -842,6 +892,19 @@ fn lower_class_kind(k: valen_ast::ClassKind) -> ClassDefKind {
         valen_ast::ClassKind::Open => ClassDefKind::Open,
         valen_ast::ClassKind::Abstract => ClassDefKind::Abstract,
         valen_ast::ClassKind::Sealed => ClassDefKind::Sealed,
+    }
+}
+
+fn tyref_contains_name(ty: &TyRef, name: &str) -> bool {
+    match ty {
+        TyRef::Named(n) => n == name,
+        TyRef::Generic(n, args) => n == name || args.iter().any(|a| tyref_contains_name(a, name)),
+        TyRef::Nullable(inner) | TyRef::RefMut(inner) => tyref_contains_name(inner, name),
+        TyRef::Fn(params, ret) => {
+            params.iter().any(|p| tyref_contains_name(p, name)) || tyref_contains_name(ret, name)
+        }
+        TyRef::Unresolved(n) => n == name,
+        TyRef::Prim(_) | TyRef::SelfTy | TyRef::Error => false,
     }
 }
 
@@ -1269,6 +1332,44 @@ mod tests {
         assert!(
             parsed.diagnostics.has_errors(),
             "non-abstract method without body should be a parse error"
+        );
+    }
+
+    #[test]
+    fn covariant_in_return_is_ok() {
+        let r = resolve_source("class Box<out T> {\n    fn get(self) -> T { self }\n}");
+        assert!(
+            !r.diagnostics.has_errors(),
+            "covariant type param in return position should be OK: {:?}",
+            r.diagnostics
+        );
+    }
+
+    #[test]
+    fn covariant_in_param_is_error() {
+        let r = resolve_source("class Sink<out T> {\n    fn put(self, item: T) {}\n}");
+        assert!(
+            r.diagnostics.has_errors(),
+            "covariant type param in parameter position should error"
+        );
+    }
+
+    #[test]
+    fn contravariant_in_param_is_ok() {
+        let r = resolve_source("class Sink<in T> {\n    fn put(self, item: T) {}\n}");
+        assert!(
+            !r.diagnostics.has_errors(),
+            "contravariant type param in parameter position should be OK: {:?}",
+            r.diagnostics
+        );
+    }
+
+    #[test]
+    fn contravariant_in_return_is_error() {
+        let r = resolve_source("class Source<in T> {\n    fn get(self) -> T { self }\n}");
+        assert!(
+            r.diagnostics.has_errors(),
+            "contravariant type param in return position should error"
         );
     }
 }

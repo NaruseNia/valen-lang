@@ -12,7 +12,7 @@ pub mod ty;
 
 use indexmap::IndexMap;
 use smol_str::SmolStr;
-use valen_ast::{BinaryOp, Span, UnaryOp};
+use valen_ast::{BinaryOp, Span, UnaryOp, Variance};
 
 /// Unique identifier for a definition in the HIR.
 pub type DefId = u32;
@@ -296,6 +296,8 @@ pub struct ClassDef {
     pub superclass: Option<TyRef>,
     pub trait_impls: Vec<TyRef>,
     pub methods: Vec<DefId>,
+    /// Variance annotations for generic type parameters (e.g. `out T`, `in T`).
+    pub generic_variances: Vec<(SmolStr, Variance)>,
 }
 
 /// The modifier kind of a class declaration.
