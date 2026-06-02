@@ -3514,6 +3514,7 @@ const EXPR_KEYWORDS: &[&str] = &[
     "continue",
     "true",
     "false",
+    "null",
     "safe",
     "unsafe",
     "ref mut",

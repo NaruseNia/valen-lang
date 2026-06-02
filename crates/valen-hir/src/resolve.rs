@@ -712,6 +712,16 @@ impl Resolver {
                                 format!("non-abstract method `{}` must have a body", mdef.name),
                             );
                         }
+                        if fd.is_abstract && class_def.kind == ClassDefKind::Final {
+                            self.diagnostics.error(
+                                DiagCode::VARIANCE_VIOLATION,
+                                mdef.span,
+                                format!(
+                                    "abstract method `{}` is not allowed in final class",
+                                    mdef.name
+                                ),
+                            );
+                        }
                     }
                 }
             }
