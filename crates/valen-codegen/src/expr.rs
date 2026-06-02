@@ -1051,19 +1051,15 @@ impl<'a> ExprLowering<'a> {
     /// `invokedynamic` instruction referencing `LambdaMetafactory.metafactory` is emitted
     /// at the call site to create a functional interface proxy.
     fn lower_lambda(&mut self, params: &[(SmolStr, Ty)], body: &TypedExpr, _lambda_ty: &Ty) {
-        // java.util.function only provides Supplier (0), Function (1), BiFunction (2).
-        // 3+ param lambdas cannot be expressed with standard functional interfaces and
-        // would produce wrong-arity proxies (LambdaConversionException at runtime).
-        // Emit a runtime error stub instead of silently generating broken bytecode.
-        if params.len() > 2 {
+        if params.len() > 22 {
             eprintln!(
-                "[codegen] error: lambda with {} parameters exceeds java.util.function \
-                 arity limit (max 2). Emitting UnsupportedOperationException.",
+                "[codegen] error: lambda with {} parameters exceeds arity limit (max 22). \
+                 Emitting UnsupportedOperationException.",
                 params.len()
             );
             self.ops
                 .extend(crate::jvm_ir::throw_unsupported_ops(&format!(
-                    "lambda with {} parameters exceeds arity limit (max 2)",
+                    "lambda with {} parameters exceeds arity limit (max 22)",
                     params.len()
                 )));
             return;
@@ -1210,9 +1206,20 @@ impl<'a> ExprLowering<'a> {
                     specialized,
                 )
             }
+            n @ 3..=22 => {
+                // valen/core/FunctionN<A, B, ..., R> — compiler-generated interface
+                let iface = format!("valen/core/Function{n}");
+                let erased_params: String = (0..n).map(|_| obj.to_string()).collect::<String>();
+                let erased = format!("({erased_params}){obj}");
+                let specialized_params: String = param_types
+                    .iter()
+                    .map(|t| self.boxed_descriptor(t))
+                    .collect::<String>();
+                let sr = self.boxed_descriptor(return_type);
+                let specialized = format!("({specialized_params}){sr}");
+                (iface, "apply".to_string(), erased, specialized)
+            }
             _ => {
-                // 3+ params are rejected earlier in lower_lambda().
-                // This branch should be unreachable, but provide a safe fallback.
                 unreachable!(
                     "lambda_functional_interface called with {} params; \
                      should have been caught in lower_lambda",
@@ -1277,28 +1284,25 @@ impl<'a> ExprLowering<'a> {
         // Load the functional interface reference.
         self.lower_expr(callee);
 
-        // Determine the functional interface and SAM method.
-        if args.len() > 2 {
-            // 3+ arg lambda calls cannot target standard java.util.function interfaces.
-            // Pop the loaded callee reference and emit a throw to surface the error.
+        if args.len() > 22 {
             self.ops.push(JvmOp::Pop);
-            eprintln!(
-                "[codegen] error: lambda call with {} arguments exceeds java.util.function \
-                 arity limit (max 2). Emitting UnsupportedOperationException.",
-                args.len()
-            );
             self.ops
                 .extend(crate::jvm_ir::throw_unsupported_ops(&format!(
-                    "lambda call with {} arguments exceeds arity limit (max 2)",
+                    "lambda call with {} arguments exceeds arity limit (max 22)",
                     args.len()
                 )));
             return;
         }
-        let (func_iface, sam_name) = match args.len() {
-            0 => ("java/util/function/Supplier", "get"),
-            1 => ("java/util/function/Function", "apply"),
-            2 => ("java/util/function/BiFunction", "apply"),
-            _ => unreachable!("handled above"),
+        let func_iface: String = match args.len() {
+            0 => "java/util/function/Supplier".to_string(),
+            1 => "java/util/function/Function".to_string(),
+            2 => "java/util/function/BiFunction".to_string(),
+            n @ 3..=22 => format!("valen/core/Function{n}"),
+            _ => unreachable!(),
+        };
+        let sam_name = match args.len() {
+            0 => "get",
+            _ => "apply",
         };
 
         // Box each argument and emit.
