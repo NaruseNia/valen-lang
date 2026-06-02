@@ -556,9 +556,22 @@ impl ServerState {
             }
 
             // Methods/fields from foreign (Java) types
-            if let Some(info) = hir.foreign_types.get(tn.as_str()) {
+            let java_aliases: &[&str] = match tn.as_str() {
+                "List" => &["java/util/List", "java/util/ArrayList"],
+                "Map" => &["java/util/Map", "java/util/HashMap"],
+                "Set" => &["java/util/Set", "java/util/HashSet"],
+                "String" => &["java/lang/String"],
+                _ => &[],
+            };
+            let foreign_info = hir.foreign_types.get(tn.as_str()).into_iter().chain(
+                java_aliases
+                    .iter()
+                    .filter_map(|a| hir.foreign_types.get(*a)),
+            );
+            let mut seen_foreign = std::collections::HashSet::new();
+            for info in foreign_info {
                 for m in &info.methods {
-                    if m.is_static {
+                    if m.is_static || !seen_foreign.insert(m.name.to_string()) {
                         continue;
                     }
                     items.push(CompletionItem {
@@ -569,6 +582,9 @@ impl ServerState {
                     });
                 }
                 for f in &info.fields {
+                    if !seen_foreign.insert(f.name.to_string()) {
+                        continue;
+                    }
                     items.push(CompletionItem {
                         label: f.name.to_string(),
                         kind: Some(CompletionItemKind::FIELD),
