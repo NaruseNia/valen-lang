@@ -968,6 +968,20 @@ impl<'hir> TypeChecker<'hir> {
                 ty: Ty::unit(),
                 span: *span,
             },
+            valen_ast::Literal::Null(span) => {
+                if !self.in_unsafe {
+                    self.diags.error(
+                        DiagCode::UNSAFE_CONTEXT_REQUIRED,
+                        *span,
+                        SmolStr::from("`null` can only be used inside an `unsafe` block"),
+                    );
+                }
+                TypedExpr {
+                    kind: TypedExprKind::NullLit,
+                    ty: Ty::Nullable(Box::new(Ty::Named(SmolStr::from("Nothing")))),
+                    span: *span,
+                }
+            }
         }
     }
 
@@ -5140,5 +5154,17 @@ mod tests {
             "#,
         );
         assert_no_errors(&r);
+    }
+
+    #[test]
+    fn null_in_unsafe_is_ok() {
+        let r = check_source("fn main() { unsafe { let x = null; } }");
+        assert_no_errors(&r);
+    }
+
+    #[test]
+    fn null_outside_unsafe_is_error() {
+        let r = check_source("fn main() { let x = null; }");
+        assert_has_error(&r, DiagCode::UNSAFE_CONTEXT_REQUIRED);
     }
 }

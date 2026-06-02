@@ -1533,6 +1533,10 @@ impl Parser {
                 self.bump();
                 Some(Expr::Literal(Literal::Bool(b, span)))
             }
+            TokenKind::Null => {
+                self.bump();
+                Some(Expr::Literal(Literal::Null(span)))
+            }
             TokenKind::Ident(_) | TokenKind::Data => self.parse_path_expr(),
             TokenKind::SelfKw => {
                 self.bump();
@@ -2668,6 +2672,7 @@ fn expr_span(expr: &Expr) -> Span {
         Expr::Literal(Literal::String(_, s)) => *s,
         Expr::Literal(Literal::Bool(_, s)) => *s,
         Expr::Literal(Literal::Unit(s)) => *s,
+        Expr::Literal(Literal::Null(s)) => *s,
         Expr::Path(p) => p.span,
         Expr::Call(c) => c.span,
         Expr::MethodCall(m) => m.span,
@@ -2727,6 +2732,7 @@ fn literal_span(lit: &Literal) -> Span {
         Literal::String(_, s) => *s,
         Literal::Bool(_, s) => *s,
         Literal::Unit(s) => *s,
+        Literal::Null(s) => *s,
     }
 }
 

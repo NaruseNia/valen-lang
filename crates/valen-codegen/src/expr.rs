@@ -450,6 +450,9 @@ impl<'a> ExprLowering<'a> {
                 self.ops.push(JvmOp::PushInt(if *b { 1 } else { 0 }));
             }
             TypedExprKind::UnitLit => {}
+            TypedExprKind::NullLit => {
+                self.ops.push(JvmOp::PushNull);
+            }
             TypedExprKind::LocalVar(name) => {
                 if let Some((slot, ty)) = self.locals.get(name) {
                     if name == "self" {
@@ -1974,6 +1977,7 @@ impl<'a> ExprLowering<'a> {
             valen_ast::Literal::String(s, _) => self.ops.push(JvmOp::PushString(s.to_string())),
             valen_ast::Literal::Bool(b, _) => self.ops.push(JvmOp::PushInt(if *b { 1 } else { 0 })),
             valen_ast::Literal::Unit(_) => {}
+            valen_ast::Literal::Null(_) => self.ops.push(JvmOp::PushNull),
         }
     }
 

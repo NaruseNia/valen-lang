@@ -929,6 +929,7 @@ impl<'a> Printer<'a> {
             }
             Literal::Bool(b, _) => self.w(if *b { "true" } else { "false" }),
             Literal::Unit(_) => self.w("()"),
+            Literal::Null(_) => self.w("null"),
         }
     }
 
