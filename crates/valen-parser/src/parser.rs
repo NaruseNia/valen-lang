@@ -449,7 +449,25 @@ impl Parser {
             }));
         }
 
-        let name = self.expect_ident()?;
+        // `Self::AssocType` — associated type access
+        if self.at(&TokenKind::SelfKw) && self.lookahead(1) == &TokenKind::DoubleColon {
+            self.bump(); // Self
+            self.bump(); // ::
+            let assoc_name = self.expect_ident()?;
+            let end = self.prev_span();
+            return Some(Type::SelfAssoc {
+                name: assoc_name,
+                span: start.merge(end),
+            });
+        }
+
+        // `Self` as a type
+        let name = if self.at(&TokenKind::SelfKw) {
+            self.bump();
+            SmolStr::from("Self")
+        } else {
+            self.expect_ident()?
+        };
         let mut segments = vec![self.parse_type_path_segment(name, start)?];
 
         while self.eat(&TokenKind::Dot).is_some() {
@@ -1723,13 +1741,22 @@ impl Parser {
             // Turbofish: `Foo::<Int, String>` -- after `::`, `<` starts generic args.
             if self.at(&TokenKind::Lt) || self.at(&TokenKind::Shr) {
                 let generics = self.parse_turbofish_args()?;
-                // Attach generics to the last segment.
                 if let Some(last) = segments.last_mut() {
                     let gen_end = self.prev_span();
                     last.generics = generics;
                     last.span = last.span.merge(gen_end);
                 }
                 continue;
+            }
+            // `T::class` — Class object access
+            if self.peek_is_ident_matching("class") {
+                let end = self.peek_span();
+                self.bump();
+                let type_name = segments.last().map(|s| s.name.clone()).unwrap_or_default();
+                return Some(Expr::ClassOf(valen_ast::ClassOfExpr {
+                    type_name,
+                    span: start.merge(end),
+                }));
             }
             let seg_span = self.peek_span();
             let seg_name = self.expect_ident()?;
@@ -2704,6 +2731,7 @@ fn expr_span(expr: &Expr) -> Span {
         Expr::Cast(c) => c.span,
         Expr::Deref(d) => d.span,
         Expr::RefMutCreate(r) => r.span,
+        Expr::ClassOf(c) => c.span,
     }
 }
 

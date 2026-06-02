@@ -453,6 +453,15 @@ impl<'a> ExprLowering<'a> {
             TypedExprKind::NullLit => {
                 self.ops.push(JvmOp::PushNull);
             }
+            TypedExprKind::ClassOf(type_name) => {
+                self.ops.push(JvmOp::PushString(type_name.to_string()));
+                self.ops.push(JvmOp::InvokeStatic {
+                    owner: "java/lang/Class".to_string(),
+                    name: "forName".to_string(),
+                    params: vec![JvmType::Object("java/lang/String".to_string())],
+                    ret: JvmType::Object("java/lang/Class".to_string()),
+                });
+            }
             TypedExprKind::LocalVar(name) => {
                 if let Some((slot, ty)) = self.locals.get(name) {
                     if name == "self" {

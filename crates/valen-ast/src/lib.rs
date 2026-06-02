@@ -335,6 +335,8 @@ pub enum Type {
     Tuple(Vec<Type>, Span),
     /// `ref mut T` — mutable reference type.
     RefMut { inner: Box<Type>, span: Span },
+    /// `Self::TypeName` — associated type access on Self.
+    SelfAssoc { name: SmolStr, span: Span },
 }
 
 /// A dot-separated type path (e.g. `java.util.List<String>`).
@@ -454,6 +456,15 @@ pub enum Expr {
     Deref(DerefExpr),
     /// `ref mut expr` — create a mutable reference.
     RefMutCreate(RefMutExpr),
+    /// `T::class` — get the Class object of a type (reified type parameters only).
+    ClassOf(ClassOfExpr),
+}
+
+/// `T::class` expression — gets the `java.lang.Class` for a type.
+#[derive(Debug, Clone)]
+pub struct ClassOfExpr {
+    pub type_name: SmolStr,
+    pub span: Span,
 }
 
 /// Literal value (integer, float, string, etc.).
@@ -528,6 +539,7 @@ impl Expr {
             Expr::Cast(c) => c.span,
             Expr::Deref(d) => d.span,
             Expr::RefMutCreate(r) => r.span,
+            Expr::ClassOf(c) => c.span,
         }
     }
 }
@@ -541,6 +553,7 @@ impl Type {
             Type::Fn(f) => f.span,
             Type::Tuple(_, span) => *span,
             Type::RefMut { span, .. } => *span,
+            Type::SelfAssoc { span, .. } => *span,
         }
     }
 }
@@ -1068,6 +1081,7 @@ impl std::fmt::Display for Type {
                 write!(f, ")")
             }
             Type::RefMut { inner, .. } => write!(f, "ref mut {inner}"),
+            Type::SelfAssoc { name, .. } => write!(f, "Self::{name}"),
         }
     }
 }

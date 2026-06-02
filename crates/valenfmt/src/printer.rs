@@ -673,6 +673,10 @@ impl<'a> Printer<'a> {
                 }
                 self.w(")");
             }
+            Type::SelfAssoc { name, .. } => {
+                self.w("Self::");
+                self.w(name);
+            }
         }
     }
 
@@ -858,6 +862,10 @@ impl<'a> Printer<'a> {
                     self.print_expr(value);
                 }
                 self.w("}");
+            }
+            Expr::ClassOf(c) => {
+                self.w(&c.type_name);
+                self.w("::class");
             }
         }
     }
