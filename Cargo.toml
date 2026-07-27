@@ -48,9 +48,9 @@ tokio-util = { version = "0.7", features = ["compat"] }
 futures = "0.3"
 lsp-types = "0.97"
 # JVM bytecode emit (Phase 0 選定: ristretto_classfile — write API + Java 21-25 + sealed/record attrs)
-ristretto_classfile = "0.31"
+ristretto_classfile = "0.32"
 # Archive reading (JAR/JMOD)
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "8", default-features = false, features = ["deflate"] }
 # File operations
 tempfile = "3"
 # Test
